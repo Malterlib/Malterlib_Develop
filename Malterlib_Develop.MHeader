@@ -1,0 +1,54 @@
+// Copyright © Unbroken AB
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+Import "../Core/Lib_Malterlib.MTarget"
+
+%Group "{Malterlib}/{Lib_Malterlib_Develop}"
+{
+	%Group "Develop"
+	{
+		%Group "Include"
+		{
+			Compile.Type "C++"
+			{
+				!!DocumentationEnabled true
+			}
+			%File "Include/Mib/Develop/^*"
+		}
+		%File "Source/*"
+		%Group "Documentation"
+		{
+			%File "Documentation/*"
+		}
+	}
+	%Dependency "Lib_Malterlib"
+	%Dependency "Lib_Malterlib_Concurrency"
+}
+
+Property
+{
+	MalterlibLibrary_Develop: bool = MalterlibLibrary_All
+	MalterlibSubLibraries =+ "Develop"
+	{
+		!!MalterlibLibrary_Develop true
+	}
+	MalterlibLibrarySeparate_Lib_Malterlib_Develop: bool = true
+	MalterlibIncludeRoots =+ "Include"->MakeAbsolute()
+	{
+		!!MalterlibLibrary_Develop true
+	}
+}
+
+%Group "{Test}/{Malterlib_Develop}"
+{
+}
+
+Property
+{
+	!!MalterlibEnableInternalTests true
+
+	MalterlibTests =+ "Malterlib_Develop"
+	MalterlibTestFiles_Malterlib_Develop: [type(CEntity)] = ["Test/*.cpp"->MakeAbsolute()]
+	MalterlibTestDependencies_Malterlib_Develop: [type(CEntity)] = ["Lib_Malterlib_Develop"]
+	MalterlibTestExtraGroups_Malterlib_Develop: [string] = ["{Test}/{Malterlib_Develop}"]
+}
