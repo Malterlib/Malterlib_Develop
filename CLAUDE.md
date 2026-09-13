@@ -35,10 +35,36 @@ supports a documented subset of the specification. Do not describe it as a
 fully conforming EditorConfig core without running the upstream conformance
 cases.
 
+## Code formatting
+
+The public API is `<Mib/Develop/CodeFormatting>` and `<Mib/Develop/TextLayout>`,
+in `NMib::NDevelop`. See `Documentation/CodeFormatting.md` for the opt-in
+property, settings, rule matrix, protected regions, and range contract.
+
+`fg_AnalyzeCodeFormatting` is pure: it takes immutable source bytes and returns
+an ordered, non-overlapping edit plan plus diagnostics. Introduce no filesystem
+operations, Git access, or console output in the engine; those belong in the
+consumer. `MTool Format` applies the plan and `MTool Validate` reports it, so a
+rule must never be reimplemented as a separate regular-expression check.
+
+Every rule in the current matrix changes whitespace only. A plan is verified
+against `fg_HasEquivalentCodeTokens`, and a whole-file plan is re-analyzed to
+prove it converged; a failing check reports a formatter failure instead of
+emitting edits. A rule that would change tokens, such as adding required braces
+or converting to a trailing return type, needs its own precondition proof and
+structural equivalence tests before it is enabled.
+
+Prefer an explicit unsupported result over a guessed edit. Ambiguous spellings
+stay out of the matrix: plain `=` is also a lambda capture default and the tail
+of the `_o=` DSL, and `&`, `&&`, and `*` are also declarators.
+
 ## Tests
 
-Read `../Test/CLAUDE.md` before modifying tests. Use native tests for parser
-and resolver behavior; MTool's integration tests cover staged/base validation.
+Read `../Test/CLAUDE.md` before modifying tests. Use native tests for parser,
+resolver, lexer, and formatting-engine behavior; MTool's integration tests cover
+the command line, staged/base validation, and safe writes. Formatting tests must
+cover golden output, idempotence, token equivalence, protected regions, range
+endpoints, and explicit unsupported cases.
 
 ```bash
 MalterlibBuildShowProgress=false ./mib build-target Tests Com_Test_Malterlib_Develop
