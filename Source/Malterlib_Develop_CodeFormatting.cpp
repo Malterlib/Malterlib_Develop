@@ -2422,27 +2422,23 @@ namespace
 		umint iScope = 0;
 		while (iScope < Scopes.f_GetLen() && !fp_FitsInline(iLineFirst, _iLast, nLineIndent))
 		{
-			// The line is filled with as many scopes as fit and opened at the one that no
-			// longer does, so a scope is only ever taken apart to resolve its own overflow.
-			umint iPick = iScope;
-			for (umint i = iScope; i < Scopes.f_GetLen(); ++i)
-			{
-				auto iBefore = fp_PreviousCode(Nodes[Scopes[i]].m_iFirstToken);
-				if (iBefore >= 0 && umint(iBefore) >= iLineFirst && !fp_FitsInline(iLineFirst, umint(iBefore), nLineIndent))
-					break;
-
-				iPick = i;
-			}
-
-			auto const &Child = Nodes[Scopes[iPick]];
-			iScope = iPick + 1;
+			// Scopes on one line are all of the same standing, so the line is opened at the
+			// first of them. Keeping that one closed and opening a later one would put two
+			// scopes of one level on different footings, which is what the standard's
+			// substatement rule forbids.
+			auto const &Child = Nodes[Scopes[iScope]];
+			bool bStartsLine = Child.m_iFirstToken == iLineFirst;
+			++iScope;
 			// What the line holds in front of that scope was measured as one line, so it
 			// is put on one: a break left over from the source would contradict the choice.
 			auto iHead = fp_PreviousCode(Child.m_iFirstToken);
 			if (iHead >= 0 && umint(iHead) > iLineFirst)
 				fp_TryJoin(iLineFirst, umint(iHead), nLineIndent);
 
-			if (!fp_LayoutGroup(Scopes[iPick], nGroupIndent, Child.m_iFirstToken != iLineFirst))
+			// A scope that already starts its line owns that line's indentation; its
+			// closing marker belongs under its opening one, not a level further in.
+			auto nMarkerIndent = bStartsLine ? nLineIndent : nGroupIndent;
+			if (!fp_LayoutGroup(Scopes[iScope - 1], nMarkerIndent, !bStartsLine))
 				continue;
 
 			bSplit = true;
@@ -2450,8 +2446,9 @@ namespace
 			if (iNext < 0 || umint(iNext) > _iLast)
 				break;
 
+			// What follows the scope resumes under its closing marker.
 			iLineFirst = umint(iNext);
-			nLineIndent = _iIndent + nTab;
+			nLineIndent = nMarkerIndent;
 			fp_BreakBefore(iLineFirst, nLineIndent);
 		}
 
