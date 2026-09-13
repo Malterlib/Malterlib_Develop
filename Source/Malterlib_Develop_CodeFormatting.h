@@ -127,4 +127,7 @@ namespace NMib::NDevelop
 	// True when the two sources have the same significant token sequence, ignoring layout.
 	// Every rule in the current matrix is whitespace-only, so this holds for every plan.
 	bool fg_HasEquivalentCodeTokens(NStr::CStr const &_First, NStr::CStr const &_Second);
+
+	// Describes the first token difference between two sources, for formatter diagnostics.
+	NStr::CStr fg_DescribeCodeTokenDifference(NStr::CStr const &_First, NStr::CStr const &_Second);
 }

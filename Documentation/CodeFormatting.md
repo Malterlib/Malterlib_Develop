@@ -93,7 +93,8 @@ result is stable; either check failing is a formatter failure, not an edit.
 | `operator-space` | One space around unambiguous binary operators. |
 | `block-blank-line` | Removes blank lines directly after an opening brace. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
-| `line-length` | Diagnostic only; the engine never splits a line to satisfy the limit. |
+| `line-break` | Brings a split construct back to one line when it fits and nothing forbids it. |
+| `line-length` | Diagnostic only; the engine does not yet split an overlong line. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
 assignments. Plain `=` is deliberately excluded: the same token spells a lambda
@@ -105,6 +106,40 @@ declarator name and is left alone.
 `indentation` normalizes indentation characters, not indentation depth. The
 depth model for split statements, continuations, and clause parentheses is not
 implemented yet, so existing structure is preserved rather than guessed.
+
+## Line structure
+
+`<Mib/Develop/CodeFormattingStructure>` builds a layout tree over the token
+stream: statements, blocks, and bracketed groups, with the split points where a
+canonical split form starts a new line. Anything it cannot classify becomes an
+unsupported node whose layout is preserved.
+
+A `<` opens a template argument list only when it is written tight against the
+name before it, or across a line break; Malterlib spells a comparison with
+spaces, so the loose spelling stays an operator. A brace holding a statement
+terminator at its own level is a block, which is how a lambda body inside an
+argument list is told apart from a braced initializer.
+
+`fg_GetCanonicalSpacing` gives the inline separator between two adjacent tokens.
+It decides only the spellings the standard settles, and answers `mc_Preserve`
+elsewhere, which is what keeps a rewrite from guessing at an ambiguous
+construct such as `->`, which is both member access and a trailing return type.
+
+`line-break` currently only joins. A construct collapses to one line when it
+fits at its starting column and contains no comment, preprocessor directive,
+multiline token, block, or braced initializer written across lines. A braced
+initializer is excluded because it is data, most of it written one element per
+line on purpose, including Malterlib's `_o=` and `_j=` command-line DSL. A
+template header, a `requires` clause, a label, and the statement a clause guards
+each keep their own line.
+
+Two constructs that each fit can still overflow the line they share, so the plan
+is applied, every line is measured again, and any join landing on an overlong
+line is dropped, repeating until no join makes a line too long.
+
+Splitting an overlong construct into the canonical multi-line form is not
+implemented yet. Until it is, an overlong line is reported by `line-length` and
+left alone.
 
 ## Protected regions
 

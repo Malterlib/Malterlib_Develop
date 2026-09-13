@@ -230,7 +230,8 @@ namespace
 				{
 					fg_ExpectFormat("If", "void f()\n{\n\tif(a)\n\t\tg();\n}\n", "void f()\n{\n\tif (a)\n\t\tg();\n}\n");
 					fg_ExpectFormat("While", "void f()\n{\n\twhile  (a)\n\t\tg();\n}\n", "void f()\n{\n\twhile (a)\n\t\tg();\n}\n");
-					fg_ExpectFormat("Split", "void f()\n{\n\tif\n\t(\n\t\ta\n\t)\n\t\tg();\n}\n", "void f()\n{\n\tif\n\t(\n\t\ta\n\t)\n\t\tg();\n}\n");
+					// A split clause head that fits is brought back to one line.
+					fg_ExpectFormat("Split", "void f()\n{\n\tif\n\t(\n\t\ta\n\t)\n\t\tg();\n}\n", "void f()\n{\n\tif (a)\n\t\tg();\n}\n");
 					fg_ExpectFormat("Call", "void f()\n{\n\tg(a);\n}\n", "void f()\n{\n\tg(a);\n}\n");
 				};
 
@@ -238,7 +239,7 @@ namespace
 				{
 					fg_ExpectFormat("Tight", "void f()\n{\n\tg(a,b);\n}\n", "void f()\n{\n\tg(a, b);\n}\n");
 					fg_ExpectFormat("SpaceBefore", "void f()\n{\n\tg(a , b);\n}\n", "void f()\n{\n\tg(a, b);\n}\n");
-					fg_ExpectFormat("Leading", "void f()\n{\n\tg\n\t\t(\n\t\t\ta\n\t\t\t, b\n\t\t)\n\t;\n}\n", "void f()\n{\n\tg\n\t\t(\n\t\t\ta\n\t\t\t, b\n\t\t)\n\t;\n}\n");
+					fg_ExpectFormat("Leading", "void f()\n{\n\tg\n\t\t(\n\t\t\ta\n\t\t\t, b\n\t\t)\n\t;\n}\n", "void f()\n{\n\tg(a, b);\n}\n");
 					fg_ExpectFormat("Pack", "void f()\n{\n\tg(a, ...);\n}\n", "void f()\n{\n\tg(a, ...);\n}\n");
 				};
 
@@ -287,6 +288,112 @@ namespace
 					};
 
 					fg_ExpectFormat("Preserve", "int a;\r\nint b;\n", "int a;\r\nint b;\n");
+				};
+			};
+
+			DMibTestSuite("LineBreaks")
+			{
+				DMibTestCategory("Join")
+				{
+					fg_ExpectFormat("Call", "void f()\n{\n\tg\n\t\t(\n\t\t\t5\n\t\t\t, 6\n\t\t)\n\t;\n}\n", "void f()\n{\n\tg(5, 6);\n}\n");
+					fg_ExpectFormat
+						(
+							"Nested"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5\n\t\t\t, h\n\t\t\t\t(\n\t\t\t\t\t6\n\t\t\t\t)\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg(5, h(6));\n}\n"
+						)
+					;
+					// A parameter list rejoins while the body keeps its own lines.
+					fg_ExpectFormat
+						(
+							"ParameterList"
+							, "void fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n{\n}\n"
+							, "void fg_F(int _A, int _B)\n{\n}\n"
+						)
+					;
+					fg_ExpectFormat("Template", "TCMap\n<\n\tCStr\n\t, CStr\n>\ng_Map;\n", "TCMap<CStr, CStr> g_Map;\n");
+					fg_ExpectFormat("Condition", "void f()\n{\n\tif\n\t(\n\t\ta\n\t\t&& b\n\t)\n\t\tg();\n}\n", "void f()\n{\n\tif (a && b)\n\t\tg();\n}\n");
+				};
+
+				DMibTestCategory("Kept")
+				{
+					// A comment or a directive inside fixes the construct's line structure.
+					fg_ExpectFormat
+						(
+							"Comment"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"Directive"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5\n#if 0\n\t\t\t, 6\n#endif\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5\n#if 0\n\t\t\t, 6\n#endif\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// A template header and a requires clause stay on their own lines.
+					fg_ExpectFormat("TemplateHeader", "template <typename t_C>\nvoid fg_F(t_C _A);\n", "template <typename t_C>\nvoid fg_F(t_C _A);\n");
+					fg_ExpectFormat
+						(
+							"Requires"
+							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires cFoo<t_C>\n;\n"
+							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires cFoo<t_C>\n;\n"
+						)
+					;
+					// A label and its body are separate statements.
+					fg_ExpectFormat
+						(
+							"CaseLabel"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\tbreak;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\tbreak;\n\t}\n}\n"
+						)
+					;
+					fg_ExpectFormat("AccessSpecifier", "struct C\n{\npublic:\n\tint m_A;\n};\n", "struct C\n{\npublic:\n\tint m_A;\n};\n");
+					// A clause's condition does not own the statement it guards, even when that
+					// statement starts with a parenthesis.
+					fg_ExpectFormat
+						(
+							"ClauseBody"
+							, "void f()\n{\n\twhile (auto p = g())\n\t\t(*p)();\n}\n"
+							, "void f()\n{\n\twhile (auto p = g())\n\t\t(*p)();\n}\n"
+						)
+					;
+					// A braced initializer is written one element per line on purpose.
+					fg_ExpectFormat
+						(
+							"BracedInitializer"
+							, "auto g_Option =\n\t{\n\t\t\"Names\"_o= 1\n\t\t, \"Default\"_o= 2\n\t}\n;\n"
+							, "auto g_Option =\n\t{\n\t\t\"Names\"_o= 1\n\t\t, \"Default\"_o= 2\n\t}\n;\n"
+						)
+					;
+					// A call nested inside one still rejoins.
+					fg_ExpectFormat
+						(
+							"CallInsideInitializer"
+							, "auto g_Option =\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t1\n\t\t\t)\n\t}\n;\n"
+							, "auto g_Option =\n\t{\n\t\tg(1)\n\t}\n;\n"
+						)
+					;
+					// A lambda body is a block, so the call around it keeps its lines.
+					fg_ExpectFormat
+						(
+							"LambdaBody"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]\n\t\t\t{\n\t\t\t\th();\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]\n\t\t\t{\n\t\t\t\th();\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
+				};
+
+				DMibTestCategory("TooLong")
+				{
+					DMibTestPath("DoesNotFit");
+					CStr Name;
+					for (umint i = 0; i < 100; ++i)
+						Name += "A";
+
+					CStr Source = "void f()\n{\n\tg\n\t\t(\n\t\t\t" + Name + "\n\t\t\t, " + Name + "\n\t\t)\n\t;\n}\n";
+					DMibExpect(fg_FormatSource(Source), ==, Source);
 				};
 			};
 

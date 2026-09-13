@@ -37,9 +37,10 @@ cases.
 
 ## Code formatting
 
-The public API is `<Mib/Develop/CodeFormatting>` and `<Mib/Develop/TextLayout>`,
-in `NMib::NDevelop`. See `Documentation/CodeFormatting.md` for the opt-in
-property, settings, rule matrix, protected regions, and range contract.
+The public API is `<Mib/Develop/CodeFormatting>`, `<Mib/Develop/TextLayout>`,
+and `<Mib/Develop/CodeFormattingStructure>`, in `NMib::NDevelop`. See
+`Documentation/CodeFormatting.md` for the opt-in property, settings, rule
+matrix, line structure, protected regions, and range contract.
 
 `fg_AnalyzeCodeFormatting` is pure: it takes immutable source bytes and returns
 an ordered, non-overlapping edit plan plus diagnostics. Introduce no filesystem
@@ -56,7 +57,16 @@ structural equivalence tests before it is enabled.
 
 Prefer an explicit unsupported result over a guessed edit. Ambiguous spellings
 stay out of the matrix: plain `=` is also a lambda capture default and the tail
-of the `_o=` DSL, and `&`, `&&`, and `*` are also declarators.
+of the `_o=` DSL, and `&`, `&&`, and `*` are also declarators. The structure
+builder answers the same way: an unclassified construct keeps its layout, and
+`fg_GetCanonicalSpacing` returns `mc_Preserve` for a pair the standard does not
+settle, which is what makes a relayout refuse rather than guess.
+
+Corpus trials are part of the work, not a final check. Every structural bug in
+the line-break rule so far was found by reading a diff of already-correct
+sources, not by a unit test: a lambda body parsed as an initializer, a clause
+body pulled onto its condition, and a group joined across a statement boundary.
+Turn each one into a golden case.
 
 ## Tests
 

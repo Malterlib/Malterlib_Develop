@@ -3,6 +3,7 @@
 
 #include "Malterlib_Develop_CodeFormatting.h"
 #include "Malterlib_Develop_CodeFormattingLexer.h"
+#include "Malterlib_Develop_CodeFormattingStructure.h"
 
 #include <Mib/File/File>
 
@@ -238,46 +239,71 @@ namespace NMib::NDevelop
 		return Result;
 	}
 
+	// Normalizes a source into comparable token spellings. Closing a nested template
+	// argument list regroups '>' '>' into the single token '>>', the same ambiguity the
+	// language resolves by context, so both spellings normalize alike.
+	static TCVector<CStr> fg_NormalizeCodeTokens(CStr const &_Source)
+	{
+		CCodeTokenStream Stream(_Source);
+		TCVector<CStr> Texts;
+		for (auto const &Token : Stream.f_GetTokens())
+		{
+			auto Kind = Token.m_Kind;
+			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice)
+				continue;
+
+			auto Text = Stream.f_GetText(Token);
+			// Trailing space inside a line comment is layout, not comment text.
+			if (Kind == ECodeTokenKind::mc_LineComment)
+				Text = fg_TrimCommentTrailingSpace(Text);
+
+			auto fInsert = [&](CStr const &_Text)
+				{
+					Texts.f_Insert("{}:{}"_f << umint(Kind) << _Text);
+				}
+			;
+			if (Kind == ECodeTokenKind::mc_Punctuator && (Text == ">>" || Text == ">>="))
+			{
+				fInsert(">");
+				fInsert(Text == ">>" ? ">" : ">=");
+
+				continue;
+			}
+
+			fInsert(Text);
+		}
+
+		return Texts;
+	}
+
+	CStr fg_DescribeCodeTokenDifference(CStr const &_First, CStr const &_Second)
+	{
+		auto First = fg_NormalizeCodeTokens(_First);
+		auto Second = fg_NormalizeCodeTokens(_Second);
+		for (umint i = 0; i < fg_Min(First.f_GetLen(), Second.f_GetLen()); ++i)
+		{
+			if (First[i] == Second[i])
+				continue;
+
+			return "token {} became '{}' instead of '{}'"_f << i << Second[i] << First[i];
+		}
+
+		if (First.f_GetLen() == Second.f_GetLen())
+			return {};
+
+		return "the token count changed from {} to {}"_f << First.f_GetLen() << Second.f_GetLen();
+	}
+
 	bool fg_HasEquivalentCodeTokens(CStr const &_First, CStr const &_Second)
 	{
-		CCodeTokenStream FirstStream(_First);
-		CCodeTokenStream SecondStream(_Second);
-		auto fSignificant = [](TCVector<CCodeToken> const &_Tokens)
-			{
-				TCVector<umint> Indices;
-				for (umint i = 0; i < _Tokens.f_GetLen(); ++i)
-				{
-					auto Kind = _Tokens[i].m_Kind;
-					if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline && Kind != ECodeTokenKind::mc_LineSplice)
-						Indices.f_Insert(i);
-				}
-
-				return Indices;
-			}
-		;
-
-		auto FirstIndices = fSignificant(FirstStream.f_GetTokens());
-		auto SecondIndices = fSignificant(SecondStream.f_GetTokens());
-		if (FirstIndices.f_GetLen() != SecondIndices.f_GetLen())
+		auto First = fg_NormalizeCodeTokens(_First);
+		auto Second = fg_NormalizeCodeTokens(_Second);
+		if (First.f_GetLen() != Second.f_GetLen())
 			return false;
 
-		for (umint i = 0; i < FirstIndices.f_GetLen(); ++i)
+		for (umint i = 0; i < First.f_GetLen(); ++i)
 		{
-			auto const &FirstToken = FirstStream.f_GetTokens()[FirstIndices[i]];
-			auto const &SecondToken = SecondStream.f_GetTokens()[SecondIndices[i]];
-			if (FirstToken.m_Kind != SecondToken.m_Kind)
-				return false;
-
-			auto FirstText = FirstStream.f_GetText(FirstToken);
-			auto SecondText = SecondStream.f_GetText(SecondToken);
-			// Trailing space inside a line comment is layout, not comment text.
-			if (FirstToken.m_Kind == ECodeTokenKind::mc_LineComment)
-			{
-				FirstText = fg_TrimCommentTrailingSpace(FirstText);
-				SecondText = fg_TrimCommentTrailingSpace(SecondText);
-			}
-
-			if (FirstText != SecondText)
+			if (First[i] != Second[i])
 				return false;
 		}
 
@@ -292,6 +318,7 @@ namespace
 		explicit CFormattingAnalyzer(CCodeFormattingRequest const &_Request)
 			: m_Request(_Request)
 			, m_Tokens(_Request.m_Source)
+			, m_Structure(m_Tokens)
 			, m_Lines(_Request.m_Source)
 		{
 		}
@@ -325,6 +352,13 @@ namespace
 		void fp_RuleTokenSpacing();
 		bool fp_HasOperand(umint _iToken, bool _bBefore) const;
 		void fp_RuleBlankLines();
+		void fp_RuleLineBreaks();
+		void fp_LimitJoinedLines();
+		void fp_BuildPlan(NContainer::TCVector<CCodeFormattingEdit> &o_Edits, NContainer::TCVector<umint> &o_Sources) const;
+		void fp_JoinNode(umint _iNode);
+		bool fp_TryJoin(umint _iFirstToken, umint _iLastToken, umint _iStartColumn);
+		bool fp_MeasureJoinedWidth(umint _iFirstToken, umint _iLastToken, umint &o_nColumns) const;
+		umint fp_GetTokenColumns(CCodeToken const &_Token) const;
 		void fp_DiagnoseLineLength();
 		void fp_EnsureSingleSpace(umint _iToken, bool _bBefore, CStr const &_Rule, CStr const &_Explanation);
 		void fp_RemoveSpaceBefore(umint _iToken, CStr const &_Rule, CStr const &_Explanation);
@@ -332,13 +366,23 @@ namespace
 
 		CCodeFormattingRequest const &m_Request;
 		CCodeTokenStream m_Tokens;
+		CCodeStructure m_Structure;
 		CTextLineMap m_Lines;
 		NContainer::TCVector<uint8> m_bProtectedStart;
 		NContainer::TCVector<uint8> m_bProtectedEnd;
 		NContainer::TCVector<CCodeFormattingRange> m_Disabled;
 		NContainer::TCVector<CCodeFormattingRange> m_Effective;
+		struct CJoinCandidate
+		{
+			umint m_iOffset = 0;								// Where the joined construct starts in the source.
+			NContainer::TCVector<umint> m_Edits;
+			bool m_bDropped = false;
+		};
+
 		NContainer::TCVector<CCodeFormattingEdit> m_Edits;
 		NContainer::TCVector<NStr::CStr> m_EditExplanations;
+		NContainer::TCVector<uint8> m_bEditDropped;
+		NContainer::TCVector<CJoinCandidate> m_JoinCandidates;
 		NContainer::TCVector<CCodeFormattingDiagnostic> m_Diagnostics;
 		bool m_bWholeFile = false;
 	};
@@ -461,9 +505,7 @@ namespace
 
 			auto fSplitsLineEnding = [&](umint _iOffset)
 				{
-					return _iOffset && _iOffset < nSource
-						&& m_Request.m_Source.f_GetStr()[_iOffset - 1] == '\r' && m_Request.m_Source.f_GetStr()[_iOffset] == '\n'
-					;
+					return _iOffset && _iOffset < nSource && m_Request.m_Source.f_GetStr()[_iOffset - 1] == '\r' && m_Request.m_Source.f_GetStr()[_iOffset] == '\n';
 				}
 			;
 			if (fSplitsLineEnding(Range.m_iOffset) || fSplitsLineEnding(Range.f_GetEnd()))
@@ -593,13 +635,7 @@ namespace
 		{
 			if (m_Request.m_RangePolicy == ECodeRangePolicy::mc_Strict)
 			{
-				fp_AddDiagnostic
-					(
-						"range-boundary", _iOffset, _nLength
-						, "{} requires an edit outside the requested range; no edit was applied to this unit"_f << _Rule
-						, false
-					)
-				;
+				fp_AddDiagnostic("range-boundary", _iOffset, _nLength, "{} requires an edit outside the requested range; no edit was applied to this unit"_f << _Rule, false);
 			}
 
 			return;
@@ -611,6 +647,9 @@ namespace
 		Edit.m_Replacement = _Replacement;
 		Edit.m_Rule = _Rule;
 		m_EditExplanations.f_Insert(_Explanation);
+		m_bEditDropped.f_Insert(uint8(0));
+		if (!m_JoinCandidates.f_IsEmpty() && _Rule == "line-break")
+			m_JoinCandidates.f_GetLast().m_Edits.f_Insert(m_Edits.f_GetLen() - 1);
 	}
 }
 
@@ -715,9 +754,7 @@ namespace
 			_iToken = umint(iNext);
 			auto const &Next = m_Tokens.f_GetTokens()[_iToken];
 
-			return !m_Tokens.f_IsText(Next, ")") && !m_Tokens.f_IsText(Next, "]") && !m_Tokens.f_IsText(Next, "}")
-				&& !m_Tokens.f_IsText(Next, ",") && !m_Tokens.f_IsText(Next, ";")
-			;
+			return !m_Tokens.f_IsText(Next, ")") && !m_Tokens.f_IsText(Next, "]") && !m_Tokens.f_IsText(Next, "}") && !m_Tokens.f_IsText(Next, ",") && !m_Tokens.f_IsText(Next, ";");
 		}
 
 		auto const &Previous = m_Tokens.f_GetTokens()[_iToken];
@@ -768,12 +805,7 @@ namespace
 			if (Canonical == CStr(Source.f_GetStr() + iStart, iIndent - iStart))
 				continue;
 
-			fp_AddEdit
-				(
-					"indentation", iStart, iIndent - iStart, Canonical
-					, Settings.m_bIndentWithTabs ? "indentation must use tabs" : "indentation must use spaces"
-				)
-			;
+			fp_AddEdit("indentation", iStart, iIndent - iStart, Canonical, Settings.m_bIndentWithTabs ? "indentation must use tabs" : "indentation must use spaces");
 		}
 	}
 
@@ -818,12 +850,7 @@ namespace
 			if (m_bProtectedEnd[iLine])
 				continue;
 
-			fp_AddEdit
-				(
-					"line-ending", m_Lines.f_GetLineContentEnd(iLine), m_Lines.f_GetTerminatorLength(iLine), Bytes
-					, "line ending must match end_of_line"
-				)
-			;
+			fp_AddEdit("line-ending", m_Lines.f_GetLineContentEnd(iLine), m_Lines.f_GetTerminatorLength(iLine), Bytes, "line ending must match end_of_line");
 		}
 	}
 
@@ -836,12 +863,7 @@ namespace
 		if (!m_Lines.f_GetLine(iLast).m_nLength && m_Lines.f_GetLine(iLast).m_Ending == ETextLineEnding::mc_None)
 			return;
 
-		fp_AddEdit
-			(
-				"final-newline", m_Request.m_Source.f_GetLen(), 0, fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding())
-				, "file must end with a newline"
-			)
-		;
+		fp_AddEdit("final-newline", m_Request.m_Source.f_GetLen(), 0, fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding()), "file must end with a newline");
 	}
 
 	void CFormattingAnalyzer::fp_EnsureSingleSpace(umint _iToken, bool _bBefore, CStr const &_Rule, CStr const &_Explanation)
@@ -933,9 +955,7 @@ namespace
 				auto iNext = fp_NextSignificant(i);
 				if (iNext >= 0 && !Tokens[umint(iNext)].m_bMultiLine && Tokens[umint(iNext)].m_Kind != ECodeTokenKind::mc_Newline)
 				{
-					bool bClosing = m_Tokens.f_IsText(Tokens[umint(iNext)], ")") || m_Tokens.f_IsText(Tokens[umint(iNext)], "]")
-						|| m_Tokens.f_IsText(Tokens[umint(iNext)], "}")
-					;
+					bool bClosing = m_Tokens.f_IsText(Tokens[umint(iNext)], ")") || m_Tokens.f_IsText(Tokens[umint(iNext)], "]") || m_Tokens.f_IsText(Tokens[umint(iNext)], "}");
 					if (!bClosing)
 						fp_EnsureSingleSpace(i, false, "comma-space", "the comma operator has one space after it");
 				}
@@ -1026,9 +1046,7 @@ namespace
 				continue;
 
 			auto const &Previous = Tokens[umint(iPrevious)];
-			bool bLabelContext = m_Tokens.f_IsText(Previous, "{") || m_Tokens.f_IsText(Previous, "}")
-				|| m_Tokens.f_IsText(Previous, ";") || m_Tokens.f_IsText(Previous, ":")
-			;
+			bool bLabelContext = m_Tokens.f_IsText(Previous, "{") || m_Tokens.f_IsText(Previous, "}") || m_Tokens.f_IsText(Previous, ";") || m_Tokens.f_IsText(Previous, ":");
 			if (!bLabelContext)
 				continue;
 
@@ -1176,41 +1194,16 @@ namespace
 		fp_RuleFinalNewline();
 		fp_RuleTokenSpacing();
 		fp_RuleBlankLines();
+		fp_RuleLineBreaks();
 
-		NContainer::TCVector<umint> Order;
-		for (umint i = 0; i < m_Edits.f_GetLen(); ++i)
-			Order.f_Insert(i);
+		fp_LimitJoinedLines();
 
-		Order.f_Sort
-			(
-				[this](umint _Left, umint _Right)
-				{
-					auto const &Left = m_Edits[_Left];
-					auto const &Right = m_Edits[_Right];
-					if (Left.m_iOffset != Right.m_iOffset)
-						return Left.m_iOffset <=> Right.m_iOffset;
-
-					return Right.m_nLength <=> Left.m_nLength;
-				}
-			)
-		;
-
-		// Independent rules can describe the same bytes, for example when a blank line
-		// inside a removed run also carries trailing whitespace. The first plan wins.
-		umint iCovered = 0;
-		umint iLastInsertion = 0;
-		bool bHasInsertion = false;
-		for (auto iEdit : Order)
+		NContainer::TCVector<umint> Sources;
+		fp_BuildPlan(Result.m_Edits, Sources);
+		for (auto iEdit : Sources)
 		{
 			auto const &Edit = m_Edits[iEdit];
-			if (Edit.m_iOffset < iCovered)
-				continue;
-
-			if (!Edit.m_nLength && bHasInsertion && Edit.m_iOffset == iLastInsertion)
-				continue;
-
-			Result.m_Edits.f_Insert(Edit);
-			auto &Diagnostic = Result.m_Diagnostics.f_Insert();
+			auto &Diagnostic = m_Diagnostics.f_Insert();
 			Diagnostic.m_Rule = Edit.m_Rule;
 			Diagnostic.m_Severity = ECodeFormattingSeverity::mc_Warning;
 			Diagnostic.m_iOffset = Edit.m_iOffset;
@@ -1219,13 +1212,6 @@ namespace
 			Diagnostic.m_iColumn = fp_GetColumn(Edit.m_iOffset);
 			Diagnostic.m_Explanation = m_EditExplanations[iEdit];
 			Diagnostic.m_bHasAutomaticFix = true;
-			if (!Edit.m_nLength)
-			{
-				iLastInsertion = Edit.m_iOffset;
-				bHasInsertion = true;
-			}
-
-			iCovered = Edit.f_GetEnd();
 		}
 
 		fp_DiagnoseLineLength();
@@ -1251,7 +1237,7 @@ namespace
 
 		auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, Result.m_Edits);
 		if (!fg_HasEquivalentCodeTokens(m_Request.m_Source, Formatted))
-			return fFailed("Formatting would change the token stream; no edits were produced");
+			return fFailed("Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(m_Request.m_Source, Formatted));
 
 		if (m_bWholeFile)
 		{
@@ -1287,5 +1273,268 @@ namespace NMib::NDevelop
 		CFormattingAnalyzer Analyzer(_Request);
 
 		return Analyzer.f_Analyze(true);
+	}
+}
+
+namespace
+{
+	umint CFormattingAnalyzer::fp_GetTokenColumns(CCodeToken const &_Token) const
+	{
+		umint nColumns = 0;
+		if (!fg_MeasureTextColumns(m_Request.m_Source.f_GetStr() + _Token.m_iOffset, _Token.m_nLength, m_Request.m_Settings.m_nTabWidth, nColumns))
+			return TCLimitsInt<umint>::mc_Max;
+
+		return nColumns;
+	}
+
+	// Measures the construct as a single line. Returns false when a gap has no canonical
+	// inline spelling, which is also what makes the construct ineligible for joining.
+	bool CFormattingAnalyzer::fp_MeasureJoinedWidth(umint _iFirstToken, umint _iLastToken, umint &o_nColumns) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		umint nColumns = 0;
+		umint iPrevious = _iFirstToken;
+		for (umint i = _iFirstToken; i <= _iLastToken; ++i)
+		{
+			auto const &Token = Tokens[i];
+			if (Token.m_Kind == ECodeTokenKind::mc_Newline || Token.m_Kind == ECodeTokenKind::mc_LineSplice)
+				continue;
+
+			if (Token.m_Kind == ECodeTokenKind::mc_Whitespace)
+				continue;
+
+			if (Token.m_bMultiLine)
+				return false;
+
+			if (i != _iFirstToken)
+			{
+				bool bNewline = false;
+				for (umint iGap = iPrevious + 1; iGap < i; ++iGap)
+					bNewline |= Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline || Tokens[iGap].m_Kind == ECodeTokenKind::mc_LineSplice;
+
+				if (!bNewline)
+				{
+					for (umint iGap = iPrevious + 1; iGap < i; ++iGap)
+						nColumns += fp_GetTokenColumns(Tokens[iGap]);
+				}
+				else
+				{
+					auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, iPrevious, i);
+					if (Spacing == ECodeSpacing::mc_Preserve)
+						return false;
+
+					nColumns += Spacing == ECodeSpacing::mc_Space;
+				}
+			}
+
+			nColumns += fp_GetTokenColumns(Token);
+			iPrevious = i;
+		}
+
+		o_nColumns = nColumns;
+
+		return true;
+	}
+
+	// Replaces every gap inside the construct that holds a line break with its canonical
+	// inline separator. Gaps already on one line keep the spacing the other rules govern.
+	bool CFormattingAnalyzer::fp_TryJoin(umint _iFirstToken, umint _iLastToken, umint _iStartColumn)
+	{
+		umint nColumns = 0;
+		if (!fp_MeasureJoinedWidth(_iFirstToken, _iLastToken, nColumns))
+			return false;
+
+		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		if (nMaxColumns && _iStartColumn + nColumns > nMaxColumns)
+			return false;
+
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		m_JoinCandidates.f_Insert().m_iOffset = Tokens[_iFirstToken].m_iOffset;
+		umint iPrevious = TCLimitsInt<umint>::mc_Max;
+		for (umint i = _iFirstToken; i <= _iLastToken; ++i)
+		{
+			auto Kind = Tokens[i].m_Kind;
+			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice)
+				continue;
+
+			if (iPrevious != TCLimitsInt<umint>::mc_Max && iPrevious + 1 != i)
+			{
+				bool bNewline = false;
+				for (umint iGap = iPrevious + 1; iGap < i; ++iGap)
+					bNewline |= Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline || Tokens[iGap].m_Kind == ECodeTokenKind::mc_LineSplice;
+
+				if (bNewline)
+				{
+					auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, iPrevious, i);
+					auto iStart = Tokens[iPrevious].f_GetEnd();
+					fp_AddEdit("line-break", iStart, Tokens[i].m_iOffset - iStart, Spacing == ECodeSpacing::mc_Space ? " " : CStr(), "the construct fits on one line");
+				}
+			}
+
+			iPrevious = i;
+		}
+
+		return true;
+	}
+
+	void CFormattingAnalyzer::fp_JoinNode(umint _iNode)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		if (Node.m_Kind == ECodeNodeKind::mc_Unsupported)
+			return;
+
+		bool bContainer = Node.m_Kind == ECodeNodeKind::mc_File || Node.m_Kind == ECodeNodeKind::mc_Block
+			|| (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace)
+		;
+		if (!bContainer && Node.f_IsJoinable() && !Node.m_bFixedLineBreaks)
+		{
+			// A group is joined together with the name in front of it, so a split call
+			// collapses to its inline spelling rather than leaving a dangling parenthesis.
+			// Only a name or a closing bracket owns the group, and only inside the same
+			// statement: a clause's condition never owns the statement it guards.
+			auto iFirst = Node.m_iFirstToken;
+			if (Node.m_Kind == ECodeNodeKind::mc_Group)
+			{
+				umint iStatement = _iNode;
+				while (Nodes[iStatement].m_Kind != ECodeNodeKind::mc_Statement && iStatement)
+					iStatement = Nodes[iStatement].m_iParent;
+
+				auto iBoundary = Nodes[iStatement].m_Kind == ECodeNodeKind::mc_Statement ? Nodes[iStatement].m_iFirstToken : iFirst;
+				auto iOwner = fp_PreviousCode(iFirst);
+				if (iOwner >= 0 && umint(iOwner) >= iBoundary)
+				{
+					auto const &Owner = m_Tokens.f_GetTokens()[umint(iOwner)];
+					bool bOwns = Owner.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Owner, ")") || m_Tokens.f_IsText(Owner, "]") || m_Tokens.f_IsText(Owner, ">");
+					if (bOwns)
+						iFirst = umint(iOwner);
+				}
+			}
+
+			if (fp_TryJoin(iFirst, Node.m_iLastToken, fp_GetColumn(m_Tokens.f_GetTokens()[iFirst].m_iOffset) - 1))
+				return;
+		}
+
+		for (auto iChild : Node.m_Children)
+			fp_JoinNode(iChild);
+	}
+
+	void CFormattingAnalyzer::fp_RuleLineBreaks()
+	{
+		if (!m_Structure.f_IsComplete())
+			return;
+
+		fp_JoinNode(0);
+	}
+}
+
+namespace
+{
+	// Orders the collected edits and resolves the overlaps independent rules can produce,
+	// for example a blank line inside a removed run that also carries trailing whitespace.
+	void CFormattingAnalyzer::fp_BuildPlan(TCVector<CCodeFormattingEdit> &o_Edits, TCVector<umint> &o_Sources) const
+	{
+		o_Edits.f_Clear();
+		o_Sources.f_Clear();
+
+		TCVector<umint> Order;
+		for (umint i = 0; i < m_Edits.f_GetLen(); ++i)
+		{
+			if (!m_bEditDropped[i])
+				Order.f_Insert(i);
+		}
+
+		Order.f_Sort
+			(
+				[this](umint _Left, umint _Right)
+				{
+					auto const &Left = m_Edits[_Left];
+					auto const &Right = m_Edits[_Right];
+					if (Left.m_iOffset != Right.m_iOffset)
+						return Left.m_iOffset <=> Right.m_iOffset;
+
+					return Right.m_nLength <=> Left.m_nLength;
+				}
+			)
+		;
+
+		umint iCovered = 0;
+		umint iLastInsertion = 0;
+		bool bHasInsertion = false;
+		for (auto iEdit : Order)
+		{
+			auto const &Edit = m_Edits[iEdit];
+			if (Edit.m_iOffset < iCovered)
+				continue;
+
+			if (!Edit.m_nLength && bHasInsertion && Edit.m_iOffset == iLastInsertion)
+				continue;
+
+			o_Edits.f_Insert(Edit);
+			o_Sources.f_Insert(iEdit);
+			if (!Edit.m_nLength)
+			{
+				iLastInsertion = Edit.m_iOffset;
+				bHasInsertion = true;
+			}
+
+			iCovered = Edit.f_GetEnd();
+		}
+	}
+
+	// Joining is decided per construct, so two constructs that end up on the same line can
+	// each fit and still overflow together. The plan is applied and remeasured, and every
+	// join landing on an overlong line is dropped, until no join makes a line too long.
+	void CFormattingAnalyzer::fp_LimitJoinedLines()
+	{
+		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		if (!nMaxColumns || m_JoinCandidates.f_IsEmpty())
+			return;
+
+		for (umint iPass = 0; iPass < 8; ++iPass)
+		{
+			TCVector<CCodeFormattingEdit> Plan;
+			TCVector<umint> Sources;
+			fp_BuildPlan(Plan, Sources);
+			auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, Plan);
+			CTextLineMap FormattedLines(Formatted);
+
+			bool bDropped = false;
+			umint iPlan = 0;
+			aint nDelta = 0;
+			for (auto &Candidate : m_JoinCandidates)
+			{
+				if (Candidate.m_bDropped || Candidate.m_Edits.f_IsEmpty())
+					continue;
+
+				while (iPlan < Plan.f_GetLen() && Plan[iPlan].f_GetEnd() <= Candidate.m_iOffset)
+				{
+					nDelta += aint(Plan[iPlan].m_Replacement.f_GetLen()) - aint(Plan[iPlan].m_nLength);
+					++iPlan;
+				}
+
+				auto iLine = FormattedLines.f_FindLine(umint(aint(Candidate.m_iOffset) + nDelta));
+				umint nColumns = 0;
+				auto iStart = FormattedLines.f_GetLineStart(iLine);
+				bool bMeasured = fg_MeasureTextColumns(Formatted.f_GetStr() + iStart, FormattedLines.f_GetLine(iLine).m_nLength, m_Request.m_Settings.m_nTabWidth, nColumns);
+				if (bMeasured && nColumns <= nMaxColumns)
+					continue;
+
+				Candidate.m_bDropped = true;
+				bDropped = true;
+				for (auto iEdit : Candidate.m_Edits)
+					m_bEditDropped[iEdit] = 1;
+			}
+
+			if (!bDropped)
+				return;
+		}
+
+		// The passes did not settle, so no construct is joined rather than risking a long line.
+		for (auto &Candidate : m_JoinCandidates)
+		{
+			for (auto iEdit : Candidate.m_Edits)
+				m_bEditDropped[iEdit] = 1;
+		}
 	}
 }
