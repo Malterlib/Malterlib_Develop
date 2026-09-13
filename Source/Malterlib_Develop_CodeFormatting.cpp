@@ -360,6 +360,7 @@ namespace
 		bool fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore = true);
 		void fp_LayoutElements(umint _iNode, umint _iIndent);
 		bool fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations);
+		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_IsCastGroup(umint _iNode) const;
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause);
 		void fp_FindLooseOperators(umint _iFirst, umint _iLast, NContainer::TCVector<umint> &o_Operators) const;
@@ -2326,6 +2327,28 @@ namespace
 		}
 	}
 
+	// A lambda follows the operator at _iToken when the next thing is a capture list with
+	// a parameter list or a body behind it.
+	bool CFormattingAnalyzer::fp_IsLambdaIntroducer(umint _iToken) const
+	{
+		auto iNext = fp_NextCode(_iToken);
+		if (iNext < 0 || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iNext)], "["))
+			return false;
+
+		auto const &Nodes = m_Structure.f_GetNodes();
+		for (auto const &Node : Nodes)
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_iFirstToken != umint(iNext))
+				continue;
+
+			auto iAfter = fp_NextCode(Node.m_iLastToken);
+
+			return iAfter >= 0 && (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAfter)], "(") || m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAfter)], "{"));
+		}
+
+		return false;
+	}
+
 	// A parenthesised type in front of an operand is a cast: nothing separates the closing
 	// parenthesis from what follows, while a call or a clause has a name or a keyword in
 	// front of the opening one.
@@ -2367,7 +2390,11 @@ namespace
 		auto nGroupIndent = _bClause ? _iIndent : _iIndent + nTab;
 		bool bStatement = Node.m_Kind == ECodeNodeKind::mc_Statement;
 		bool bSplit = false;
-		umint iPreviousEnd = TCLimitsInt<umint>::mc_Max;
+		// Scopes are opened from the outside in, and only while the line still overflows.
+		// A line runs from the first token standing on it to the end of the range: opening
+		// a scope puts its closing marker on a line of its own, which is what moves the
+		// text after it, such as a chained call, onto the next line.
+		TCVector<umint> Scopes;
 		for (auto iChild : Node.m_Children)
 		{
 			auto const &Child = Nodes[iChild];
@@ -2387,24 +2414,46 @@ namespace
 			if (fp_IsCastGroup(iChild))
 				continue;
 
-			// Text between two scope markers, such as a chained call, is its own unit.
-			if (iPreviousEnd != TCLimitsInt<umint>::mc_Max)
-			{
-				auto iSegment = fp_NextCode(iPreviousEnd);
-				if (iSegment >= 0 && umint(iSegment) < Child.m_iFirstToken)
-					fp_BreakBefore(umint(iSegment), _iIndent + nTab);
-			}
-
-			bSplit |= fp_LayoutGroup(iChild, nGroupIndent, Child.m_iFirstToken != _iFirst);
-			iPreviousEnd = Child.m_iLastToken;
+			Scopes.f_Insert(iChild);
 		}
 
-		if (iPreviousEnd == TCLimitsInt<umint>::mc_Max || iPreviousEnd >= _iLast)
-			return bSplit;
+		umint iLineFirst = _iFirst;
+		umint nLineIndent = _iIndent;
+		umint iScope = 0;
+		while (iScope < Scopes.f_GetLen() && !fp_FitsInline(iLineFirst, _iLast, nLineIndent))
+		{
+			// The line is filled with as many scopes as fit and opened at the one that no
+			// longer does, so a scope is only ever taken apart to resolve its own overflow.
+			umint iPick = iScope;
+			for (umint i = iScope; i < Scopes.f_GetLen(); ++i)
+			{
+				auto iBefore = fp_PreviousCode(Nodes[Scopes[i]].m_iFirstToken);
+				if (iBefore >= 0 && umint(iBefore) >= iLineFirst && !fp_FitsInline(iLineFirst, umint(iBefore), nLineIndent))
+					break;
 
-		auto iSegment = fp_NextCode(iPreviousEnd);
-		if (iSegment >= 0 && umint(iSegment) <= _iLast)
-			fp_BreakBefore(umint(iSegment), _iIndent + nTab);
+				iPick = i;
+			}
+
+			auto const &Child = Nodes[Scopes[iPick]];
+			iScope = iPick + 1;
+			// What the line holds in front of that scope was measured as one line, so it
+			// is put on one: a break left over from the source would contradict the choice.
+			auto iHead = fp_PreviousCode(Child.m_iFirstToken);
+			if (iHead >= 0 && umint(iHead) > iLineFirst)
+				fp_TryJoin(iLineFirst, umint(iHead), nLineIndent);
+
+			if (!fp_LayoutGroup(Scopes[iPick], nGroupIndent, Child.m_iFirstToken != iLineFirst))
+				continue;
+
+			bSplit = true;
+			auto iNext = fp_NextCode(Child.m_iLastToken);
+			if (iNext < 0 || umint(iNext) > _iLast)
+				break;
+
+			iLineFirst = umint(iNext);
+			nLineIndent = _iIndent + nTab;
+			fp_BreakBefore(iLineFirst, nLineIndent);
+		}
 
 		return bSplit;
 	}
@@ -2413,8 +2462,14 @@ namespace
 	// first, and a resulting line is only broken further when it is still too long.
 	bool CFormattingAnalyzer::fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations)
 	{
+		// Fitting is not the same as being written that way: a range the layout keeps on
+		// one line is put there, so the result does not depend on where the source broke.
 		if (fp_FitsInline(_iFirst, _iLast, _iIndent))
+		{
+			fp_TryJoin(_iFirst, _iLast, _iIndent);
+
 			return false;
+		}
 
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
 		TCVector<umint> Operators;
@@ -2426,18 +2481,39 @@ namespace
 		// already sits at the group's content indentation and its continuation aligns there.
 		auto nContinuation = _bIndentContinuations ? _iIndent + nTab : _iIndent;
 		m_bOperatorSplit |= _bIndentContinuations;
-		for (auto iOperator : Operators)
-			fp_BreakBefore(iOperator, nContinuation);
+		// A lambda is written behind the operator that takes it, so that operator stays on
+		// the line its left hand side ends: 'g_Dispatch /' with the lambda below it. Only
+		// the first operator qualifies, and only while the line in front of it is whole.
+		bool bOperatorTrails = fp_IsLambdaIntroducer(Operators[0]) && fp_FitsInline(_iFirst, Operators[0], _iIndent);
+		if (bOperatorTrails)
+			fp_BreakAfter(Operators[0], nContinuation);
+
+		for (umint i = bOperatorTrails ? 1 : 0; i < Operators.f_GetLen(); ++i)
+			fp_BreakBefore(Operators[i], nContinuation);
 
 		for (umint iSegment = 0; iSegment <= Operators.f_GetLen(); ++iSegment)
 		{
 			auto iStart = iSegment ? Operators[iSegment - 1] : _iFirst;
 			auto iEnd = iSegment < Operators.f_GetLen() ? Operators[iSegment] - 1 : _iLast;
+			// An operator left on the previous line belongs to neither segment's own line.
+			if (iSegment == 1 && bOperatorTrails)
+			{
+				auto iNext = fp_NextCode(iStart);
+				if (iNext < 0 || umint(iNext) > iEnd)
+					continue;
+
+				iStart = umint(iNext);
+			}
+			else if (!iSegment && bOperatorTrails)
+				iEnd = Operators[0];
+
 			if (iEnd < iStart)
 				continue;
 
 			auto nSegmentIndent = iSegment ? nContinuation : _iIndent;
-			if (!fp_FitsInline(iStart, iEnd, nSegmentIndent))
+			if (fp_FitsInline(iStart, iEnd, nSegmentIndent))
+				fp_TryJoin(iStart, iEnd, nSegmentIndent);
+			else
 				fp_LayoutScopes(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iSegment);
 		}
 

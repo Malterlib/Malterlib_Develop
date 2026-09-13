@@ -286,9 +286,10 @@ namespace NMib::NDevelop
 			if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 				continue;
 
-			// A template argument can be a function type or an array bound, so a balanced
-			// bracket group inside the list is skipped rather than ending the search.
-			if (mp_pTokens->f_IsText(Token, "(") || mp_pTokens->f_IsText(Token, "["))
+			// A template argument can be a function type, an array bound or a braced value,
+			// so a balanced group inside the list is skipped rather than ending the search.
+			// A brace that opens a block belongs to whatever the '<' really was, and ends it.
+			if (mp_pTokens->f_IsText(Token, "(") || mp_pTokens->f_IsText(Token, "[") || (mp_pTokens->f_IsText(Token, "{") && !fp_IsBlockBrace(i)))
 			{
 				++nBrackets;
 
@@ -297,7 +298,7 @@ namespace NMib::NDevelop
 
 			if (nBrackets)
 			{
-				if (mp_pTokens->f_IsText(Token, ")") || mp_pTokens->f_IsText(Token, "]"))
+				if (mp_pTokens->f_IsText(Token, ")") || mp_pTokens->f_IsText(Token, "]") || mp_pTokens->f_IsText(Token, "}"))
 					--nBrackets;
 
 				continue;
@@ -707,8 +708,22 @@ namespace NMib::NDevelop
 
 			// A parameter list after a template argument's type spells a function type,
 			// which the standard separates: TCActorFunctor<TCFuture<void> (CStr _Host)>.
+			// Anywhere else the same spelling is a call or a construction, and stays tight.
 			if (fRight("("))
-				return ECodeSpacing::mc_Space;
+			{
+				auto const &Nodes = _Structure.f_GetNodes();
+				for (auto const &Node : Nodes)
+				{
+					if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != _iLeft)
+						continue;
+
+					auto const &Parent = Nodes[Node.m_iParent];
+
+					return Parent.m_Bracket == ECodeBracket::mc_Angle ? ECodeSpacing::mc_Space : ECodeSpacing::mc_None;
+				}
+
+				return ECodeSpacing::mc_None;
+			}
 
 			if (fRight("::") || fRight(",") || fRight(";") || fRight(")") || fRight("[") || fRight("]"))
 				return ECodeSpacing::mc_None;

@@ -338,6 +338,22 @@ namespace
 					// parenthesis, and its ':' was then read as a member initializer list.
 					CStr Conditional = "void f()\n{\n\tumint Mask = nBits == c_Per ? ~umint(0) : ((umint(1) << nBits) - 1);\n}\n";
 					fg_ExpectFormat("Conditional", Conditional, Conditional);
+
+					// A braced value is a template argument like any other. Stopping the
+					// angle match at its brace turned the list's '<' and '>' into
+					// comparisons, and the statement was then broken at them.
+					CStr Braced = "void f()\n{\n\tg.f_Bind\n\t\t<\n\t\t\t&C::f_D<CReturn, NTraits::TCDecay<tfp_CParams>...>\n"
+						"\t\t\t, COptions{EType::mc_Direct, EVirtual::mc_Not}\n\t\t>\n\t\t(\n"
+						"\t\t\tNFunction::TCFunctionMovable<CReturn (NTraits::TCRemoveQualifiersAndAddRValueReference<tfp_CParams>...)>\n"
+						"\t\t\t(fg_Forward<tf_FToDispatch>(_fDispatch))\n\t\t\t, fg_Forward<tfp_CParams>(p_Params)...\n\t\t)\n\t;\n}\n"
+					;
+					// The argument list fits where it stands, so only the call is opened up.
+					CStr BracedResult = "void f()\n{\n\tg.f_Bind<&C::f_D<CReturn, NTraits::TCDecay<tfp_CParams>...>"
+						", COptions{EType::mc_Direct, EVirtual::mc_Not}>\n\t\t(\n"
+						"\t\t\tNFunction::TCFunctionMovable<CReturn (NTraits::TCRemoveQualifiersAndAddRValueReference<tfp_CParams>...)>(fg_Forward<tf_FToDispatch>(_fDispatch))\n"
+						"\t\t\t, fg_Forward<tfp_CParams>(p_Params)...\n\t\t)\n\t;\n}\n"
+					;
+					fg_ExpectFormat("BracedTemplateArgument", Braced, BracedResult);
 				};
 
 				DMibTestCategory("Kept")
