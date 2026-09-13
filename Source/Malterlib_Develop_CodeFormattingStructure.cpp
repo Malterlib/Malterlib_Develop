@@ -78,9 +78,7 @@ namespace NMib::NDevelop
 {
 	bool CCodeNode::f_IsJoinable() const
 	{
-		return !m_bHasComment && !m_bHasDirective && !m_bHasBlock && !m_bHasMultiLineToken && !m_bHasMultiLineBrace
-			&& m_Kind != ECodeNodeKind::mc_Unsupported
-		;
+		return !m_bHasComment && !m_bHasDirective && !m_bHasBlock && !m_bHasMultiLineToken && !m_bHasMultiLineBrace && m_Kind != ECodeNodeKind::mc_Unsupported;
 	}
 
 	CCodeStructure::CCodeStructure(CCodeTokenStream const &_Tokens)
@@ -140,6 +138,11 @@ namespace NMib::NDevelop
 		return mp_bComplete;
 	}
 
+	umint CCodeStructure::f_GetIncompleteOffset() const
+	{
+		return mp_iIncompleteOffset;
+	}
+
 	bool CCodeStructure::f_IsAngleBracket(umint _iToken) const
 	{
 		return _iToken < mp_bAngleBracket.f_GetLen() && mp_bAngleBracket[_iToken];
@@ -194,7 +197,10 @@ namespace NMib::NDevelop
 		Parent.m_bHasMultiLineToken |= Node.m_bHasMultiLineToken;
 		Parent.m_bHasMultiLineBrace |= mp_Nodes[_iNode].m_bHasMultiLineBrace;
 		Parent.m_bHasBlock |= Node.m_bHasBlock || Node.m_Kind == ECodeNodeKind::mc_Block;
-		if (Node.m_Kind == ECodeNodeKind::mc_Unsupported)
+		// An unclassified construct makes the expression around it unclassified too, but a
+		// block and the file are only containers: their other statements stay layoutable.
+		bool bContainer = Parent.m_Kind == ECodeNodeKind::mc_Block || Parent.m_Kind == ECodeNodeKind::mc_File;
+		if (Node.m_Kind == ECodeNodeKind::mc_Unsupported && !bContainer)
 			Parent.m_Kind = ECodeNodeKind::mc_Unsupported;
 	}
 
@@ -211,6 +217,9 @@ namespace NMib::NDevelop
 			if (!_bBraced && fg_IsClosingBracket(*mp_pTokens, Token))
 			{
 				// A closer with no opener means the file's brackets do not balance.
+				if (mp_bComplete)
+					mp_iIncompleteOffset = Token.m_iOffset;
+
 				mp_bComplete = false;
 				mp_Nodes[_iNode].m_Kind = ECodeNodeKind::mc_Unsupported;
 
@@ -305,8 +314,10 @@ namespace NMib::NDevelop
 			}
 			else if (mp_pTokens->f_IsText(Token, ">>"))
 			{
+				// From the inner list's view a '>>' closes this level and leaves the other
+				// half to the list around it.
 				if (nDepth < 2)
-					return 0;
+					return i;
 
 				nDepth -= 2;
 				if (!nDepth)
@@ -375,6 +386,17 @@ namespace NMib::NDevelop
 				return i + 1;
 			}
 
+			// Closing two nested template argument lists is spelled as one '>>' token, so
+			// the inner list stops on it and leaves the outer one to close there as well.
+			if (_Bracket == ECodeBracket::mc_Angle && mp_pTokens->f_IsText(Token, ">>"))
+			{
+				mp_bAngleBracket[mp_Significant[i]] = 1;
+				mp_nPendingAngleClose = 1;
+				fp_Finish(iNode, mp_Significant[i]);
+
+				return i;
+			}
+
 			// A top-level separator is where the canonical split form starts a new line.
 			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && (mp_pTokens->f_IsText(Token, ",") || mp_pTokens->f_IsText(Token, ";")))
 			{
@@ -396,6 +418,9 @@ namespace NMib::NDevelop
 					mp_Nodes[iBlock].m_Kind = ECodeNodeKind::mc_Unsupported;
 					fp_Finish(iBlock, mp_Significant.f_GetLast());
 					fp_Finish(iNode, mp_Significant.f_GetLast());
+					if (mp_bComplete)
+						mp_iIncompleteOffset = Tokens[mp_Nodes[iBlock].m_iFirstToken].m_iOffset;
+
 					mp_bComplete = false;
 
 					return mp_Significant.f_GetLen();
@@ -417,6 +442,13 @@ namespace NMib::NDevelop
 			if (fp_MatchAngleGroup(i))
 			{
 				i = fp_BuildGroup(iNode, i, ECodeBracket::mc_Angle);
+				if (mp_nPendingAngleClose && _Bracket == ECodeBracket::mc_Angle)
+				{
+					--mp_nPendingAngleClose;
+					fp_Finish(iNode, mp_Significant[i]);
+
+					return i + 1;
+				}
 
 				continue;
 			}
@@ -435,6 +467,9 @@ namespace NMib::NDevelop
 
 		mp_Nodes[iNode].m_Kind = ECodeNodeKind::mc_Unsupported;
 		fp_Finish(iNode, mp_Significant.f_GetLast());
+		if (mp_bComplete)
+			mp_iIncompleteOffset = Tokens[mp_Nodes[iNode].m_iFirstToken].m_iOffset;
+
 		mp_bComplete = false;
 
 		return mp_Significant.f_GetLen();
@@ -450,8 +485,11 @@ namespace NMib::NDevelop
 		bool bConditional = false;
 		auto const &First = Tokens[mp_Significant[_iToken]];
 		bool bLabel = mp_pTokens->f_IsText(First, "case");
-		bool bClause = mp_pTokens->f_IsText(First, "if") || mp_pTokens->f_IsText(First, "for") || mp_pTokens->f_IsText(First, "while")
-			|| mp_pTokens->f_IsText(First, "switch") || mp_pTokens->f_IsText(First, "catch")
+		bool bClause = mp_pTokens->f_IsText(First, "if")
+			|| mp_pTokens->f_IsText(First, "for")
+			|| mp_pTokens->f_IsText(First, "while")
+			|| mp_pTokens->f_IsText(First, "switch")
+			|| mp_pTokens->f_IsText(First, "catch")
 		;
 		// A keyword that only introduces the statement after it ends here.
 		if (mp_pTokens->f_IsText(First, "else") || mp_pTokens->f_IsText(First, "do") || mp_pTokens->f_IsText(First, "try"))
@@ -503,19 +541,26 @@ namespace NMib::NDevelop
 				// an identifier in front of the brace. A statement terminator at the brace's
 				// own level is what tells the two apart.
 				auto const &First = Tokens[mp_Significant[_iToken]];
-				bool bDefinition = mp_pTokens->f_IsText(First, "struct") || mp_pTokens->f_IsText(First, "class")
-					|| mp_pTokens->f_IsText(First, "union") || mp_pTokens->f_IsText(First, "enum")
+				bool bDefinition = mp_pTokens->f_IsText(First, "struct")
+					|| mp_pTokens->f_IsText(First, "class")
+					|| mp_pTokens->f_IsText(First, "union")
+					|| mp_pTokens->f_IsText(First, "enum")
 					|| mp_pTokens->f_IsText(First, "namespace")
 				;
 				bool bBlock = bAfterCloseParen || i == _iToken || bDefinition;
 				if (!bBlock)
 				{
+					// A statement terminator at the brace's own level settles it wherever the
+					// brace appears, including a body that follows a braced member initializer.
 					auto const &Previous = Tokens[mp_Significant[i - 1]];
-					bBlock = mp_pTokens->f_IsText(Previous, "else") || mp_pTokens->f_IsText(Previous, "do")
-						|| mp_pTokens->f_IsText(Previous, "try") || mp_pTokens->f_IsText(Previous, "const")
-						|| mp_pTokens->f_IsText(Previous, "noexcept") || mp_pTokens->f_IsText(Previous, "override")
+					bBlock = mp_pTokens->f_IsText(Previous, "else")
+						|| mp_pTokens->f_IsText(Previous, "do")
+						|| mp_pTokens->f_IsText(Previous, "try")
+						|| mp_pTokens->f_IsText(Previous, "const")
+						|| mp_pTokens->f_IsText(Previous, "noexcept")
+						|| mp_pTokens->f_IsText(Previous, "override")
 						|| mp_pTokens->f_IsText(Previous, "final")
-						|| (Previous.m_Kind == ECodeTokenKind::mc_Identifier && fp_IsBlockBrace(i))
+						|| fp_IsBlockBrace(i)
 					;
 				}
 
@@ -536,6 +581,9 @@ namespace NMib::NDevelop
 					mp_Nodes[iBlock].m_Kind = ECodeNodeKind::mc_Unsupported;
 					fp_Finish(iBlock, mp_Significant.f_GetLast());
 					fp_Finish(iNode, mp_Significant.f_GetLast());
+					if (mp_bComplete)
+						mp_iIncompleteOffset = Tokens[mp_Nodes[iBlock].m_iFirstToken].m_iOffset;
+
 					mp_bComplete = false;
 
 					return mp_Significant.f_GetLen();
@@ -589,6 +637,8 @@ namespace NMib::NDevelop
 			if (fp_MatchAngleGroup(i))
 			{
 				i = fp_BuildGroup(iNode, i, ECodeBracket::mc_Angle);
+				// A '>>' that closed a nested list has no outer list here to close.
+				mp_nPendingAngleClose = 0;
 				bAfterCloseParen = false;
 
 				continue;

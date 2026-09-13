@@ -48,9 +48,7 @@ namespace NMib::NDevelop
 
 	private:
 		NConcurrency::TCFuture<NStorage::TCOptional<CEditorConfig>> fp_LoadConfiguration(NStr::CStr _Path);
-		auto fp_GetConfiguration(NStorage::TCSharedPointer<NPrivate::CEditorConfigCache> _pCache, NStr::CStr _Path)
-			-> NConcurrency::TCFuture<NStorage::TCOptional<CEditorConfig>>
-		;
+		auto fp_GetConfiguration(NStorage::TCSharedPointer<NPrivate::CEditorConfigCache> _pCache, NStr::CStr _Path) -> NConcurrency::TCFuture<NStorage::TCOptional<CEditorConfig>>;
 
 		FEditorConfigLoader mp_fLoader;
 		NStr::CStr mp_Boundary;

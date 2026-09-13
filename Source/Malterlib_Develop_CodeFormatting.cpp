@@ -473,7 +473,9 @@ namespace
 			if (!bDisabled)
 			{
 				o_Explanation = "'{}' at line {} has no matching '{}'"_f
-					<< gc_FormatOnDirective << m_Lines.f_FindLine(Token.m_iOffset) + 1 << gc_FormatOffDirective
+					<< gc_FormatOnDirective
+					<< m_Lines.f_FindLine(Token.m_iOffset) + 1
+					<< gc_FormatOffDirective
 				;
 
 				return false;
@@ -488,7 +490,9 @@ namespace
 		if (bDisabled)
 		{
 			o_Explanation = "'{}' at line {} has no matching '{}'"_f
-				<< gc_FormatOffDirective << m_Lines.f_FindLine(iDirective) + 1 << gc_FormatOnDirective
+				<< gc_FormatOffDirective
+				<< m_Lines.f_FindLine(iDirective) + 1
+				<< gc_FormatOnDirective
 			;
 
 			return false;
@@ -781,8 +785,11 @@ namespace
 
 		auto const &Previous = m_Tokens.f_GetTokens()[_iToken];
 
-		return !m_Tokens.f_IsText(Previous, "(") && !m_Tokens.f_IsText(Previous, "[") && !m_Tokens.f_IsText(Previous, "{")
-			&& !m_Tokens.f_IsText(Previous, ",") && !m_Tokens.f_IsText(Previous, ";")
+		return !m_Tokens.f_IsText(Previous, "(")
+			&& !m_Tokens.f_IsText(Previous, "[")
+			&& !m_Tokens.f_IsText(Previous, "{")
+			&& !m_Tokens.f_IsText(Previous, ",")
+			&& !m_Tokens.f_IsText(Previous, ";")
 		;
 	}
 
@@ -953,8 +960,11 @@ namespace
 			auto const &Token = Tokens[i];
 			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
 			{
-				bool bClause = m_Tokens.f_IsText(Token, "if") || m_Tokens.f_IsText(Token, "for") || m_Tokens.f_IsText(Token, "while")
-					|| m_Tokens.f_IsText(Token, "switch") || m_Tokens.f_IsText(Token, "catch")
+				bool bClause = m_Tokens.f_IsText(Token, "if")
+					|| m_Tokens.f_IsText(Token, "for")
+					|| m_Tokens.f_IsText(Token, "while")
+					|| m_Tokens.f_IsText(Token, "switch")
+					|| m_Tokens.f_IsText(Token, "catch")
 				;
 				if (!bClause)
 					continue;
@@ -1135,7 +1145,9 @@ namespace
 			{
 				fp_AddDiagnostic
 					(
-						"line-length", m_Lines.f_GetLineStart(iLine), m_Lines.f_GetLine(iLine).m_nLength
+						"line-length"
+						, m_Lines.f_GetLineStart(iLine)
+						, m_Lines.f_GetLine(iLine).m_nLength
 						, "line length overflows the column counter and exceeds max_line_length = {}"_f << nMaxColumns
 						, false
 					)
@@ -1149,7 +1161,9 @@ namespace
 
 			fp_AddDiagnostic
 				(
-					"line-length", m_Lines.f_GetLineStart(iLine), m_Lines.f_GetLine(iLine).m_nLength
+					"line-length"
+					, m_Lines.f_GetLineStart(iLine)
+					, m_Lines.f_GetLine(iLine).m_nLength
 					, "line length {} exceeds max_line_length = {}"_f << nColumns << nMaxColumns
 					, false
 				)
@@ -1290,7 +1304,8 @@ namespace
 				return fFailed
 					(
 						"Formatting did not reach a stable result: {} would still change formatted line {}"_f
-							<< Edit.m_Rule << FormattedLines.f_FindLine(Edit.m_iOffset) + 1
+						<< Edit.m_Rule
+						<< FormattedLines.f_FindLine(Edit.m_iOffset) + 1
 					)
 				;
 			}
@@ -1839,6 +1854,37 @@ namespace
 		if (iReturnLast < 0 || umint(iReturnLast) < iReturn)
 			return false;
 
+		// Everything before the name has to read as a type. An expression statement also
+		// ends in a call, and rewriting one of those as a declaration would destroy it.
+		auto iBeforeDeclarator = fp_PreviousCode(iDeclarator);
+		if (iBeforeDeclarator >= 0 && (m_Tokens.f_IsText(Tokens[umint(iBeforeDeclarator)], ".") || m_Tokens.f_IsText(Tokens[umint(iBeforeDeclarator)], "->")))
+			return false;
+
+		for (umint i = iReturn; i <= umint(iReturnLast); ++i)
+		{
+			auto const &Token = Tokens[i];
+			if (Token.m_Kind == ECodeTokenKind::mc_Identifier || Token.m_Kind == ECodeTokenKind::mc_Number)
+				continue;
+
+			if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
+				return false;
+
+			if (m_Structure.f_IsAngleBracket(i))
+				continue;
+
+			bool bTypePunctuation = m_Tokens.f_IsText(Token, "::")
+				|| m_Tokens.f_IsText(Token, "*")
+				|| m_Tokens.f_IsText(Token, "&")
+				|| m_Tokens.f_IsText(Token, "&&")
+				|| m_Tokens.f_IsText(Token, ",")
+				|| m_Tokens.f_IsText(Token, "[")
+				|| m_Tokens.f_IsText(Token, "]")
+				|| m_Tokens.f_IsText(Token, "...")
+			;
+			if (!bTypePunctuation)
+				return false;
+		}
+
 		// Find where the trailing type goes: after the qualifiers, before a definition,
 		// a pure specifier, or the terminator. An existing arrow means there is nothing to do.
 		umint iInsert = TCLimitsInt<umint>::mc_Max;
@@ -1888,7 +1934,8 @@ namespace
 		if (Node.m_Kind == ECodeNodeKind::mc_Unsupported)
 			return;
 
-		bool bContainer = Node.m_Kind == ECodeNodeKind::mc_File || Node.m_Kind == ECodeNodeKind::mc_Block
+		bool bContainer = Node.m_Kind == ECodeNodeKind::mc_File
+			|| Node.m_Kind == ECodeNodeKind::mc_Block
 			|| (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace)
 		;
 		if (!bContainer && Node.f_IsJoinable() && !Node.m_bFixedLineBreaks)
@@ -1905,9 +1952,7 @@ namespace
 				if (iOwner >= 0 && umint(iOwner) >= iBoundary)
 				{
 					auto const &Owner = m_Tokens.f_GetTokens()[umint(iOwner)];
-					bool bOwns = Owner.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Owner, ")")
-						|| m_Tokens.f_IsText(Owner, "]") || m_Tokens.f_IsText(Owner, ">")
-					;
+					bool bOwns = Owner.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Owner, ")") || m_Tokens.f_IsText(Owner, "]") || m_Tokens.f_IsText(Owner, ">");
 					if (bOwns)
 						iFirst = umint(iOwner);
 				}
@@ -2007,7 +2052,8 @@ namespace
 			iBlock = iChild;
 			auto iFirst = Nodes[iChild].m_iFirstToken;
 			auto iPrevious = fp_PreviousCode(iFirst);
-			iHeadLast = iPrevious >= 0 ? umint(iPrevious) : iFirst;
+			iHeadLast = iPrevious >= 0 ? umint(iPrevious)
+				: iFirst;
 			iHeadLastWithInitializers = iHeadLast;
 
 			break;
@@ -2055,8 +2101,10 @@ namespace
 				iSignatureLast = umint(iPrevious);
 		}
 
-		bool bJoinable = fp_IsRangeJoinable(_iNode, Node.m_iFirstToken, iSignatureLast) && !Node.m_bFixedLineBreaks
-			&& Node.m_Kind != ECodeNodeKind::mc_Unsupported && fp_IsFirstOnLine(Node.m_iFirstToken)
+		bool bJoinable = fp_IsRangeJoinable(_iNode, Node.m_iFirstToken, iSignatureLast)
+			&& !Node.m_bFixedLineBreaks
+			&& Node.m_Kind != ECodeNodeKind::mc_Unsupported
+			&& fp_IsFirstOnLine(Node.m_iFirstToken)
 		;
 		if (iInitializerList != TCLimitsInt<umint>::mc_Max)
 			iHeadLast = iSignatureLast;
@@ -2074,8 +2122,10 @@ namespace
 
 		if (bJoinable)
 		{
-			bool bClause = m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "if") || m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "for")
-				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "while") || m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "switch")
+			bool bClause = m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "if")
+				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "for")
+				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "while")
+				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "switch")
 				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "catch")
 			;
 			bool bHasTerminator = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && Node.m_iLastToken > Node.m_iFirstToken;
@@ -2157,8 +2207,14 @@ namespace
 
 	void CFormattingAnalyzer::fp_RuleLineBreaks()
 	{
+		// Brackets that do not nest as written make every line position a guess, so the
+		// file keeps its layout. Say so rather than silently leaving it unformatted.
 		if (!m_Structure.f_IsComplete())
+		{
+			fp_AddDiagnostic("structure", m_Structure.f_GetIncompleteOffset(), 0, "this construct's brackets do not nest as written, so the file's line structure was left alone", false);
+
 			return;
+		}
 
 		fp_LayoutNode(0, 0);
 	}
@@ -2173,14 +2229,18 @@ namespace
 		umint nDepth = 0;
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 		{
-			bool bClosing = m_Tokens.f_IsText(Tokens[i], ")") || m_Tokens.f_IsText(Tokens[i], "]") || m_Tokens.f_IsText(Tokens[i], "}")
+			bool bClosing = m_Tokens.f_IsText(Tokens[i], ")")
+				|| m_Tokens.f_IsText(Tokens[i], "]")
+				|| m_Tokens.f_IsText(Tokens[i], "}")
 				|| (m_Structure.f_IsAngleBracket(i) && m_Tokens.f_IsText(Tokens[i], ">"))
 			;
 			if (bClosing && nDepth)
 				--nDepth;
 
 			m_TokenDepth[i] = nDepth;
-			bool bOpening = m_Tokens.f_IsText(Tokens[i], "(") || m_Tokens.f_IsText(Tokens[i], "[") || m_Tokens.f_IsText(Tokens[i], "{")
+			bool bOpening = m_Tokens.f_IsText(Tokens[i], "(")
+				|| m_Tokens.f_IsText(Tokens[i], "[")
+				|| m_Tokens.f_IsText(Tokens[i], "{")
 				|| (m_Structure.f_IsAngleBracket(i) && m_Tokens.f_IsText(Tokens[i], "<"))
 			;
 			if (bOpening)

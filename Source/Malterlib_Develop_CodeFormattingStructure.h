@@ -63,6 +63,9 @@ namespace NMib::NDevelop
 		CCodeNode const &f_GetRoot() const;
 		bool f_IsComplete() const;
 
+		// Byte offset of the construct the builder could not close, when it is not complete.
+		umint f_GetIncompleteOffset() const;
+
 		// True for a '<' or '>' the builder resolved as a template argument list bracket
 		// rather than a comparison operator.
 		bool f_IsAngleBracket(umint _iToken) const;
@@ -82,6 +85,8 @@ namespace NMib::NDevelop
 		NContainer::TCVector<umint> mp_Significant;		// Indices of significant tokens, in order.
 		NContainer::TCVector<uint8> mp_GapFlags;		// What the trivia before each significant token contains.
 		NContainer::TCVector<uint8> mp_bAngleBracket;	// Indexed by token, set for resolved template brackets.
+		umint mp_iIncompleteOffset = 0;
+		umint mp_nPendingAngleClose = 0;				// A '>>' closing a nested list still has to close the list around it.
 		NContainer::TCVector<CCodeNode> mp_Nodes;
 		bool mp_bComplete = true;
 	};

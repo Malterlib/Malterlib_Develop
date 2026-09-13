@@ -299,22 +299,12 @@ namespace
 				DMibTestCategory("Join")
 				{
 					fg_ExpectFormat("Call", "void f()\n{\n\tg\n\t\t(\n\t\t\t5\n\t\t\t, 6\n\t\t)\n\t;\n}\n", "void f()\n{\n\tg(5, 6);\n}\n");
-					fg_ExpectFormat
-						(
-							"Nested"
-							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5\n\t\t\t, h\n\t\t\t\t(\n\t\t\t\t\t6\n\t\t\t\t)\n\t\t)\n\t;\n}\n"
-							, "void f()\n{\n\tg(5, h(6));\n}\n"
-						)
-					;
+					fg_ExpectFormat("Nested", "void f()\n{\n\tg\n\t\t(\n\t\t\t5\n\t\t\t, h\n\t\t\t\t(\n\t\t\t\t\t6\n\t\t\t\t)\n\t\t)\n\t;\n}\n", "void f()\n{\n\tg(5, h(6));\n}\n");
 					// A parameter list rejoins while the body keeps its own lines.
-					fg_ExpectFormat
-						(
-							"ParameterList"
-							, "void fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n{\n}\n"
-							, "void fg_F(int _A, int _B)\n{\n}\n"
-						)
-					;
+					fg_ExpectFormat("ParameterList", "void fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n{\n}\n", "void fg_F(int _A, int _B)\n{\n}\n");
 					fg_ExpectFormat("Template", "TCMap\n<\n\tCStr\n\t, CStr\n>\ng_Map;\n", "TCMap<CStr, CStr> g_Map;\n");
+					// Two nested lists close with one '>>' token.
+					fg_ExpectFormat("NestedTemplate", "TCMap\n<\n\tCStr\n\t, TCVector<CStr>\n>\ng_Map;\n", "TCMap<CStr, TCVector<CStr>> g_Map;\n");
 					// A function type is a template argument, and its parameter list is separated.
 					fg_ExpectFormat
 						(
@@ -329,13 +319,7 @@ namespace
 				DMibTestCategory("Kept")
 				{
 					// A comment or a directive inside fixes the construct's line structure.
-					fg_ExpectFormat
-						(
-							"Comment"
-							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n"
-							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n"
-						)
-					;
+					fg_ExpectFormat("Comment", "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n", "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n");
 					fg_ExpectFormat
 						(
 							"Directive"
@@ -374,13 +358,7 @@ namespace
 					fg_ExpectFormat("TypeDefinition", "struct C\n{\n\tint m_A;\n};\n", "struct C\n{\n\tint m_A;\n};\n");
 					// A clause's condition does not own the statement it guards, even when that
 					// statement starts with a parenthesis.
-					fg_ExpectFormat
-						(
-							"ClauseBody"
-							, "void f()\n{\n\twhile (auto p = g())\n\t\t(*p)();\n}\n"
-							, "void f()\n{\n\twhile (auto p = g())\n\t\t(*p)();\n}\n"
-						)
-					;
+					fg_ExpectFormat("ClauseBody", "void f()\n{\n\twhile (auto p = g())\n\t\t(*p)();\n}\n", "void f()\n{\n\twhile (auto p = g())\n\t\t(*p)();\n}\n");
 					// A braced initializer is written one element per line on purpose.
 					fg_ExpectFormat
 						(
@@ -390,13 +368,7 @@ namespace
 						)
 					;
 					// A call nested inside one still rejoins.
-					fg_ExpectFormat
-						(
-							"CallInsideInitializer"
-							, "auto g_Option =\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t1\n\t\t\t)\n\t}\n;\n"
-							, "auto g_Option =\n\t{\n\t\tg(1)\n\t}\n;\n"
-						)
-					;
+					fg_ExpectFormat("CallInsideInitializer", "auto g_Option =\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t1\n\t\t\t)\n\t}\n;\n", "auto g_Option =\n\t{\n\t\tg(1)\n\t}\n;\n");
 					// A lambda body is a block, so the call around it keeps its lines.
 					fg_ExpectFormat
 						(
@@ -421,28 +393,10 @@ namespace
 					;
 					fSplit("Call", "void f()\n{\n\tg(@, @, @);\n}\n", "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t\t, @\n\t\t)\n\t;\n}\n");
 					// A clause's parenthesis sits at the statement's own indentation.
-					fSplit
-						(
-							"Clause"
-							, "void f()\n{\n\tif (@ && @ && @)\n\t\th();\n}\n"
-							, "void f()\n{\n\tif\n\t(\n\t\t@\n\t\t&& @\n\t\t&& @\n\t)\n\t\th();\n}\n"
-						)
-					;
-					fSplit
-						(
-							"For"
-							, "void f()\n{\n\tfor (umint @ = 0; @ < 5; ++@)\n\t\th();\n}\n"
-							, "void f()\n{\n\tfor\n\t(\n\t\tumint @ = 0\n\t\t; @ < 5\n\t\t; ++@\n\t)\n\t\th();\n}\n"
-						)
-					;
+					fSplit("Clause", "void f()\n{\n\tif (@ && @ && @)\n\t\th();\n}\n", "void f()\n{\n\tif\n\t(\n\t\t@\n\t\t&& @\n\t\t&& @\n\t)\n\t\th();\n}\n");
+					fSplit("For", "void f()\n{\n\tfor (umint @ = 0; @ < 5; ++@)\n\t\th();\n}\n", "void f()\n{\n\tfor\n\t(\n\t\tumint @ = 0\n\t\t; @ < 5\n\t\t; ++@\n\t)\n\t\th();\n}\n");
 					// A definition splits its parameter list and keeps its body at statement level.
-					fSplit
-						(
-							"Definition"
-							, "void fg_F(int @, int @)\n{\n}\n"
-							, "void fg_F\n\t(\n\t\tint @\n\t\t, int @\n\t)\n{\n}\n"
-						)
-					;
+					fSplit("Definition", "void fg_F(int @, int @)\n{\n}\n", "void fg_F\n\t(\n\t\tint @\n\t\t, int @\n\t)\n{\n}\n");
 					// A trailing qualifier run is a logical unit of its own.
 					fSplit
 						(
@@ -461,21 +415,9 @@ namespace
 					;
 					// The outermost level is split first: an operator chain breaks at its
 					// loosest operators, and a call on a line that then fits is left alone.
-					fSplit
-						(
-							"OperatorChain"
-							, "void f()\n{\n\to_Str += g(\"@\") << @ << @;\n}\n"
-							, "void f()\n{\n\to_Str += g(\"@\")\n\t\t<< @\n\t\t<< @\n\t;\n}\n"
-						)
-					;
+					fSplit("OperatorChain", "void f()\n{\n\to_Str += g(\"@\") << @ << @;\n}\n", "void f()\n{\n\to_Str += g(\"@\")\n\t\t<< @\n\t\t<< @\n\t;\n}\n");
 					// The loosest operator wins, so a tighter one stays on its line.
-					fSplit
-						(
-							"Precedence"
-							, "void f()\n{\n\treturn g(\"@\") && h(\"@\") == nullptr;\n}\n"
-							, "void f()\n{\n\treturn g(\"@\")\n\t\t&& h(\"@\") == nullptr\n\t;\n}\n"
-						)
-					;
+					fSplit("Precedence", "void f()\n{\n\treturn g(\"@\") && h(\"@\") == nullptr;\n}\n", "void f()\n{\n\treturn g(\"@\")\n\t\t&& h(\"@\") == nullptr\n\t;\n}\n");
 					// An element that still does not fit splits its own scope markers.
 					fSplit
 						(
@@ -499,20 +441,8 @@ namespace
 						}
 					;
 					// The name does not fit before the parameter list, so the return type moves.
-					fSplit
-						(
-							"Declaration"
-							, "TCLongTemplate<@> fg_F(int _A, int _B);\n"
-							, "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n;\n"
-						)
-					;
-					fSplit
-						(
-							"Definition"
-							, "TCLongTemplate<@> fg_F(int _A, int _B)\n{\n}\n"
-							, "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n{\n}\n"
-						)
-					;
+					fSplit("Declaration", "TCLongTemplate<@> fg_F(int _A, int _B);\n", "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n;\n");
+					fSplit("Definition", "TCLongTemplate<@> fg_F(int _A, int _B)\n{\n}\n", "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n{\n}\n");
 					// The trailing type goes after the qualifiers.
 					fSplit
 						(
@@ -522,31 +452,21 @@ namespace
 						)
 					;
 					// Declaration specifiers stay in front of auto.
-					fSplit
-						(
-							"Specifiers"
-							, "static inline_always TCLongTemplate<@> fg_F(int _A);\n"
-							, "static inline_always auto fg_F\n\t(\n\t\tint _A\n\t)\n\t-> TCLongTemplate<@>\n;\n"
-						)
-					;
+					fSplit("Specifiers", "static inline_always TCLongTemplate<@> fg_F(int _A);\n", "static inline_always auto fg_F\n\t(\n\t\tint _A\n\t)\n\t-> TCLongTemplate<@>\n;\n");
 					// A constructor has no return type to move.
+					fSplit("Constructor", "CLongName<@>::CLongName(int _A, int _B);\n", "CLongName<@>::CLongName\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n;\n", true);
+					// An expression statement also ends in a call, and must never be rewritten
+					// as a declaration.
 					fSplit
 						(
-							"Constructor"
-							, "CLongName<@>::CLongName(int _A, int _B);\n"
-							, "CLongName<@>::CLongName\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n;\n"
+							"ExpressionStatement"
+							, "void f()\n{\n\to_Str = \"@\"_f << m_A << m_Lines.f_FindLine(_Offset) + 1 << m_B;\n}\n"
+							, "void f()\n{\n\to_Str = \"@\"_f\n\t\t<< m_A\n\t\t<< m_Lines.f_FindLine(_Offset) + 1\n\t\t<< m_B\n\t;\n}\n"
 							, true
 						)
 					;
 					// An existing trailing return type is only relaid out.
-					fSplit
-						(
-							"AlreadyTrailing"
-							, "auto fg_F(int _A, int _B) -> TCLongTemplate<@>;\n"
-							, "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n;\n"
-							, true
-						)
-					;
+					fSplit("AlreadyTrailing", "auto fg_F(int _A, int _B) -> TCLongTemplate<@>;\n", "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n;\n", true);
 				};
 
 				DMibTestCategory("TooLong")
