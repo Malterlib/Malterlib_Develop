@@ -339,6 +339,15 @@ namespace
 					CStr Conditional = "void f()\n{\n\tumint Mask = nBits == c_Per ? ~umint(0) : ((umint(1) << nBits) - 1);\n}\n";
 					fg_ExpectFormat("Conditional", Conditional, Conditional);
 
+					// The terminator ends the expression's line and counts towards it. An
+					// expression that only fits without it still has to be split.
+					CStr Wide;
+					for (umint i = 0; i < 183; ++i)
+						Wide += "W";
+
+					CStr Terminator = "void f()\n{\n\tg(" + Wide + ");\n}\n";
+					fg_ExpectFormat("Terminator", Terminator, "void f()\n{\n\tg\n\t\t(\n\t\t\t" + Wide + "\n\t\t)\n\t;\n}\n");
+
 					// A braced value is a template argument like any other. Stopping the
 					// angle match at its brace turned the list's '<' and '>' into
 					// comparisons, and the statement was then broken at them.
@@ -495,9 +504,9 @@ namespace
 					;
 					// Declaration specifiers stay in front of auto.
 					fSplit("Specifiers", "static inline_always TCLongTemplate<@> fg_F(int _A);\n", "static inline_always auto fg_F\n\t(\n\t\tint _A\n\t)\n\t-> TCLongTemplate<@>\n;\n");
-					// A constructor has no return type to move. The parameter list fits on a
-					// line of its own, so it goes there whole rather than being opened.
-					fSplit("Constructor", "CLongName<@>::CLongName(int _A, int _B);\n", "CLongName<@>::CLongName\n\t(int _A, int _B)\n;\n", true);
+					// A constructor has no return type to move. Its parameter list stands behind
+					// the name, so splitting there means opening the list.
+					fSplit("Constructor", "CLongName<@>::CLongName(int _A, int _B);\n", "CLongName<@>::CLongName\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n;\n", true);
 					// An expression statement also ends in a call, and must never be rewritten
 					// as a declaration.
 					fSplit
