@@ -425,7 +425,7 @@ namespace
 						(
 							"Clause"
 							, "void f()\n{\n\tif (@ && @ && @)\n\t\th();\n}\n"
-							, "void f()\n{\n\tif\n\t(\n\t\t@ && @ && @\n\t)\n\t\th();\n}\n"
+							, "void f()\n{\n\tif\n\t(\n\t\t@\n\t\t&& @\n\t\t&& @\n\t)\n\t\th();\n}\n"
 						)
 					;
 					fSplit
@@ -457,6 +457,23 @@ namespace
 							"Chained"
 							, "void f()\n{\n\tg(@, @).f_Call(@, @);\n}\n"
 							, "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t\t.f_Call\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// The outermost level is split first: an operator chain breaks at its
+					// loosest operators, and a call on a line that then fits is left alone.
+					fSplit
+						(
+							"OperatorChain"
+							, "void f()\n{\n\to_Str += g(\"@\") << @ << @;\n}\n"
+							, "void f()\n{\n\to_Str += g(\"@\")\n\t\t<< @\n\t\t<< @\n\t;\n}\n"
+						)
+					;
+					// The loosest operator wins, so a tighter one stays on its line.
+					fSplit
+						(
+							"Precedence"
+							, "void f()\n{\n\treturn g(\"@\") && h(\"@\") == nullptr;\n}\n"
+							, "void f()\n{\n\treturn g(\"@\")\n\t\t&& h(\"@\") == nullptr\n\t;\n}\n"
 						)
 					;
 					// An element that still does not fit splits its own scope markers.

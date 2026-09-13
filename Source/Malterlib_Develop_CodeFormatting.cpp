@@ -359,6 +359,10 @@ namespace
 		umint fp_FindInitializerList(umint _iNode, umint _iFirstParen, umint _iLast) const;
 		void fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore = true);
 		void fp_LayoutElements(umint _iNode, umint _iIndent);
+		bool fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations);
+		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause);
+		void fp_FindLooseOperators(umint _iFirst, umint _iLast, NContainer::TCVector<umint> &o_Operators) const;
+		void fp_PrepareTokenDepth();
 		bool fp_TryTrailingReturn(umint _iNode, umint _iIndent);
 		void fp_BreakBefore(umint _iToken, umint _iIndent);
 		void fp_BreakAfter(umint _iToken, umint _iIndent);
@@ -381,6 +385,10 @@ namespace
 		CCodeTokenStream m_Tokens;
 		CCodeStructure m_Structure;
 		CTextLineMap m_Lines;
+		bool m_bOperatorSplit = false;							// The statement broke at operators, so a block belongs to a continuation.
+		umint m_iSplitFirstParen = 0;							// A declaration is never split before its name.
+		umint m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
+		NContainer::TCVector<umint> m_TokenDepth;				// Bracket nesting of each token, for finding a range's own level.
 		NContainer::TCVector<uint8> m_bProtectedStart;
 		NContainer::TCVector<uint8> m_bProtectedEnd;
 		NContainer::TCVector<CCodeFormattingRange> m_Disabled;
@@ -1195,6 +1203,7 @@ namespace
 		}
 
 		fp_PrepareLineProtection();
+		fp_PrepareTokenDepth();
 		CStr Explanation;
 		if (!fp_CollectDisabledRegions(Explanation))
 			return fFailed(Explanation);
@@ -1659,7 +1668,6 @@ namespace
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
 		auto const &Node = Nodes[_iNode];
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
 		umint iElement = Node.m_iFirstToken + 1;
 		umint iSplit = 0;
 		while (iElement <= Node.m_iLastToken)
@@ -1668,15 +1676,9 @@ namespace
 			if (iEnd > iElement)
 			{
 				umint iLast = iEnd - 1;
-				if (!fp_FitsInline(iElement, iLast, _iIndent))
-				{
-					for (auto iChild : Node.m_Children)
-					{
-						auto const &Child = Nodes[iChild];
-						if (Child.m_iFirstToken >= iElement && Child.m_iLastToken <= iLast)
-							fp_LayoutGroup(iChild, _iIndent + nTab);
-					}
-				}
+				auto iStart = fp_NextCode(iElement - 1);
+				if (iStart >= 0 && umint(iStart) <= iLast)
+					fp_LayoutRange(_iNode, umint(iStart), iLast, _iIndent, false, false);
 			}
 
 			if (iSplit >= Node.m_SplitPoints.f_GetLen())
@@ -2014,13 +2016,31 @@ namespace
 		// A statement that does not start its own line, such as one behind an attribute on
 		// a clause's line, has no indentation of its own to lay anything out against.
 		umint iFirstParenGroup = 0;
+		umint iFirstParenGroupStart = 0;
 		for (auto iChild : Node.m_Children)
 		{
 			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Group && Nodes[iChild].m_Bracket == ECodeBracket::mc_Paren)
 			{
 				iFirstParenGroup = Nodes[iChild].m_iLastToken;
+				iFirstParenGroupStart = Nodes[iChild].m_iFirstToken;
 
 				break;
+			}
+		}
+
+		// A trailing return type is one logical unit on its own line; its own scope markers
+		// are only split when it does not fit there.
+		umint iTrailingReturn = TCLimitsInt<umint>::mc_Max;
+		if (iFirstParenGroup)
+		{
+			for (umint i = iFirstParenGroup; i <= Node.m_iLastToken; ++i)
+			{
+				if (Tokens[i].m_Kind == ECodeTokenKind::mc_Punctuator && m_Tokens.f_IsText(Tokens[i], "->"))
+				{
+					iTrailingReturn = i;
+
+					break;
+				}
 			}
 		}
 
@@ -2058,78 +2078,26 @@ namespace
 				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "while") || m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "switch")
 				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "catch")
 			;
-			auto nGroupIndent = bClause ? _iIndent : _iIndent + nTab;
+			bool bHasTerminator = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && Node.m_iLastToken > Node.m_iFirstToken;
 			// The return type moves behind the parameter list when the name would not fit.
 			fp_TryTrailingReturn(_iNode, _iIndent);
 
-			bool bHasTerminator = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && Node.m_iLastToken > Node.m_iFirstToken;
-			// A declaration is never split before its name, so the template arguments of a
-			// declarator-id keep their line even when the statement does not fit.
-			umint iFirstParen = 0;
-			for (auto iChild : Node.m_Children)
+			auto iRangeLast = iHeadLast;
+			if (bHasTerminator && iRangeLast == Node.m_iLastToken)
 			{
-				if (Nodes[iChild].m_Kind != ECodeNodeKind::mc_Group || Nodes[iChild].m_Bracket != ECodeBracket::mc_Paren)
-					continue;
-
-				iFirstParen = Nodes[iChild].m_iFirstToken;
-
-				break;
+				auto iPrevious = fp_PreviousCode(Node.m_iLastToken);
+				if (iPrevious >= 0)
+					iRangeLast = umint(iPrevious);
 			}
 
-			// A trailing return type is one logical unit on its own line. Its own scope
-			// markers are only split if it does not fit there, which the join pass decides.
-			umint iTrailingReturn = TCLimitsInt<umint>::mc_Max;
-			if (iFirstParen)
-			{
-				for (umint i = iFirstParen; i <= Node.m_iLastToken; ++i)
-				{
-					if (m_Tokens.f_IsText(Tokens[i], "->") && Tokens[i].m_Kind == ECodeTokenKind::mc_Punctuator)
-					{
-						iTrailingReturn = i;
-
-						break;
-					}
-				}
-			}
-
-			umint iPreviousEnd = Node.m_iFirstToken;
-			bool bSplit = false;
-			for (auto iChild : Node.m_Children)
-			{
-				auto const &Child = Nodes[iChild];
-				if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_iLastToken > iHeadLast)
-					continue;
-
-				if (Child.m_Bracket == ECodeBracket::mc_Brace || Child.m_iLastToken < iFirstParen)
-					continue;
-
-				if (Child.m_iFirstToken > iTrailingReturn)
-					continue;
-
-				// Text between two scope markers is a logical unit of its own.
-				auto iSegment = fp_NextCode(iPreviousEnd);
-				if (iPreviousEnd != Node.m_iFirstToken && iSegment >= 0 && umint(iSegment) < Child.m_iFirstToken)
-					fp_BreakBefore(umint(iSegment), _iIndent + nTab);
-
-				// A group that opens the statement, such as a cast, keeps the statement's own
-				// first line; moving it would change the indentation everything else is
-				// measured against.
-				fp_LayoutGroup(iChild, nGroupIndent, Child.m_iFirstToken != Node.m_iFirstToken);
-				iPreviousEnd = Child.m_iLastToken;
-				bSplit = true;
-			}
-
-			// A trailing qualifier run and the terminator each end up on their own line.
-			// With no scope marker to split there is nothing to lay out, so the statement
-			// keeps its shape and an overlong line is reported instead.
-			if (bSplit && iPreviousEnd < iHeadLast)
-			{
-				auto iSegment = fp_NextCode(iPreviousEnd);
-				auto iTerminator = bHasTerminator ? Node.m_iLastToken : Node.m_iLastToken + 1;
-				if (iSegment >= 0 && umint(iSegment) <= iHeadLast && umint(iSegment) < iTerminator)
-					fp_BreakBefore(umint(iSegment), _iIndent + nTab);
-			}
-
+			m_iSplitFirstParen = iFirstParenGroupStart;
+			m_iSplitTrailingReturn = iTrailingReturn;
+			m_bOperatorSplit = false;
+			// A statement with no scope marker to split keeps its shape; only a statement
+			// that was actually relaid out puts its terminator on a line of its own.
+			bool bSplit = fp_LayoutRange(_iNode, Node.m_iFirstToken, iRangeLast, _iIndent, bClause, true);
+			m_iSplitFirstParen = 0;
+			m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
 			if (bSplit && bHasTerminator)
 				fp_BreakBefore(Node.m_iLastToken, _iIndent);
 		}
@@ -2149,7 +2117,9 @@ namespace
 
 		if (iBlock != TCLimitsInt<umint>::mc_Max)
 		{
-			if (bJoinable)
+			// A body opens at the statement's own indentation. After an operator split the
+			// brace belongs to a lambda on a continuation line and keeps its place.
+			if (bJoinable && !m_bOperatorSplit)
 				fp_BreakBefore(Nodes[iBlock].m_iFirstToken, _iIndent);
 
 			fp_LayoutNode(iBlock, _iIndent);
@@ -2191,5 +2161,167 @@ namespace
 			return;
 
 		fp_LayoutNode(0, 0);
+	}
+}
+
+namespace
+{
+	void CFormattingAnalyzer::fp_PrepareTokenDepth()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		m_TokenDepth.f_SetLen(Tokens.f_GetLen());
+		umint nDepth = 0;
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			bool bClosing = m_Tokens.f_IsText(Tokens[i], ")") || m_Tokens.f_IsText(Tokens[i], "]") || m_Tokens.f_IsText(Tokens[i], "}")
+				|| (m_Structure.f_IsAngleBracket(i) && m_Tokens.f_IsText(Tokens[i], ">"))
+			;
+			if (bClosing && nDepth)
+				--nDepth;
+
+			m_TokenDepth[i] = nDepth;
+			bool bOpening = m_Tokens.f_IsText(Tokens[i], "(") || m_Tokens.f_IsText(Tokens[i], "[") || m_Tokens.f_IsText(Tokens[i], "{")
+				|| (m_Structure.f_IsAngleBracket(i) && m_Tokens.f_IsText(Tokens[i], "<"))
+			;
+			if (bOpening)
+				++nDepth;
+		}
+	}
+
+	// Finds the binary operators that bind loosest at the range's own bracket level. Those
+	// are the outermost places the range can be broken, so they are split first and the
+	// scopes inside them only if a resulting line is still too long.
+	void CFormattingAnalyzer::fp_FindLooseOperators(umint _iFirst, umint _iLast, TCVector<umint> &o_Operators) const
+	{
+		struct CPrecedence
+		{
+			ch8 const *m_pText;
+			umint m_Level;
+		};
+		// Assignment keeps its right hand side, and a comma is a separator a group owns.
+		static CPrecedence const gsc_Operators[] =
+			{
+				{"*", 5}, {"/", 5}, {"%", 5}, {"+", 6}, {"-", 6}, {"<<", 7}, {">>", 7}, {"<=>", 8}
+				, {"<", 9}, {">", 9}, {"<=", 9}, {">=", 9}, {"==", 10}, {"!=", 10}
+				, {"&", 11}, {"^", 12}, {"|", 13}, {"&&", 14}, {"||", 15}
+			}
+		;
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto nLevel = m_TokenDepth[_iFirst];
+		umint nLoosest = 0;
+		for (umint iPass = 0; iPass < 2; ++iPass)
+		{
+			for (umint i = _iFirst; i <= _iLast; ++i)
+			{
+				if (Tokens[i].m_Kind != ECodeTokenKind::mc_Punctuator || m_TokenDepth[i] != nLevel || m_Structure.f_IsAngleBracket(i))
+					continue;
+
+				umint nPrecedence = 0;
+				for (auto const &Operator : gsc_Operators)
+				{
+					if (m_Tokens.f_IsText(Tokens[i], Operator.m_pText))
+						nPrecedence = Operator.m_Level;
+				}
+
+				// Without operands on both sides the token is a declarator or a unary form.
+				if (!nPrecedence || i == _iFirst || !fp_HasOperand(i, true) || !fp_HasOperand(i, false))
+					continue;
+
+				if (!iPass)
+				{
+					nLoosest = fg_Max(nLoosest, nPrecedence);
+
+					continue;
+				}
+
+				if (nPrecedence == nLoosest)
+					o_Operators.f_Insert(i);
+			}
+
+			if (!nLoosest)
+				return;
+		}
+	}
+
+	// Splits a range at its scope markers: every group on it goes onto its own lines.
+	bool CFormattingAnalyzer::fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto nGroupIndent = _bClause ? _iIndent : _iIndent + nTab;
+		bool bStatement = Node.m_Kind == ECodeNodeKind::mc_Statement;
+		bool bSplit = false;
+		umint iPreviousEnd = TCLimitsInt<umint>::mc_Max;
+		for (auto iChild : Node.m_Children)
+		{
+			auto const &Child = Nodes[iChild];
+			if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_Bracket == ECodeBracket::mc_Brace)
+				continue;
+
+			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken > _iLast)
+				continue;
+
+			// A declaration is never split before its name, and a trailing return type is
+			// one unit on its own line.
+			if (bStatement && (Child.m_iLastToken < m_iSplitFirstParen || Child.m_iFirstToken > m_iSplitTrailingReturn))
+				continue;
+
+			// Text between two scope markers, such as a chained call, is its own unit.
+			if (iPreviousEnd != TCLimitsInt<umint>::mc_Max)
+			{
+				auto iSegment = fp_NextCode(iPreviousEnd);
+				if (iSegment >= 0 && umint(iSegment) < Child.m_iFirstToken)
+					fp_BreakBefore(umint(iSegment), _iIndent + nTab);
+			}
+
+			fp_LayoutGroup(iChild, nGroupIndent, Child.m_iFirstToken != _iFirst);
+			iPreviousEnd = Child.m_iLastToken;
+			bSplit = true;
+		}
+
+		if (iPreviousEnd == TCLimitsInt<umint>::mc_Max || iPreviousEnd >= _iLast)
+			return bSplit;
+
+		auto iSegment = fp_NextCode(iPreviousEnd);
+		if (iSegment >= 0 && umint(iSegment) <= _iLast)
+			fp_BreakBefore(umint(iSegment), _iIndent + nTab);
+
+		return bSplit;
+	}
+
+	// Lays a range out on as few levels as the column limit allows: the outermost breaks
+	// first, and a resulting line is only broken further when it is still too long.
+	bool CFormattingAnalyzer::fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations)
+	{
+		if (fp_FitsInline(_iFirst, _iLast, _iIndent))
+			return false;
+
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		TCVector<umint> Operators;
+		fp_FindLooseOperators(_iFirst, _iLast, Operators);
+		if (Operators.f_IsEmpty())
+			return fp_LayoutScopes(_iNode, _iFirst, _iLast, _iIndent, _bClause);
+
+		// A statement's continuation is indented past its own start; an element of a group
+		// already sits at the group's content indentation and its continuation aligns there.
+		auto nContinuation = _bIndentContinuations ? _iIndent + nTab : _iIndent;
+		m_bOperatorSplit |= _bIndentContinuations;
+		for (auto iOperator : Operators)
+			fp_BreakBefore(iOperator, nContinuation);
+
+		for (umint iSegment = 0; iSegment <= Operators.f_GetLen(); ++iSegment)
+		{
+			auto iStart = iSegment ? Operators[iSegment - 1] : _iFirst;
+			auto iEnd = iSegment < Operators.f_GetLen() ? Operators[iSegment] - 1 : _iLast;
+			if (iEnd < iStart)
+				continue;
+
+			auto nSegmentIndent = iSegment ? nContinuation : _iIndent;
+			if (!fp_FitsInline(iStart, iEnd, nSegmentIndent))
+				fp_LayoutScopes(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iSegment);
+		}
+
+		return true;
 	}
 }
