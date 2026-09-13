@@ -312,6 +312,14 @@ namespace
 						)
 					;
 					fg_ExpectFormat("Template", "TCMap\n<\n\tCStr\n\t, CStr\n>\ng_Map;\n", "TCMap<CStr, CStr> g_Map;\n");
+					// A function type is a template argument, and its parameter list is separated.
+					fg_ExpectFormat
+						(
+							"FunctionType"
+							, "using FOnUse = TCActorFunctor\n\t<\n\t\tTCFuture<void>\n\t\t(\n\t\t\tCStr _HostID\n\t\t\t, int _Info\n\t\t)\n\t>\n;\n"
+							, "using FOnUse = TCActorFunctor<TCFuture<void> (CStr _HostID, int _Info)>;\n"
+						)
+					;
 					fg_ExpectFormat("Condition", "void f()\n{\n\tif\n\t(\n\t\ta\n\t\t&& b\n\t)\n\t\tg();\n}\n", "void f()\n{\n\tif (a && b)\n\t\tg();\n}\n");
 				};
 
@@ -350,6 +358,17 @@ namespace
 						)
 					;
 					fg_ExpectFormat("AccessSpecifier", "struct C\n{\npublic:\n\tint m_A;\n};\n", "struct C\n{\npublic:\n\tint m_A;\n};\n");
+					// A lambda body is part of the expression around it, so the statement keeps
+					// its lines and its terminator keeps its own line.
+					fg_ExpectFormat
+						(
+							"TerminatorAfterLambda"
+							, "void f()\n{\n\tself / []() -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t\t> g_Discard\n\t;\n}\n"
+							, "void f()\n{\n\tself / []() -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t\t> g_Discard\n\t;\n}\n"
+						)
+					;
+					// A type definition still ends at its terminator.
+					fg_ExpectFormat("TypeDefinition", "struct C\n{\n\tint m_A;\n};\n", "struct C\n{\n\tint m_A;\n};\n");
 					// A clause's condition does not own the statement it guards, even when that
 					// statement starts with a parenthesis.
 					fg_ExpectFormat

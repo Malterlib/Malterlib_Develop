@@ -270,11 +270,29 @@ namespace NMib::NDevelop
 			return 0;
 
 		umint nDepth = 0;
+		umint nBrackets = 0;
 		for (auto i = _iToken; i < mp_Significant.f_GetLen(); ++i)
 		{
 			auto const &Token = Tokens[mp_Significant[i]];
 			if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 				continue;
+
+			// A template argument can be a function type or an array bound, so a balanced
+			// bracket group inside the list is skipped rather than ending the search.
+			if (mp_pTokens->f_IsText(Token, "(") || mp_pTokens->f_IsText(Token, "["))
+			{
+				++nBrackets;
+
+				continue;
+			}
+
+			if (nBrackets)
+			{
+				if (mp_pTokens->f_IsText(Token, ")") || mp_pTokens->f_IsText(Token, "]"))
+					--nBrackets;
+
+				continue;
+			}
 
 			if (mp_pTokens->f_IsText(Token, "<"))
 				++nDepth;
@@ -518,7 +536,8 @@ namespace NMib::NDevelop
 				fp_Finish(iBlock, mp_Significant[iClose]);
 				i = iClose + 1;
 				bAfterCloseParen = false;
-				// A block ends the statement unless a terminator, else, or while follows it.
+				// A block ends the statement unless it is a lambda body, which sits inside an
+				// expression, so an operator or closer after it continues the same statement.
 				if (i < mp_Significant.f_GetLen())
 				{
 					auto const &Next = Tokens[mp_Significant[i]];
@@ -531,6 +550,9 @@ namespace NMib::NDevelop
 					}
 
 					if (mp_pTokens->f_IsText(Next, "else") || mp_pTokens->f_IsText(Next, "while") || mp_pTokens->f_IsText(Next, "catch"))
+						continue;
+
+					if (Next.m_Kind == ECodeTokenKind::mc_Punctuator && !mp_pTokens->f_IsText(Next, "{") && !mp_pTokens->f_IsText(Next, "}"))
 						continue;
 				}
 
@@ -616,7 +638,12 @@ namespace NMib::NDevelop
 			if (Right.m_Kind == ECodeTokenKind::mc_Identifier)
 				return ECodeSpacing::mc_Space;
 
-			if (fRight("(") || fRight("::") || fRight(",") || fRight(";") || fRight(")") || fRight("[") || fRight("]"))
+			// A parameter list after a template argument's type spells a function type,
+			// which the standard separates: TCActorFunctor<TCFuture<void> (CStr _Host)>.
+			if (fRight("("))
+				return ECodeSpacing::mc_Space;
+
+			if (fRight("::") || fRight(",") || fRight(";") || fRight(")") || fRight("[") || fRight("]"))
 				return ECodeSpacing::mc_None;
 
 			return ECodeSpacing::mc_Preserve;
