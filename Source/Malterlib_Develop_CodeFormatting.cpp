@@ -362,7 +362,7 @@ namespace
 		bool fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations);
 		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_IsCastGroup(umint _iNode) const;
-		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause);
+		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent);
 		void fp_FindLooseOperators(umint _iFirst, umint _iLast, NContainer::TCVector<umint> &o_Operators) const;
 		void fp_PrepareTokenDepth();
 		bool fp_TryTrailingReturn(umint _iNode, umint _iIndent);
@@ -388,6 +388,7 @@ namespace
 		CCodeStructure m_Structure;
 		CTextLineMap m_Lines;
 		bool m_bOperatorSplit = false;							// The statement broke at operators, so a block belongs to a continuation.
+		umint m_iForcedScope = TCLimitsInt<umint>::mc_Max;		// Parameter list a converted trailing return type commits to opening.
 		umint m_iSplitFirstParen = 0;							// A declaration is never split before its name.
 		umint m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
 		NContainer::TCVector<umint> m_TokenDepth;				// Bracket nesting of each token, for finding a range's own level.
@@ -2142,7 +2143,11 @@ namespace
 			;
 			bool bHasTerminator = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && Node.m_iLastToken > Node.m_iFirstToken;
 			// The return type moves behind the parameter list when the name would not fit.
-			fp_TryTrailingReturn(_iNode, _iIndent);
+			// That text is written into a gap, so the tokens stop saying how wide the line
+			// is; the conversion is only worth making together with opening the list, so
+			// the list is committed to being opened.
+			if (fp_TryTrailingReturn(_iNode, _iIndent))
+				m_iForcedScope = iFirstParenGroupStart;
 
 			auto iRangeLast = iHeadLast;
 			if (bHasTerminator && iRangeLast == Node.m_iLastToken)
@@ -2160,6 +2165,7 @@ namespace
 			bool bSplit = fp_LayoutRange(_iNode, Node.m_iFirstToken, iRangeLast, _iIndent, bClause, true);
 			m_iSplitFirstParen = 0;
 			m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
+			m_iForcedScope = TCLimitsInt<umint>::mc_Max;
 			if (bSplit && bHasTerminator)
 				fp_BreakBefore(Node.m_iLastToken, _iIndent);
 		}
@@ -2382,18 +2388,16 @@ namespace
 	}
 
 	// Splits a range at its scope markers: every group on it goes onto its own lines.
-	bool CFormattingAnalyzer::fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause)
+	bool CFormattingAnalyzer::fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent)
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
 		auto const &Node = Nodes[_iNode];
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
-		auto nGroupIndent = _bClause ? _iIndent : _iIndent + nTab;
+		// A range that is already a continuation keeps its lines at one level. Only a range
+		// standing at its own start puts what follows it one level in.
+		auto nContinuation = _bClause || !_bIndent ? _iIndent : _iIndent + nTab;
 		bool bStatement = Node.m_Kind == ECodeNodeKind::mc_Statement;
 		bool bSplit = false;
-		// Scopes are opened from the outside in, and only while the line still overflows.
-		// A line runs from the first token standing on it to the end of the range: opening
-		// a scope puts its closing marker on a line of its own, which is what moves the
-		// text after it, such as a chained call, onto the next line.
 		TCVector<umint> Scopes;
 		for (auto iChild : Node.m_Children)
 		{
@@ -2420,35 +2424,87 @@ namespace
 		umint iLineFirst = _iFirst;
 		umint nLineIndent = _iIndent;
 		umint iScope = 0;
-		while (iScope < Scopes.f_GetLen() && !fp_FitsInline(iLineFirst, _iLast, nLineIndent))
+		while (true)
 		{
-			// Scopes on one line are all of the same standing, so the line is opened at the
-			// first of them. Keeping that one closed and opening a later one would put two
-			// scopes of one level on different footings, which is what the standard's
-			// substatement rule forbids.
-			auto const &Child = Nodes[Scopes[iScope]];
-			bool bStartsLine = Child.m_iFirstToken == iLineFirst;
-			++iScope;
-			// What the line holds in front of that scope was measured as one line, so it
-			// is put on one: a break left over from the source would contradict the choice.
-			auto iHead = fp_PreviousCode(Child.m_iFirstToken);
-			if (iHead >= 0 && umint(iHead) > iLineFirst)
-				fp_TryJoin(iLineFirst, umint(iHead), nLineIndent);
+			bool bForced = iScope < Scopes.f_GetLen() && Nodes[Scopes[iScope]].m_iFirstToken == m_iForcedScope;
+			// Deciding the rest fits is also deciding to write it that way.
+			if (!bForced && fp_FitsInline(iLineFirst, _iLast, nLineIndent))
+			{
+				fp_TryJoin(iLineFirst, _iLast, nLineIndent);
 
-			// A scope that already starts its line owns that line's indentation; its
-			// closing marker belongs under its opening one, not a level further in.
-			auto nMarkerIndent = bStartsLine ? nLineIndent : nGroupIndent;
-			if (!fp_LayoutGroup(Scopes[iScope - 1], nMarkerIndent, !bStartsLine))
+				break;
+			}
+
+			// A line carries whole scopes for as long as it can and breaks in front of the
+			// first one it cannot carry. Taking a scope apart is the next level down, and
+			// only for one that overflows a line of its own.
+			umint iBreak = TCLimitsInt<umint>::mc_Max;
+			umint iFirstBreak = TCLimitsInt<umint>::mc_Max;
+			for (umint i = iScope; i < Scopes.f_GetLen(); ++i)
+			{
+				auto iBefore = fp_PreviousCode(Nodes[Scopes[i]].m_iFirstToken);
+				if (iBefore < 0 || umint(iBefore) < iLineFirst)
+					continue;
+
+				// A break is only worth forcing in front of a scope that holds something.
+				// An empty one carries nothing down and leaves the line just as wide.
+				auto iInner = fp_NextCode(Nodes[Scopes[i]].m_iFirstToken);
+				if (iFirstBreak == TCLimitsInt<umint>::mc_Max && iInner >= 0 && umint(iInner) != Nodes[Scopes[i]].m_iLastToken)
+					iFirstBreak = i;
+
+				if (bForced)
+				{
+					iBreak = i;
+
+					break;
+				}
+
+				if (!fp_FitsInline(iLineFirst, umint(iBefore), nLineIndent))
+					break;
+
+				iBreak = i;
+			}
+
+			// A scope already standing at the start of the line has no line of its own left
+			// to be given, so it is opened before any break further along is considered.
+			bool bOpens = iBreak == TCLimitsInt<umint>::mc_Max
+				&& iScope < Scopes.f_GetLen()
+				&& Nodes[Scopes[iScope]].m_iFirstToken == iLineFirst
+			;
+			// Otherwise even the first scope's own line is too wide. Breaking cannot make
+			// it fit, but it keeps the overflow to that one line.
+			if (!bOpens && iBreak == TCLimitsInt<umint>::mc_Max)
+				iBreak = iFirstBreak;
+
+			if (!bOpens && iBreak != TCLimitsInt<umint>::mc_Max)
+			{
+				auto const &Scope = Nodes[Scopes[iBreak]];
+				auto iBefore = fp_PreviousCode(Scope.m_iFirstToken);
+				fp_TryJoin(iLineFirst, umint(iBefore), nLineIndent);
+				fp_BreakBefore(Scope.m_iFirstToken, nContinuation);
+				bSplit = true;
+				iLineFirst = Scope.m_iFirstToken;
+				nLineIndent = nContinuation;
+				iScope = iBreak;
+
+				continue;
+			}
+
+			if (!bOpens)
+				break;
+
+			auto const &Scope = Nodes[Scopes[iScope]];
+			++iScope;
+			if (!fp_LayoutGroup(Scopes[iScope - 1], nLineIndent, false))
 				continue;
 
 			bSplit = true;
-			auto iNext = fp_NextCode(Child.m_iLastToken);
+			auto iNext = fp_NextCode(Scope.m_iLastToken);
 			if (iNext < 0 || umint(iNext) > _iLast)
 				break;
 
 			// What follows the scope resumes under its closing marker.
 			iLineFirst = umint(iNext);
-			nLineIndent = nMarkerIndent;
 			fp_BreakBefore(iLineFirst, nLineIndent);
 		}
 
@@ -2472,7 +2528,7 @@ namespace
 		TCVector<umint> Operators;
 		fp_FindLooseOperators(_iFirst, _iLast, Operators);
 		if (Operators.f_IsEmpty())
-			return fp_LayoutScopes(_iNode, _iFirst, _iLast, _iIndent, _bClause);
+			return fp_LayoutScopes(_iNode, _iFirst, _iLast, _iIndent, _bClause, _bIndentContinuations);
 
 		// A statement's continuation is indented past its own start; an element of a group
 		// already sits at the group's content indentation and its continuation aligns there.
@@ -2511,7 +2567,7 @@ namespace
 			if (fp_FitsInline(iStart, iEnd, nSegmentIndent))
 				fp_TryJoin(iStart, iEnd, nSegmentIndent);
 			else
-				fp_LayoutScopes(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iSegment);
+				fp_LayoutScopes(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iSegment, _bIndentContinuations && !iSegment);
 		}
 
 		return true;

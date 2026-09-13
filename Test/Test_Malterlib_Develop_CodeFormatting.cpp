@@ -463,7 +463,9 @@ namespace
 						(
 							"Nested"
 							, "void f()\n{\n\tg(@, h(@, @, @));\n}\n"
-							, "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, h\n\t\t\t\t(\n\t\t\t\t\t@\n\t\t\t\t\t, @\n\t\t\t\t\t, @\n\t\t\t\t)\n\t\t)\n\t;\n}\n"
+							// A call inside a split expression aligns its own scope markers with
+							// the name, rather than taking another continuation level.
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, h\n\t\t\t(\n\t\t\t\t@\n\t\t\t\t, @\n\t\t\t\t, @\n\t\t\t)\n\t\t)\n\t;\n}\n"
 						)
 					;
 				};
@@ -493,8 +495,9 @@ namespace
 					;
 					// Declaration specifiers stay in front of auto.
 					fSplit("Specifiers", "static inline_always TCLongTemplate<@> fg_F(int _A);\n", "static inline_always auto fg_F\n\t(\n\t\tint _A\n\t)\n\t-> TCLongTemplate<@>\n;\n");
-					// A constructor has no return type to move.
-					fSplit("Constructor", "CLongName<@>::CLongName(int _A, int _B);\n", "CLongName<@>::CLongName\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n;\n", true);
+					// A constructor has no return type to move. The parameter list fits on a
+					// line of its own, so it goes there whole rather than being opened.
+					fSplit("Constructor", "CLongName<@>::CLongName(int _A, int _B);\n", "CLongName<@>::CLongName\n\t(int _A, int _B)\n;\n", true);
 					// An expression statement also ends in a call, and must never be rewritten
 					// as a declaration.
 					fSplit
