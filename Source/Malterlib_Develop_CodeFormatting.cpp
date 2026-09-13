@@ -360,6 +360,7 @@ namespace
 		bool fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore = true);
 		void fp_LayoutElements(umint _iNode, umint _iIndent);
 		bool fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations);
+		bool fp_IsCastGroup(umint _iNode) const;
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause);
 		void fp_FindLooseOperators(umint _iFirst, umint _iLast, NContainer::TCVector<umint> &o_Operators) const;
 		void fp_PrepareTokenDepth();
@@ -1984,7 +1985,9 @@ namespace
 		if (!_iFirstParen)
 			return TCLimitsInt<umint>::mc_Max;
 
-		for (umint i = _iFirstParen; i <= _iLast; ++i)
+		// A conditional operator also puts a colon at the statement's own level, and its
+		// '?' can stand in front of the parameter list the initializer list follows.
+		for (umint i = Node.m_iFirstToken; i <= _iLast; ++i)
 		{
 			bool bInside = false;
 			for (auto iChild : Node.m_Children)
@@ -1993,11 +1996,10 @@ namespace
 			if (bInside)
 				continue;
 
-			// A conditional operator also puts a colon at the statement's own level.
 			if (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "?"))
 				return TCLimitsInt<umint>::mc_Max;
 
-			if (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], ":"))
+			if (i >= _iFirstParen && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], ":"))
 				return i;
 		}
 
@@ -2023,8 +2025,13 @@ namespace
 
 		for (umint iEntry = 0; iEntry < Entries.f_GetLen(); ++iEntry)
 		{
-			fp_BreakBefore(Entries[iEntry], _iIndent);
 			auto iEnd = iEntry + 1 < Entries.f_GetLen() ? Entries[iEntry + 1] - 1 : _iLast;
+			// A directive or a comment inside an entry fixes its lines. Measuring such an
+			// entry as one line makes it look far too wide and splits what already fits.
+			if (!fp_IsRangeJoinable(_iNode, Entries[iEntry], iEnd))
+				continue;
+
+			fp_BreakBefore(Entries[iEntry], _iIndent);
 			if (fp_FitsInline(Entries[iEntry], iEnd, _iIndent))
 				continue;
 
@@ -2272,6 +2279,18 @@ namespace
 		;
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto nLevel = m_TokenDepth[_iFirst];
+		// Assignment is not a split point, and what stands to its left is a declarator, not
+		// an expression: '&' and '*' spell a reference or a pointer there, never an operator.
+		for (umint i = _iLast; i > _iFirst; --i)
+		{
+			if (m_TokenDepth[i] == nLevel && m_Tokens.f_IsText(Tokens[i], "="))
+			{
+				_iFirst = i;
+
+				break;
+			}
+		}
+
 		umint nLoosest = 0;
 		for (umint iPass = 0; iPass < 2; ++iPass)
 		{
@@ -2307,6 +2326,38 @@ namespace
 		}
 	}
 
+	// A parenthesised type in front of an operand is a cast: nothing separates the closing
+	// parenthesis from what follows, while a call or a clause has a name or a keyword in
+	// front of the opening one.
+	bool CFormattingAnalyzer::fp_IsCastGroup(umint _iNode) const
+	{
+		auto const &Node = m_Structure.f_GetNodes()[_iNode];
+		if (Node.m_Bracket != ECodeBracket::mc_Paren)
+			return false;
+
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto iBefore = fp_PreviousCode(Node.m_iFirstToken);
+		if (iBefore >= 0)
+		{
+			auto const &Before = Tokens[umint(iBefore)];
+			if (Before.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Before, ")") || m_Tokens.f_IsText(Before, "]"))
+				return false;
+		}
+
+		auto iAfter = fp_NextCode(Node.m_iLastToken);
+		if (iAfter < 0)
+			return false;
+
+		auto const &After = Tokens[umint(iAfter)];
+
+		return After.m_Kind == ECodeTokenKind::mc_Identifier
+			|| After.m_Kind == ECodeTokenKind::mc_Number
+			|| After.m_Kind == ECodeTokenKind::mc_StringLiteral
+			|| After.m_Kind == ECodeTokenKind::mc_CharLiteral
+			|| m_Tokens.f_IsText(After, "(")
+		;
+	}
+
 	// Splits a range at its scope markers: every group on it goes onto its own lines.
 	bool CFormattingAnalyzer::fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause)
 	{
@@ -2329,6 +2380,11 @@ namespace
 			// A declaration is never split before its name, and a trailing return type is
 			// one unit on its own line.
 			if (bStatement && (Child.m_iLastToken < m_iSplitFirstParen || Child.m_iFirstToken > m_iSplitTrailingReturn))
+				continue;
+
+			// A cast converts what follows it, so its parentheses belong to that operand
+			// rather than being a scope of their own.
+			if (fp_IsCastGroup(iChild))
 				continue;
 
 			// Text between two scope markers, such as a chained call, is its own unit.

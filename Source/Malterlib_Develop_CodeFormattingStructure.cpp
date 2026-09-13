@@ -551,9 +551,12 @@ namespace NMib::NDevelop
 				if (!bBlock)
 				{
 					// A statement terminator at the brace's own level settles it wherever the
-					// brace appears, including a body that follows a braced member initializer.
+					// brace appears. An empty body has no terminator to find, so a brace that
+					// follows a closing brace is taken as a block on its own: an initializer's
+					// brace always follows a name, ')', '>' or ']'.
 					auto const &Previous = Tokens[mp_Significant[i - 1]];
-					bBlock = mp_pTokens->f_IsText(Previous, "else")
+					bBlock = mp_pTokens->f_IsText(Previous, "}")
+						|| mp_pTokens->f_IsText(Previous, "else")
 						|| mp_pTokens->f_IsText(Previous, "do")
 						|| mp_pTokens->f_IsText(Previous, "try")
 						|| mp_pTokens->f_IsText(Previous, "const")
@@ -686,7 +689,13 @@ namespace NMib::NDevelop
 		// A resolved template bracket hugs its arguments and separates the list from the
 		// declarator after it. An unresolved '<' or '>' is an ordinary binary operator.
 		if (_Structure.f_IsAngleBracket(_iRight))
+		{
+			// A template header is the exception: 'template <typename t_CType>'.
+			if (fLeft("template"))
+				return ECodeSpacing::mc_Space;
+
 			return ECodeSpacing::mc_None;
+		}
 
 		if (_Structure.f_IsAngleBracket(_iLeft))
 		{

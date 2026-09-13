@@ -316,6 +316,30 @@ namespace
 					fg_ExpectFormat("Condition", "void f()\n{\n\tif\n\t(\n\t\ta\n\t\t&& b\n\t)\n\t\tg();\n}\n", "void f()\n{\n\tif (a && b)\n\t\tg();\n}\n");
 				};
 
+				DMibTestCategory("Bodies")
+				{
+					// An empty body after a braced member initializer has no terminator of its
+					// own. Reading it as another initializer swallowed the next declaration,
+					// which then no longer fit on one line and was split apart.
+					CStr Source = "struct C\n{\n\tC::C(int _A)\n\t\t: C{_A}\n\t{\n\t}\n\n\tC::C(CInit const &_B)\n\t\t: mp_p(fg_Construct(_B))\n\t{\n\t}\n};\n";
+					fg_ExpectFormat("BracedInitializer", Source, Source);
+
+					// A template header keeps its space; a template argument list does not.
+					fg_ExpectFormat("TemplateHeader", "template\n<\n\ttypename t_CType\n\t, umint t_n\n>\nvoid fg_F();\n", "template <typename t_CType, umint t_n>\nvoid fg_F();\n");
+
+					// A directive inside a member initializer list fixes those lines, and
+					// measuring the entry that spans it as one line split what already fit.
+					CStr Directive = "struct C\n{\n\tC(C &&_Other)\n\t\t: m_A(fg_Move(_Other.m_A))\n\t\t, m_B(fg_Exchange(_Other.m_B, nullptr))\n"
+						"#if DDebug\n\t\t, m_C(fg_Move(_Other.m_C))\n#endif\n\t{\n\t}\n};\n"
+					;
+					fg_ExpectFormat("InitializerDirective", Directive, Directive);
+
+					// The '?' of a conditional operator can stand in front of the first
+					// parenthesis, and its ':' was then read as a member initializer list.
+					CStr Conditional = "void f()\n{\n\tumint Mask = nBits == c_Per ? ~umint(0) : ((umint(1) << nBits) - 1);\n}\n";
+					fg_ExpectFormat("Conditional", Conditional, Conditional);
+				};
+
 				DMibTestCategory("Kept")
 				{
 					// A comment or a directive inside fixes the construct's line structure.
