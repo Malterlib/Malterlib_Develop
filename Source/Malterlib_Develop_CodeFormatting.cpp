@@ -357,7 +357,7 @@ namespace
 		void fp_LayoutStatement(umint _iNode, umint _iIndent);
 		void fp_LayoutInitializerList(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent);
 		umint fp_FindInitializerList(umint _iNode, umint _iFirstParen, umint _iLast) const;
-		void fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore = true);
+		bool fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore = true);
 		void fp_LayoutElements(umint _iNode, umint _iIndent);
 		bool fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations);
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause);
@@ -1656,16 +1656,18 @@ namespace
 			fp_BreakBefore(umint(iNext), _iIndent);
 	}
 
-	void CFormattingAnalyzer::fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore)
+	bool CFormattingAnalyzer::fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore)
 	{
 		auto const &Node = m_Structure.f_GetNodes()[_iNode];
 		if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket == ECodeBracket::mc_Brace)
-			return;
+			return false;
 
-		// An empty group has nothing to put on its own line.
+		// An empty group has nothing to put on its own line. Reporting that keeps the
+		// statement from being treated as split, which would strand its terminator on a
+		// line of its own without making anything fit.
 		auto iInner = fp_NextCode(Node.m_iFirstToken);
 		if (iInner < 0 || umint(iInner) == Node.m_iLastToken)
-			return;
+			return false;
 
 		if (_bBreakBefore)
 			fp_BreakBefore(Node.m_iFirstToken, _iIndent);
@@ -1676,6 +1678,8 @@ namespace
 
 		fp_BreakBefore(Node.m_iLastToken, _iIndent);
 		fp_LayoutElements(_iNode, _iIndent + m_Request.m_Settings.m_nTabWidth);
+
+		return true;
 	}
 
 	// Each element of a split group that still does not fit has its own groups split in turn.
@@ -2335,9 +2339,8 @@ namespace
 					fp_BreakBefore(umint(iSegment), _iIndent + nTab);
 			}
 
-			fp_LayoutGroup(iChild, nGroupIndent, Child.m_iFirstToken != _iFirst);
+			bSplit |= fp_LayoutGroup(iChild, nGroupIndent, Child.m_iFirstToken != _iFirst);
 			iPreviousEnd = Child.m_iLastToken;
-			bSplit = true;
 		}
 
 		if (iPreviousEnd == TCLimitsInt<umint>::mc_Max || iPreviousEnd >= _iLast)

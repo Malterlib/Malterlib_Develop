@@ -476,6 +476,18 @@ namespace
 					for (umint i = 0; i < 100; ++i)
 						Name += "A";
 
+					// An empty parameter list is nothing to split, so the terminator stays put
+					// rather than being stranded while the line is still too long.
+					DMibTestCategory("EmptyParameterList")
+					{
+						CStr Long = "extern template void NMib::NConcurrency::fg_Delete";
+						for (umint i = 0; i < 30; ++i)
+							Long += "VeryLongName";
+
+						Long += "();\n";
+						DMibExpect(fg_FormatSource(Long), ==, Long);
+					};
+
 					// A statement with no scope marker to split keeps its shape and is reported.
 					CStr Source = "int a" + Name + " = 0;\n";
 					DMibExpect(fg_FormatSource(Source), ==, Source);
