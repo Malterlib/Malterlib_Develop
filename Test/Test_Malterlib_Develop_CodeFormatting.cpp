@@ -504,6 +504,15 @@ namespace
 							, "struct C\n{\n\tauto f_F(int _A) const volatile\n\t\t-> TCLongTemplate<@>\n\t;\n};\n"
 						)
 					;
+					// 'override' is written after the declarator, so the trailing type goes in
+					// front of it rather than behind.
+					fSplit
+						(
+							"VirtSpecifier"
+							, "struct C\n{\n\tTCLongTemplate<@> f_F(int _A) override;\n};\n"
+							, "struct C\n{\n\tauto f_F(int _A)\n\t\t-> TCLongTemplate<@>\n\t\toverride\n\t;\n};\n"
+						)
+					;
 					// Declaration specifiers stay in front of auto.
 					fSplit("Specifiers", "static inline_always TCLongTemplate<@> fg_F(int _A);\n", "static inline_always auto fg_F(int _A)\n\t-> TCLongTemplate<@>\n;\n");
 					// A constructor has no return type to move. Its parameter list stands behind

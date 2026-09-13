@@ -1306,12 +1306,17 @@ namespace
 			{
 				CTextLineMap FormattedLines(Formatted);
 				auto const &Edit = Second.m_Edits[0];
+				auto iLine = FormattedLines.f_FindLine(Edit.m_iOffset);
+				auto iStart = FormattedLines.f_GetLineStart(iLine);
+				CStr Line(Formatted.f_GetStr() + iStart, FormattedLines.f_GetLineContentEnd(iLine) - iStart);
 
+				// The line itself is what says which construct disagreed with the first pass.
 				return fFailed
 					(
-						"Formatting did not reach a stable result: {} would still change formatted line {}"_f
+						"Formatting did not reach a stable result: {} would still change formatted line {}: {}"_f
 						<< Edit.m_Rule
-						<< FormattedLines.f_FindLine(Edit.m_iOffset) + 1
+						<< iLine + 1
+						<< Line
 					)
 				;
 			}
@@ -1742,10 +1747,14 @@ namespace
 		if (iOpen == Node.m_iFirstToken)
 			return false;
 
-		// The name line already fits, so there is nothing to gain.
 		auto iBeforeOpen = fp_PreviousCode(iOpen);
-		if (iBeforeOpen < 0 || fp_FitsInline(Node.m_iFirstToken, umint(iBeforeOpen), _iIndent))
+		if (iBeforeOpen < 0)
 			return false;
+
+		// Whether the name already fits in front of the parameter list decides, further
+		// down, whether converting is worth anything when the trailing type on its own
+		// line does not make the signature fit.
+		bool bNameFits = fp_FitsInline(Node.m_iFirstToken, umint(iBeforeOpen), _iIndent);
 
 		// The declarator-id is the last name before the parameter list, extended backwards
 		// only through '::'. A return type in front of it looks the same, so stopping at
@@ -1821,10 +1830,24 @@ namespace
 			for (auto pSpecifier : gsc_pSpecifiers)
 				bSkip |= m_Tokens.f_IsText(Token, pSpecifier);
 
-			if (m_Tokens.f_IsText(Token, "template") || m_Tokens.f_IsText(Token, "["))
+			if (m_Tokens.f_IsText(Token, "template"))
 			{
-				// The header or attribute is a child group; step past it whole. Without one
-				// the shape is not the expected declaration, so no conversion is attempted.
+				// 'template <...>' introduces a declaration and is stepped over. 'template
+				// Type Name(...)' is an explicit instantiation, which names a declaration
+				// made elsewhere and has no return type of its own to move.
+				auto iAfter = fp_SkipTemplateHeader(iReturn);
+				if (iAfter == iReturn || iAfter >= iDeclarator)
+					return false;
+
+				iReturn = iAfter;
+
+				continue;
+			}
+
+			if (m_Tokens.f_IsText(Token, "["))
+			{
+				// The attribute is a child group; step past it whole. Without one the shape
+				// is not the expected declaration, so no conversion is attempted.
 				umint iAfter = TCLimitsInt<umint>::mc_Max;
 				for (auto iChild : Node.m_Children)
 				{
@@ -1865,16 +1888,43 @@ namespace
 		if (iReturnLast < 0 || umint(iReturnLast) < iReturn)
 			return false;
 
+		// A return type that is already 'auto' has nowhere to go: moving it behind the
+		// parameter list would only spell the same deduction as 'auto ... -> auto'.
+		if (umint(iReturnLast) == iReturn && m_Tokens.f_IsText(Tokens[iReturn], "auto"))
+			return false;
+
 		// Everything before the name has to read as a type. An expression statement also
 		// ends in a call, and rewriting one of those as a declaration would destroy it.
 		auto iBeforeDeclarator = fp_PreviousCode(iDeclarator);
 		if (iBeforeDeclarator >= 0 && (m_Tokens.f_IsText(Tokens[umint(iBeforeDeclarator)], ".") || m_Tokens.f_IsText(Tokens[umint(iBeforeDeclarator)], "->")))
 			return false;
 
+		// A keyword is spelled like an identifier, so a statement that opens with one reads
+		// as a type unless it is named here. 'return g_Dispatch(x) / [] {}' is an expression
+		// whose first word would otherwise pass for its return type.
+		static ch8 const *const gsc_pStatementKeywords[] =
+			{
+				"return", "co_return", "co_await", "co_yield", "throw", "new", "delete", "this", "sizeof", "alignof"
+				, "if", "else", "for", "while", "do", "switch", "case", "default", "break", "continue", "goto"
+				, "try", "catch", "using", "namespace", "nullptr", "true", "false", "operator"
+				, "static_cast", "dynamic_cast", "const_cast", "reinterpret_cast"
+			}
+		;
 		for (umint i = iReturn; i <= umint(iReturnLast); ++i)
 		{
 			auto const &Token = Tokens[i];
-			if (Token.m_Kind == ECodeTokenKind::mc_Identifier || Token.m_Kind == ECodeTokenKind::mc_Number)
+			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
+			{
+				for (auto pKeyword : gsc_pStatementKeywords)
+				{
+					if (m_Tokens.f_IsText(Token, pKeyword))
+						return false;
+				}
+
+				continue;
+			}
+
+			if (Token.m_Kind == ECodeTokenKind::mc_Number)
 				continue;
 
 			if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
@@ -1905,7 +1955,17 @@ namespace
 			if (m_Tokens.f_IsText(Token, "->"))
 				return false;
 
-			if (m_Tokens.f_IsText(Token, "=") || m_Tokens.f_IsText(Token, "{") || m_Tokens.f_IsText(Token, ";") || m_Tokens.f_IsText(Token, "requires"))
+			// The trailing type follows the qualifiers but comes in front of 'override' and
+			// 'final', which are written after the declarator, and in front of a pure
+			// specifier, a body, a requires clause and the terminator.
+			bool bInsert = m_Tokens.f_IsText(Token, "=")
+				|| m_Tokens.f_IsText(Token, "{")
+				|| m_Tokens.f_IsText(Token, ";")
+				|| m_Tokens.f_IsText(Token, "requires")
+				|| m_Tokens.f_IsText(Token, "override")
+				|| m_Tokens.f_IsText(Token, "final")
+			;
+			if (bInsert)
 			{
 				iInsert = umint(i);
 
@@ -1929,17 +1989,24 @@ namespace
 		auto nGap = Tokens[iInsert].m_iOffset - iGap;
 		auto bBody = m_Tokens.f_IsText(Tokens[iInsert], "{") || m_Tokens.f_IsText(Tokens[iInsert], ";");
 		CStr Replacement = Ending + fp_MakeIndent(_iIndent + nTab) + "-> " + ReturnType + Ending + fp_MakeIndent(bBody ? _iIndent : _iIndent + nTab);
-		fp_AddEdit("trailing-return", iReturnStart, Tokens[umint(iReturnLast)].f_GetEnd() - iReturnStart, "auto", "the name does not fit before the parameter list");
-		fp_AddEdit("trailing-return", iGap, nGap, Replacement, "the return type moves behind the parameter list");
-		m_iSuppressBreak = iInsert;
-
 		// With the trailing type on a line of its own, 'auto' and everything up to it may
 		// already fit on one. The parameter list is then left whole: opening it is the
 		// step after this one, not a part of it.
 		umint nSignature = 0;
 		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
 		auto nAuto = _iIndent + CStr("auto ").f_GetLen();
-		if (fp_MeasureJoinedWidth(iDeclarator, umint(iPrevious), nSignature) && (!nMaxColumns || nAuto + nSignature <= nMaxColumns))
+		bool bFits = fp_MeasureJoinedWidth(iDeclarator, umint(iPrevious), nSignature) && (!nMaxColumns || nAuto + nSignature <= nMaxColumns);
+
+		// Converting costs eight columns of its own. It pays for itself when it makes the
+		// signature fit, and otherwise only when the name would not fit in front of the
+		// parameter list at all.
+		if (!bFits && bNameFits)
+			return false;
+
+		fp_AddEdit("trailing-return", iReturnStart, Tokens[umint(iReturnLast)].f_GetEnd() - iReturnStart, "auto", "the return type moves to its own line");
+		fp_AddEdit("trailing-return", iGap, nGap, Replacement, "the return type moves behind the parameter list");
+		m_iSuppressBreak = iInsert;
+		if (bFits)
 		{
 			m_bTrailingReturnFits = true;
 			fp_TryJoin(iDeclarator, umint(iPrevious), nAuto);
@@ -2183,8 +2250,16 @@ namespace
 			bool bTrailingReturn = fp_TryTrailingReturn(_iNode, _iIndent);
 			if (bTrailingReturn && m_bTrailingReturnFits)
 			{
+				// The statement is split across lines now, so its terminator and its body
+				// each take one of their own.
+				if (bHasTerminator)
+					fp_BreakBefore(Node.m_iLastToken, _iIndent);
+
 				if (iBlock != TCLimitsInt<umint>::mc_Max)
+				{
+					fp_BreakBefore(Nodes[iBlock].m_iFirstToken, _iIndent);
 					fp_LayoutNode(iBlock, _iIndent);
+				}
 
 				return;
 			}

@@ -784,6 +784,27 @@ namespace NMib::NDevelop
 			return ECodeSpacing::mc_Preserve;
 		}
 
+		// What follows a parameter list is the function's qualifiers and specifiers, and
+		// they are separated from it and from each other. Without a spelling for these the
+		// declaration cannot be measured as one line, and so could never be joined.
+		static ch8 const *const gsc_pQualifiers[] =
+			{
+				"const", "volatile", "noexcept", "override", "final", "mutable", "requires", "&", "&&"
+			}
+		;
+		bool bAfterDeclarator = fLeft(")");
+		for (auto pQualifier : gsc_pQualifiers)
+			bAfterDeclarator |= fLeft(pQualifier) && !fLeft("&") && !fLeft("&&");
+
+		if (bAfterDeclarator)
+		{
+			for (auto pQualifier : gsc_pQualifiers)
+			{
+				if (fRight(pQualifier))
+					return ECodeSpacing::mc_Space;
+			}
+		}
+
 		static ch8 const *const gsc_pBinaryOperators[] =
 			{
 				"==", "!=", "<=", ">=", "<=>", "||", "&&", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
