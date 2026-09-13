@@ -492,18 +492,20 @@ namespace
 						}
 					;
 					// The name does not fit before the parameter list, so the return type moves.
-					fSplit("Declaration", "TCLongTemplate<@> fg_F(int _A, int _B);\n", "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n;\n");
-					fSplit("Definition", "TCLongTemplate<@> fg_F(int _A, int _B)\n{\n}\n", "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n{\n}\n");
+					// With the trailing type on its own line the signature fits, and the
+					// parameter list is left whole: splitting it is the step after this one.
+					fSplit("Declaration", "TCLongTemplate<@> fg_F(int _A, int _B);\n", "auto fg_F(int _A, int _B)\n\t-> TCLongTemplate<@>\n;\n");
+					fSplit("Definition", "TCLongTemplate<@> fg_F(int _A, int _B)\n{\n}\n", "auto fg_F(int _A, int _B)\n\t-> TCLongTemplate<@>\n{\n}\n");
 					// The trailing type goes after the qualifiers.
 					fSplit
 						(
 							"Qualifiers"
 							, "struct C\n{\n\tTCLongTemplate<@> f_F(int _A) const volatile;\n};\n"
-							, "struct C\n{\n\tauto f_F\n\t\t(\n\t\t\tint _A\n\t\t)\n\t\tconst volatile\n\t\t-> TCLongTemplate<@>\n\t;\n};\n"
+							, "struct C\n{\n\tauto f_F(int _A) const volatile\n\t\t-> TCLongTemplate<@>\n\t;\n};\n"
 						)
 					;
 					// Declaration specifiers stay in front of auto.
-					fSplit("Specifiers", "static inline_always TCLongTemplate<@> fg_F(int _A);\n", "static inline_always auto fg_F\n\t(\n\t\tint _A\n\t)\n\t-> TCLongTemplate<@>\n;\n");
+					fSplit("Specifiers", "static inline_always TCLongTemplate<@> fg_F(int _A);\n", "static inline_always auto fg_F(int _A)\n\t-> TCLongTemplate<@>\n;\n");
 					// A constructor has no return type to move. Its parameter list stands behind
 					// the name, so splitting there means opening the list.
 					fSplit("Constructor", "CLongName<@>::CLongName(int _A, int _B);\n", "CLongName<@>::CLongName\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n;\n", true);
@@ -517,8 +519,9 @@ namespace
 							, true
 						)
 					;
-					// An existing trailing return type is only relaid out.
-					fSplit("AlreadyTrailing", "auto fg_F(int _A, int _B) -> TCLongTemplate<@>;\n", "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n;\n", true);
+					// An existing trailing return type is only relaid out, and moving it to its
+					// own line already makes the signature fit.
+					fSplit("AlreadyTrailing", "auto fg_F(int _A, int _B) -> TCLongTemplate<@>;\n", "auto fg_F(int _A, int _B)\n\t-> TCLongTemplate<@>\n;\n", true);
 				};
 
 				DMibTestCategory("TooLong")

@@ -501,10 +501,10 @@ namespace NMib::NDevelop
 			return _iToken + 1;
 		}
 
-		// A template header and a requires clause each occupy their own line, so the
-		// statement around them keeps its line structure even when it would fit on one.
+		// A template header and a requires clause each occupy their own line. The header
+		// only holds the line it is on; the declaration behind it is laid out as usual.
 		if (mp_pTokens->f_IsText(Tokens[mp_Significant[_iToken]], "template"))
-			mp_Nodes[iNode].m_bFixedLineBreaks = true;
+			mp_Nodes[iNode].m_bTemplateHeader = true;
 
 		while (i < mp_Significant.f_GetLen())
 		{

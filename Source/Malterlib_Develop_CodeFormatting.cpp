@@ -362,6 +362,7 @@ namespace
 		bool fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations, bool _bMustSplit = false);
 		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_FollowsScope(umint _iToken) const;
+		umint fp_SkipTemplateHeader(umint _iToken) const;
 		bool fp_IsCastGroup(umint _iNode) const;
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent, bool _bMustSplit = false);
 		void fp_FindLooseOperators(umint _iFirst, umint _iLast, NContainer::TCVector<umint> &o_Operators) const;
@@ -389,6 +390,7 @@ namespace
 		CCodeStructure m_Structure;
 		CTextLineMap m_Lines;
 		bool m_bOperatorSplit = false;							// The statement broke at operators, so a block belongs to a continuation.
+		bool m_bTrailingReturnFits = false;						// The converted signature fits on one line, so its parameter list stays whole.
 		umint m_iForcedScope = TCLimitsInt<umint>::mc_Max;		// Parameter list a converted trailing return type commits to opening.
 		umint m_iSplitFirstParen = 0;							// A declaration is never split before its name.
 		umint m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
@@ -1717,6 +1719,7 @@ namespace
 	// worth doing together with putting the trailing type on its own line.
 	bool CFormattingAnalyzer::fp_TryTrailingReturn(umint _iNode, umint _iIndent)
 	{
+		m_bTrailingReturnFits = false;
 		auto const &Nodes = m_Structure.f_GetNodes();
 		auto const &Node = Nodes[_iNode];
 		auto const &Tokens = m_Tokens.f_GetTokens();
@@ -1930,6 +1933,18 @@ namespace
 		fp_AddEdit("trailing-return", iGap, nGap, Replacement, "the return type moves behind the parameter list");
 		m_iSuppressBreak = iInsert;
 
+		// With the trailing type on a line of its own, 'auto' and everything up to it may
+		// already fit on one. The parameter list is then left whole: opening it is the
+		// step after this one, not a part of it.
+		umint nSignature = 0;
+		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		auto nAuto = _iIndent + CStr("auto ").f_GetLen();
+		if (fp_MeasureJoinedWidth(iDeclarator, umint(iPrevious), nSignature) && (!nMaxColumns || nAuto + nSignature <= nMaxColumns))
+		{
+			m_bTrailingReturnFits = true;
+			fp_TryJoin(iDeclarator, umint(iPrevious), nAuto);
+		}
+
 		return true;
 	}
 
@@ -1946,7 +1961,7 @@ namespace
 			|| Node.m_Kind == ECodeNodeKind::mc_Block
 			|| (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace)
 		;
-		if (!bContainer && Node.f_IsJoinable() && !Node.m_bFixedLineBreaks)
+		if (!bContainer && Node.f_IsJoinable() && !Node.m_bFixedLineBreaks && !Node.m_bTemplateHeader)
 		{
 			auto iFirst = Node.m_iFirstToken;
 			if (Node.m_Kind == ECodeNodeKind::mc_Group)
@@ -2115,15 +2130,32 @@ namespace
 				iSignatureLast = umint(iPrevious);
 		}
 
-		bool bJoinable = fp_IsRangeJoinable(_iNode, Node.m_iFirstToken, iSignatureLast)
+		// A template header holds the line it is on. The declaration behind it starts a
+		// line of its own and is laid out there, so the header is stepped over first.
+		umint iDeclFirst = Node.m_iFirstToken;
+		while (Node.m_bTemplateHeader)
+		{
+			auto iNext = fp_SkipTemplateHeader(iDeclFirst);
+			if (iNext == iDeclFirst || iNext > iSignatureLast)
+				break;
+
+			// The header itself still comes back to one line where it fits.
+			auto iHeaderLast = fp_PreviousCode(iNext);
+			if (iHeaderLast >= 0 && umint(iHeaderLast) > iDeclFirst && fp_FitsInline(iDeclFirst, umint(iHeaderLast), _iIndent))
+				fp_TryJoin(iDeclFirst, umint(iHeaderLast), _iIndent);
+
+			iDeclFirst = iNext;
+		}
+
+		bool bJoinable = fp_IsRangeJoinable(_iNode, iDeclFirst, iSignatureLast)
 			&& !Node.m_bFixedLineBreaks
 			&& Node.m_Kind != ECodeNodeKind::mc_Unsupported
-			&& fp_IsFirstOnLine(Node.m_iFirstToken)
+			&& fp_IsFirstOnLine(iDeclFirst)
 		;
 		if (iInitializerList != TCLimitsInt<umint>::mc_Max)
 			iHeadLast = iSignatureLast;
 
-		if (bJoinable && fp_FitsInline(Node.m_iFirstToken, iHeadLast, _iIndent) && fp_TryJoin(Node.m_iFirstToken, iHeadLast, _iIndent))
+		if (bJoinable && fp_FitsInline(iDeclFirst, iHeadLast, _iIndent) && fp_TryJoin(iDeclFirst, iHeadLast, _iIndent))
 		{
 			if (iInitializerList != TCLimitsInt<umint>::mc_Max)
 				fp_LayoutInitializerList(_iNode, iInitializerList, iHeadLastWithInitializers, _iIndent + nTab);
@@ -2136,18 +2168,28 @@ namespace
 
 		if (bJoinable)
 		{
-			bool bClause = m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "if")
-				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "for")
-				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "while")
-				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "switch")
-				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "catch")
+			bool bClause = m_Tokens.f_IsText(Tokens[iDeclFirst], "if")
+				|| m_Tokens.f_IsText(Tokens[iDeclFirst], "for")
+				|| m_Tokens.f_IsText(Tokens[iDeclFirst], "while")
+				|| m_Tokens.f_IsText(Tokens[iDeclFirst], "switch")
+				|| m_Tokens.f_IsText(Tokens[iDeclFirst], "catch")
 			;
 			bool bHasTerminator = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && Node.m_iLastToken > Node.m_iFirstToken;
-			// The return type moves behind the parameter list when the name would not fit.
-			// That text is written into a gap, so the tokens stop saying how wide the line
-			// is; the conversion is only worth making together with opening the list, so
-			// the list is committed to being opened.
-			if (fp_TryTrailingReturn(_iNode, _iIndent))
+			// The return type moves behind the parameter list when the name would not fit,
+			// and the trailing type takes a line of its own. Splitting the parameter list
+			// is the step after that, so it is only opened when the signature still does
+			// not fit. That text is written into a gap, so the tokens stop saying how wide
+			// the line is, and the measurement is made by the conversion itself.
+			bool bTrailingReturn = fp_TryTrailingReturn(_iNode, _iIndent);
+			if (bTrailingReturn && m_bTrailingReturnFits)
+			{
+				if (iBlock != TCLimitsInt<umint>::mc_Max)
+					fp_LayoutNode(iBlock, _iIndent);
+
+				return;
+			}
+
+			if (bTrailingReturn)
 				m_iForcedScope = iFirstParenGroupStart;
 
 			auto iRangeLast = iHeadLast;
@@ -2161,7 +2203,22 @@ namespace
 				// The terminator ends the expression's line and counts towards it. An
 				// expression that only fits without it is still one that has to be split,
 				// since the terminator takes a line of its own only from a split statement.
-				bMustSplit = fp_FitsInline(Node.m_iFirstToken, iRangeLast, _iIndent);
+				bMustSplit = fp_FitsInline(iDeclFirst, iRangeLast, _iIndent);
+			}
+
+			// A trailing return type is one unit on a line of its own, so the signature in
+			// front of it is laid out, and measured, without it.
+			umint iSignatureEnd = iRangeLast;
+			bool bTrailing = iTrailingReturn != TCLimitsInt<umint>::mc_Max && iTrailingReturn <= iRangeLast;
+			if (bTrailing)
+			{
+				auto iBefore = fp_PreviousCode(iTrailingReturn);
+				bTrailing = iBefore >= 0 && umint(iBefore) >= iDeclFirst;
+				if (bTrailing)
+				{
+					iSignatureEnd = umint(iBefore);
+					bMustSplit = false;
+				}
 			}
 
 			m_iSplitFirstParen = iFirstParenGroupStart;
@@ -2169,7 +2226,16 @@ namespace
 			m_bOperatorSplit = false;
 			// A statement with no scope marker to split keeps its shape; only a statement
 			// that was actually relaid out puts its terminator on a line of its own.
-			bool bSplit = fp_LayoutRange(_iNode, Node.m_iFirstToken, iRangeLast, _iIndent, bClause, true, bMustSplit);
+			bool bSplit = fp_LayoutRange(_iNode, iDeclFirst, iSignatureEnd, _iIndent, bClause, true, bMustSplit);
+			// The trailing type stays one unit. A conversion moves its text rather than its
+			// tokens, so it could not be relaid out in the same pass that produced it, and
+			// splitting it here would leave the two passes disagreeing.
+			if (bTrailing)
+			{
+				fp_BreakBefore(iTrailingReturn, _iIndent + nTab);
+				bSplit = true;
+			}
+
 			m_iSplitFirstParen = 0;
 			m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
 			m_iForcedScope = TCLimitsInt<umint>::mc_Max;
@@ -2360,6 +2426,54 @@ namespace
 		}
 
 		return false;
+	}
+
+	// A template header is spelled 'template <...>'. The space in front of the list is what
+	// tells a template argument list from a comparison, so the header's own list is not a
+	// resolved group and its end has to be found by hand.
+	umint CFormattingAnalyzer::fp_SkipTemplateHeader(umint _iToken) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		if (!m_Tokens.f_IsText(Tokens[_iToken], "template"))
+			return _iToken;
+
+		auto iOpen = fp_NextCode(_iToken);
+		if (iOpen < 0 || !m_Tokens.f_IsText(Tokens[umint(iOpen)], "<"))
+			return _iToken;
+
+		umint nDepth = 0;
+		for (auto i = iOpen; i >= 0; i = fp_NextCode(umint(i)))
+		{
+			auto const &Token = Tokens[umint(i)];
+			if (m_Tokens.f_IsText(Token, "<"))
+			{
+				++nDepth;
+
+				continue;
+			}
+
+			bool bDouble = m_Tokens.f_IsText(Token, ">>");
+			if (!bDouble && !m_Tokens.f_IsText(Token, ">"))
+			{
+				if (m_Tokens.f_IsText(Token, "<<"))
+					nDepth += 2;
+
+				continue;
+			}
+
+			if (nDepth > (bDouble ? 2u : 1u))
+			{
+				nDepth -= bDouble ? 2 : 1;
+
+				continue;
+			}
+
+			auto iNext = fp_NextCode(umint(i));
+
+			return iNext < 0 ? _iToken : umint(iNext);
+		}
+
+		return _iToken;
 	}
 
 	// A bracket's closing marker is where one scope ends and the next may start on a line

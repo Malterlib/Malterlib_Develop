@@ -47,6 +47,7 @@ namespace NMib::NDevelop
 		bool m_bHasBlock = false;					// A braced group holding statements must keep its own lines.
 		bool m_bHasMultiLineToken = false;			// A raw literal or block comment fixes its own line breaks.
 		bool m_bFixedLineBreaks = false;			// The node's own line structure is prescribed; only its children may be relaid out.
+		bool m_bTemplateHeader = false;			// The statement opens with a template header, which keeps the line it is on.
 		bool m_bHasMultiLineBrace = false;			// A braced initializer written across lines keeps those lines.
 
 		bool f_IsJoinable() const;
