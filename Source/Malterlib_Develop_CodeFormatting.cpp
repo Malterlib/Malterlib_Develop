@@ -353,6 +353,19 @@ namespace
 		bool fp_HasOperand(umint _iToken, bool _bBefore) const;
 		void fp_RuleBlankLines();
 		void fp_RuleLineBreaks();
+		void fp_LayoutNode(umint _iNode, umint _iIndent);
+		void fp_LayoutStatement(umint _iNode, umint _iIndent);
+		void fp_LayoutInitializerList(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent);
+		umint fp_FindInitializerList(umint _iNode, umint _iFirstParen, umint _iLast) const;
+		void fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore = true);
+		void fp_LayoutElements(umint _iNode, umint _iIndent);
+		bool fp_TryTrailingReturn(umint _iNode, umint _iIndent);
+		void fp_BreakBefore(umint _iToken, umint _iIndent);
+		void fp_BreakAfter(umint _iToken, umint _iIndent);
+		bool fp_IsRangeJoinable(umint _iNode, umint _iFirst, umint _iLast) const;
+		bool fp_FitsInline(umint _iFirst, umint _iLast, umint _iIndent) const;
+		umint fp_GetStatementIndent(umint _iToken) const;
+		NStr::CStr fp_MakeIndent(umint _nColumns) const;
 		void fp_LimitJoinedLines();
 		void fp_BuildPlan(NContainer::TCVector<CCodeFormattingEdit> &o_Edits, NContainer::TCVector<umint> &o_Sources) const;
 		void fp_JoinNode(umint _iNode);
@@ -383,6 +396,8 @@ namespace
 		NContainer::TCVector<NStr::CStr> m_EditExplanations;
 		NContainer::TCVector<uint8> m_bEditDropped;
 		NContainer::TCVector<CJoinCandidate> m_JoinCandidates;
+		NContainer::TCVector<uint8> m_bEditStructural;			// Set for an edit that changes tokens, not only layout.
+		umint m_iSuppressBreak = TCLimitsInt<umint>::mc_Max;		// A token whose preceding gap another rule already owns.
 		NContainer::TCVector<CCodeFormattingDiagnostic> m_Diagnostics;
 		bool m_bWholeFile = false;
 	};
@@ -648,8 +663,7 @@ namespace
 		Edit.m_Rule = _Rule;
 		m_EditExplanations.f_Insert(_Explanation);
 		m_bEditDropped.f_Insert(uint8(0));
-		if (!m_JoinCandidates.f_IsEmpty() && _Rule == "line-break")
-			m_JoinCandidates.f_GetLast().m_Edits.f_Insert(m_Edits.f_GetLen() - 1);
+		m_bEditStructural.f_Insert(uint8(_Rule == "trailing-return"));
 	}
 }
 
@@ -1236,8 +1250,19 @@ namespace
 			return Result;
 
 		auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, Result.m_Edits);
-		if (!fg_HasEquivalentCodeTokens(m_Request.m_Source, Formatted))
-			return fFailed("Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(m_Request.m_Source, Formatted));
+		// Converting to a trailing return type is the one rule that changes tokens, so the
+		// guard compares against a source with only those conversions applied. Every other
+		// rule still has to leave the token stream alone.
+		NContainer::TCVector<CCodeFormattingEdit> Structural;
+		for (umint i = 0; i < Sources.f_GetLen(); ++i)
+		{
+			if (m_bEditStructural[Sources[i]])
+				Structural.f_Insert(Result.m_Edits[i]);
+		}
+
+		auto Baseline = Structural.f_IsEmpty() ? m_Request.m_Source : fg_ApplyCodeFormattingEdits(m_Request.m_Source, Structural);
+		if (!fg_HasEquivalentCodeTokens(Baseline, Formatted))
+			return fFailed("Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(Baseline, Formatted));
 
 		if (m_bWholeFile)
 		{
@@ -1348,8 +1373,10 @@ namespace
 		if (nMaxColumns && _iStartColumn + nColumns > nMaxColumns)
 			return false;
 
+		// Only the edits this join emits belong to its candidate. Splitting shares the rule
+		// name, and dropping a split for an overlong line would undo the very fix for it.
 		auto const &Tokens = m_Tokens.f_GetTokens();
-		m_JoinCandidates.f_Insert().m_iOffset = Tokens[_iFirstToken].m_iOffset;
+		auto iFirstEdit = m_Edits.f_GetLen();
 		umint iPrevious = TCLimitsInt<umint>::mc_Max;
 		for (umint i = _iFirstToken; i <= _iLastToken; ++i)
 		{
@@ -1374,58 +1401,14 @@ namespace
 			iPrevious = i;
 		}
 
+		auto &Candidate = m_JoinCandidates.f_Insert();
+		Candidate.m_iOffset = Tokens[_iFirstToken].m_iOffset;
+		for (auto i = iFirstEdit; i < m_Edits.f_GetLen(); ++i)
+			Candidate.m_Edits.f_Insert(i);
+
 		return true;
 	}
 
-	void CFormattingAnalyzer::fp_JoinNode(umint _iNode)
-	{
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto const &Node = Nodes[_iNode];
-		if (Node.m_Kind == ECodeNodeKind::mc_Unsupported)
-			return;
-
-		bool bContainer = Node.m_Kind == ECodeNodeKind::mc_File || Node.m_Kind == ECodeNodeKind::mc_Block
-			|| (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace)
-		;
-		if (!bContainer && Node.f_IsJoinable() && !Node.m_bFixedLineBreaks)
-		{
-			// A group is joined together with the name in front of it, so a split call
-			// collapses to its inline spelling rather than leaving a dangling parenthesis.
-			// Only a name or a closing bracket owns the group, and only inside the same
-			// statement: a clause's condition never owns the statement it guards.
-			auto iFirst = Node.m_iFirstToken;
-			if (Node.m_Kind == ECodeNodeKind::mc_Group)
-			{
-				umint iStatement = _iNode;
-				while (Nodes[iStatement].m_Kind != ECodeNodeKind::mc_Statement && iStatement)
-					iStatement = Nodes[iStatement].m_iParent;
-
-				auto iBoundary = Nodes[iStatement].m_Kind == ECodeNodeKind::mc_Statement ? Nodes[iStatement].m_iFirstToken : iFirst;
-				auto iOwner = fp_PreviousCode(iFirst);
-				if (iOwner >= 0 && umint(iOwner) >= iBoundary)
-				{
-					auto const &Owner = m_Tokens.f_GetTokens()[umint(iOwner)];
-					bool bOwns = Owner.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Owner, ")") || m_Tokens.f_IsText(Owner, "]") || m_Tokens.f_IsText(Owner, ">");
-					if (bOwns)
-						iFirst = umint(iOwner);
-				}
-			}
-
-			if (fp_TryJoin(iFirst, Node.m_iLastToken, fp_GetColumn(m_Tokens.f_GetTokens()[iFirst].m_iOffset) - 1))
-				return;
-		}
-
-		for (auto iChild : Node.m_Children)
-			fp_JoinNode(iChild);
-	}
-
-	void CFormattingAnalyzer::fp_RuleLineBreaks()
-	{
-		if (!m_Structure.f_IsComplete())
-			return;
-
-		fp_JoinNode(0);
-	}
 }
 
 namespace
@@ -1536,5 +1519,677 @@ namespace
 			for (auto iEdit : Candidate.m_Edits)
 				m_bEditDropped[iEdit] = 1;
 		}
+	}
+}
+
+namespace
+{
+	CStr CFormattingAnalyzer::fp_MakeIndent(umint _nColumns) const
+	{
+		auto const &Settings = m_Request.m_Settings;
+		CStr Indent;
+		if (!Settings.m_bIndentWithTabs)
+		{
+			for (umint i = 0; i < _nColumns; ++i)
+				Indent += " ";
+
+			return Indent;
+		}
+
+		for (umint i = 0; i < _nColumns / Settings.m_nTabWidth; ++i)
+			Indent += "\t";
+
+		for (umint i = 0; i < _nColumns % Settings.m_nTabWidth; ++i)
+			Indent += " ";
+
+		return Indent;
+	}
+
+	// A statement's own indentation is where its first token already sits. Splitting places
+	// new lines relative to that, so no separate model of scope depth is needed.
+	umint CFormattingAnalyzer::fp_GetStatementIndent(umint _iToken) const
+	{
+		return fp_GetColumn(m_Tokens.f_GetTokens()[_iToken].m_iOffset) - 1;
+	}
+
+	// True when the range holds nothing that fixes its own line structure.
+	bool CFormattingAnalyzer::fp_IsRangeJoinable(umint _iNode, umint _iFirst, umint _iLast) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		for (umint i = _iFirst; i <= _iLast; ++i)
+		{
+			auto Kind = Tokens[i].m_Kind;
+			if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor)
+				return false;
+
+			// A line break is layout; only a token whose own text spans lines is fixed.
+			if (Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice || Kind == ECodeTokenKind::mc_Whitespace)
+				continue;
+
+			if (Tokens[i].m_bMultiLine)
+				return false;
+		}
+
+		// A block, a braced initializer written across lines, or anything else that fixes
+		// its own lines makes the construct around it unable to render inline. The node
+		// flags are propagated from descendants, so the direct children answer for all.
+		for (auto iChild : m_Structure.f_GetNodes()[_iNode].m_Children)
+		{
+			auto const &Child = m_Structure.f_GetNodes()[iChild];
+			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken > _iLast)
+				continue;
+
+			if (Child.m_Kind == ECodeNodeKind::mc_Block || !Child.f_IsJoinable())
+				return false;
+		}
+
+		return true;
+	}
+
+	bool CFormattingAnalyzer::fp_FitsInline(umint _iFirst, umint _iLast, umint _iIndent) const
+	{
+		umint nColumns = 0;
+		if (!fp_MeasureJoinedWidth(_iFirst, _iLast, nColumns))
+			return false;
+
+		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+
+		return !nMaxColumns || _iIndent + nColumns <= nMaxColumns;
+	}
+
+	// Starts a new line before the token, at the given indentation.
+	void CFormattingAnalyzer::fp_BreakBefore(umint _iToken, umint _iIndent)
+	{
+		if (_iToken == m_iSuppressBreak)
+			return;
+
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto iPrevious = fp_PreviousCode(_iToken);
+		if (iPrevious < 0)
+			return;
+
+		auto iStart = Tokens[umint(iPrevious)].f_GetEnd();
+		auto nLength = Tokens[_iToken].m_iOffset - iStart;
+		// A comment between the tokens owns the layout there.
+		for (umint i = umint(iPrevious) + 1; i < _iToken; ++i)
+		{
+			auto Kind = Tokens[i].m_Kind;
+			if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline && Kind != ECodeTokenKind::mc_LineSplice)
+				return;
+		}
+
+		CStr Replacement = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding()) + fp_MakeIndent(_iIndent);
+		if (Replacement == CStr(m_Request.m_Source.f_GetStr() + iStart, nLength))
+			return;
+
+		fp_AddEdit("line-break", iStart, nLength, Replacement, "a split construct puts this on its own line");
+	}
+
+	void CFormattingAnalyzer::fp_BreakAfter(umint _iToken, umint _iIndent)
+	{
+		auto iNext = fp_NextCode(_iToken);
+		if (iNext >= 0)
+			fp_BreakBefore(umint(iNext), _iIndent);
+	}
+
+	void CFormattingAnalyzer::fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore)
+	{
+		auto const &Node = m_Structure.f_GetNodes()[_iNode];
+		if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket == ECodeBracket::mc_Brace)
+			return;
+
+		// An empty group has nothing to put on its own line.
+		auto iInner = fp_NextCode(Node.m_iFirstToken);
+		if (iInner < 0 || umint(iInner) == Node.m_iLastToken)
+			return;
+
+		if (_bBreakBefore)
+			fp_BreakBefore(Node.m_iFirstToken, _iIndent);
+
+		fp_BreakAfter(Node.m_iFirstToken, _iIndent + m_Request.m_Settings.m_nTabWidth);
+		for (auto iSplit : Node.m_SplitPoints)
+			fp_BreakBefore(iSplit, _iIndent + m_Request.m_Settings.m_nTabWidth);
+
+		fp_BreakBefore(Node.m_iLastToken, _iIndent);
+		fp_LayoutElements(_iNode, _iIndent + m_Request.m_Settings.m_nTabWidth);
+	}
+
+	// Each element of a split group that still does not fit has its own groups split in turn.
+	void CFormattingAnalyzer::fp_LayoutElements(umint _iNode, umint _iIndent)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		umint iElement = Node.m_iFirstToken + 1;
+		umint iSplit = 0;
+		while (iElement <= Node.m_iLastToken)
+		{
+			auto iEnd = iSplit < Node.m_SplitPoints.f_GetLen() ? Node.m_SplitPoints[iSplit] : Node.m_iLastToken;
+			if (iEnd > iElement)
+			{
+				umint iLast = iEnd - 1;
+				if (!fp_FitsInline(iElement, iLast, _iIndent))
+				{
+					for (auto iChild : Node.m_Children)
+					{
+						auto const &Child = Nodes[iChild];
+						if (Child.m_iFirstToken >= iElement && Child.m_iLastToken <= iLast)
+							fp_LayoutGroup(iChild, _iIndent + nTab);
+					}
+				}
+			}
+
+			if (iSplit >= Node.m_SplitPoints.f_GetLen())
+				break;
+
+			iElement = Node.m_SplitPoints[iSplit];
+			++iSplit;
+		}
+	}
+
+	// Moves a declaration's return type behind its parameter list when the name would not
+	// otherwise fit. Converting alone is always eight columns longer, so it is only ever
+	// worth doing together with putting the trailing type on its own line.
+	bool CFormattingAnalyzer::fp_TryTrailingReturn(umint _iNode, umint _iIndent)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		umint iParen = TCLimitsInt<umint>::mc_Max;
+		for (auto iChild : Node.m_Children)
+		{
+			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Group && Nodes[iChild].m_Bracket == ECodeBracket::mc_Paren)
+			{
+				iParen = iChild;
+
+				break;
+			}
+		}
+
+		if (iParen == TCLimitsInt<umint>::mc_Max)
+			return false;
+
+		auto iOpen = Nodes[iParen].m_iFirstToken;
+		auto iClose = Nodes[iParen].m_iLastToken;
+		if (iOpen == Node.m_iFirstToken)
+			return false;
+
+		// The name line already fits, so there is nothing to gain.
+		auto iBeforeOpen = fp_PreviousCode(iOpen);
+		if (iBeforeOpen < 0 || fp_FitsInline(Node.m_iFirstToken, umint(iBeforeOpen), _iIndent))
+			return false;
+
+		// The declarator-id is the last name before the parameter list, extended backwards
+		// only through '::'. A return type in front of it looks the same, so stopping at
+		// the first name that is not qualified is what separates the two.
+		auto fSkipAngleBackwards = [&](aint _iToken)
+			{
+				umint nDepth = 0;
+				for (auto i = _iToken; i >= 0; i = fp_PreviousCode(umint(i)))
+				{
+					if (!m_Structure.f_IsAngleBracket(umint(i)))
+						continue;
+
+					if (m_Tokens.f_IsText(Tokens[umint(i)], ">"))
+					{
+						++nDepth;
+
+						continue;
+					}
+
+					if (!--nDepth)
+						return i;
+				}
+
+				return aint(-1);
+			}
+		;
+
+		if (Tokens[umint(iBeforeOpen)].m_Kind != ECodeTokenKind::mc_Identifier)
+			return false;
+
+		umint iDeclarator = umint(iBeforeOpen);
+		auto iWalk = fp_PreviousCode(iDeclarator);
+		if (iWalk >= 0 && m_Tokens.f_IsText(Tokens[umint(iWalk)], "~"))
+		{
+			iDeclarator = umint(iWalk);
+			iWalk = fp_PreviousCode(iDeclarator);
+		}
+
+		while (iWalk >= 0 && m_Tokens.f_IsText(Tokens[umint(iWalk)], "::"))
+		{
+			iDeclarator = umint(iWalk);
+			iWalk = fp_PreviousCode(iDeclarator);
+			if (iWalk >= 0 && m_Structure.f_IsAngleBracket(umint(iWalk)) && m_Tokens.f_IsText(Tokens[umint(iWalk)], ">"))
+			{
+				auto iOpenAngle = fSkipAngleBackwards(iWalk);
+				if (iOpenAngle < 0)
+					return false;
+
+				iDeclarator = umint(iOpenAngle);
+				iWalk = fp_PreviousCode(iDeclarator);
+			}
+
+			if (iWalk < 0 || Tokens[umint(iWalk)].m_Kind != ECodeTokenKind::mc_Identifier)
+				break;
+
+			iDeclarator = umint(iWalk);
+			iWalk = fp_PreviousCode(iDeclarator);
+		}
+
+		// Skip a template header and the declaration specifiers before the return type.
+		static ch8 const *const gsc_pSpecifiers[] =
+			{
+				"static", "virtual", "inline", "constexpr", "consteval", "constinit", "explicit", "friend", "extern"
+				, "mutable", "thread_local", "inline_always", "inline_never", "inline_small", "inline_medium"
+				, "inline_large", "inline_extralarge", "mark_nodebug"
+			}
+		;
+		umint iReturn = Node.m_iFirstToken;
+		while (iReturn < iDeclarator)
+		{
+			auto const &Token = Tokens[iReturn];
+			bool bSkip = false;
+			for (auto pSpecifier : gsc_pSpecifiers)
+				bSkip |= m_Tokens.f_IsText(Token, pSpecifier);
+
+			if (m_Tokens.f_IsText(Token, "template") || m_Tokens.f_IsText(Token, "["))
+			{
+				// The header or attribute is a child group; step past it whole. Without one
+				// the shape is not the expected declaration, so no conversion is attempted.
+				umint iAfter = TCLimitsInt<umint>::mc_Max;
+				for (auto iChild : Node.m_Children)
+				{
+					auto const &Child = Nodes[iChild];
+					if (Child.m_iFirstToken < iReturn || Child.m_iLastToken >= iDeclarator)
+						continue;
+
+					auto iNext = fp_NextCode(Child.m_iLastToken);
+					if (iNext >= 0)
+						iAfter = umint(iNext);
+
+					break;
+				}
+
+				if (iAfter == TCLimitsInt<umint>::mc_Max || iAfter <= iReturn)
+					return false;
+
+				iReturn = iAfter;
+
+				continue;
+			}
+
+			if (!bSkip)
+				break;
+
+			auto iNext = fp_NextCode(iReturn);
+			if (iNext < 0)
+				return false;
+
+			iReturn = umint(iNext);
+		}
+
+		// A constructor, a destructor, and a conversion operator have no return type.
+		if (iReturn >= iDeclarator)
+			return false;
+
+		auto iReturnLast = fp_PreviousCode(iDeclarator);
+		if (iReturnLast < 0 || umint(iReturnLast) < iReturn)
+			return false;
+
+		// Find where the trailing type goes: after the qualifiers, before a definition,
+		// a pure specifier, or the terminator. An existing arrow means there is nothing to do.
+		umint iInsert = TCLimitsInt<umint>::mc_Max;
+		for (auto i = fp_NextCode(iClose); i >= 0 && umint(i) <= Node.m_iLastToken; i = fp_NextCode(umint(i)))
+		{
+			auto const &Token = Tokens[umint(i)];
+			if (m_Tokens.f_IsText(Token, "->"))
+				return false;
+
+			if (m_Tokens.f_IsText(Token, "=") || m_Tokens.f_IsText(Token, "{") || m_Tokens.f_IsText(Token, ";") || m_Tokens.f_IsText(Token, "requires"))
+			{
+				iInsert = umint(i);
+
+				break;
+			}
+		}
+
+		if (iInsert == TCLimitsInt<umint>::mc_Max)
+			return false;
+
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
+		auto iReturnStart = Tokens[iReturn].m_iOffset;
+		CStr ReturnType(m_Request.m_Source.f_GetStr() + iReturnStart, Tokens[umint(iReturnLast)].f_GetEnd() - iReturnStart);
+		auto iPrevious = fp_PreviousCode(iInsert);
+		if (iPrevious < 0)
+			return false;
+
+		// The gap before the insertion point is written whole, so no other rule may claim it.
+		auto iGap = Tokens[umint(iPrevious)].f_GetEnd();
+		auto nGap = Tokens[iInsert].m_iOffset - iGap;
+		auto bBody = m_Tokens.f_IsText(Tokens[iInsert], "{") || m_Tokens.f_IsText(Tokens[iInsert], ";");
+		CStr Replacement = Ending + fp_MakeIndent(_iIndent + nTab) + "-> " + ReturnType + Ending + fp_MakeIndent(bBody ? _iIndent : _iIndent + nTab);
+		fp_AddEdit("trailing-return", iReturnStart, Tokens[umint(iReturnLast)].f_GetEnd() - iReturnStart, "auto", "the name does not fit before the parameter list");
+		fp_AddEdit("trailing-return", iGap, nGap, Replacement, "the return type moves behind the parameter list");
+		m_iSuppressBreak = iInsert;
+
+		return true;
+	}
+
+	// Fallback for a construct whose own lines are fixed: its inner constructs can still be
+	// brought back to one line where they fit.
+	void CFormattingAnalyzer::fp_JoinNode(umint _iNode)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		if (Node.m_Kind == ECodeNodeKind::mc_Unsupported)
+			return;
+
+		bool bContainer = Node.m_Kind == ECodeNodeKind::mc_File || Node.m_Kind == ECodeNodeKind::mc_Block
+			|| (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace)
+		;
+		if (!bContainer && Node.f_IsJoinable() && !Node.m_bFixedLineBreaks)
+		{
+			auto iFirst = Node.m_iFirstToken;
+			if (Node.m_Kind == ECodeNodeKind::mc_Group)
+			{
+				umint iStatement = _iNode;
+				while (Nodes[iStatement].m_Kind != ECodeNodeKind::mc_Statement && iStatement)
+					iStatement = Nodes[iStatement].m_iParent;
+
+				auto iBoundary = Nodes[iStatement].m_Kind == ECodeNodeKind::mc_Statement ? Nodes[iStatement].m_iFirstToken : iFirst;
+				auto iOwner = fp_PreviousCode(iFirst);
+				if (iOwner >= 0 && umint(iOwner) >= iBoundary)
+				{
+					auto const &Owner = m_Tokens.f_GetTokens()[umint(iOwner)];
+					bool bOwns = Owner.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Owner, ")")
+						|| m_Tokens.f_IsText(Owner, "]") || m_Tokens.f_IsText(Owner, ">")
+					;
+					if (bOwns)
+						iFirst = umint(iOwner);
+				}
+			}
+
+			if (fp_TryJoin(iFirst, Node.m_iLastToken, fp_GetStatementIndent(iFirst)))
+				return;
+		}
+
+		for (auto iChild : Node.m_Children)
+		{
+			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Block)
+				fp_LayoutNode(iChild, fp_GetStatementIndent(Nodes[iChild].m_iFirstToken));
+			else
+				fp_JoinNode(iChild);
+		}
+	}
+
+	// A member initializer list is its own line structure: one entry per line, each split
+	// only when that entry does not fit. It is never folded onto the signature.
+	umint CFormattingAnalyzer::fp_FindInitializerList(umint _iNode, umint _iFirstParen, umint _iLast) const
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		if (!_iFirstParen)
+			return TCLimitsInt<umint>::mc_Max;
+
+		for (umint i = _iFirstParen; i <= _iLast; ++i)
+		{
+			bool bInside = false;
+			for (auto iChild : Node.m_Children)
+				bInside |= i >= Nodes[iChild].m_iFirstToken && i <= Nodes[iChild].m_iLastToken;
+
+			if (bInside)
+				continue;
+
+			// A conditional operator also puts a colon at the statement's own level.
+			if (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "?"))
+				return TCLimitsInt<umint>::mc_Max;
+
+			if (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], ":"))
+				return i;
+		}
+
+		return TCLimitsInt<umint>::mc_Max;
+	}
+
+	void CFormattingAnalyzer::fp_LayoutInitializerList(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		NContainer::TCVector<umint> Entries;
+		Entries.f_Insert(_iFirst);
+		for (umint i = _iFirst + 1; i <= _iLast; ++i)
+		{
+			bool bInside = false;
+			for (auto iChild : Node.m_Children)
+				bInside |= i >= Nodes[iChild].m_iFirstToken && i <= Nodes[iChild].m_iLastToken;
+
+			if (!bInside && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], ","))
+				Entries.f_Insert(i);
+		}
+
+		for (umint iEntry = 0; iEntry < Entries.f_GetLen(); ++iEntry)
+		{
+			fp_BreakBefore(Entries[iEntry], _iIndent);
+			auto iEnd = iEntry + 1 < Entries.f_GetLen() ? Entries[iEntry + 1] - 1 : _iLast;
+			if (fp_FitsInline(Entries[iEntry], iEnd, _iIndent))
+				continue;
+
+			for (auto iChild : Node.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_iFirstToken >= Entries[iEntry] && Child.m_iLastToken <= iEnd)
+					fp_LayoutGroup(iChild, _iIndent + nTab);
+			}
+		}
+	}
+
+	void CFormattingAnalyzer::fp_LayoutStatement(umint _iNode, umint _iIndent)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto const &Tokens = m_Tokens.f_GetTokens();
+
+		// A block always occupies its own lines, so only the head decides the statement's shape.
+		umint iHeadLast = Node.m_iLastToken;
+		umint iHeadLastWithInitializers = Node.m_iLastToken;
+		umint iBlock = TCLimitsInt<umint>::mc_Max;
+		for (auto iChild : Node.m_Children)
+		{
+			if (Nodes[iChild].m_Kind != ECodeNodeKind::mc_Block)
+				continue;
+
+			iBlock = iChild;
+			auto iFirst = Nodes[iChild].m_iFirstToken;
+			auto iPrevious = fp_PreviousCode(iFirst);
+			iHeadLast = iPrevious >= 0 ? umint(iPrevious) : iFirst;
+			iHeadLastWithInitializers = iHeadLast;
+
+			break;
+		}
+
+		// A statement that does not start its own line, such as one behind an attribute on
+		// a clause's line, has no indentation of its own to lay anything out against.
+		umint iFirstParenGroup = 0;
+		for (auto iChild : Node.m_Children)
+		{
+			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Group && Nodes[iChild].m_Bracket == ECodeBracket::mc_Paren)
+			{
+				iFirstParenGroup = Nodes[iChild].m_iLastToken;
+
+				break;
+			}
+		}
+
+		auto iInitializerList = fp_FindInitializerList(_iNode, iFirstParenGroup, iHeadLast);
+		auto iSignatureLast = iHeadLast;
+		if (iInitializerList != TCLimitsInt<umint>::mc_Max)
+		{
+			auto iPrevious = fp_PreviousCode(iInitializerList);
+			if (iPrevious < 0)
+				iInitializerList = TCLimitsInt<umint>::mc_Max;
+			else
+				iSignatureLast = umint(iPrevious);
+		}
+
+		bool bJoinable = fp_IsRangeJoinable(_iNode, Node.m_iFirstToken, iSignatureLast) && !Node.m_bFixedLineBreaks
+			&& Node.m_Kind != ECodeNodeKind::mc_Unsupported && fp_IsFirstOnLine(Node.m_iFirstToken)
+		;
+		if (iInitializerList != TCLimitsInt<umint>::mc_Max)
+			iHeadLast = iSignatureLast;
+
+		if (bJoinable && fp_FitsInline(Node.m_iFirstToken, iHeadLast, _iIndent) && fp_TryJoin(Node.m_iFirstToken, iHeadLast, _iIndent))
+		{
+			if (iInitializerList != TCLimitsInt<umint>::mc_Max)
+				fp_LayoutInitializerList(_iNode, iInitializerList, iHeadLastWithInitializers, _iIndent + nTab);
+
+			if (iBlock != TCLimitsInt<umint>::mc_Max)
+				fp_LayoutNode(iBlock, _iIndent);
+
+			return;
+		}
+
+		if (bJoinable)
+		{
+			bool bClause = m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "if") || m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "for")
+				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "while") || m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "switch")
+				|| m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "catch")
+			;
+			auto nGroupIndent = bClause ? _iIndent : _iIndent + nTab;
+			// The return type moves behind the parameter list when the name would not fit.
+			fp_TryTrailingReturn(_iNode, _iIndent);
+
+			bool bHasTerminator = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && Node.m_iLastToken > Node.m_iFirstToken;
+			// A declaration is never split before its name, so the template arguments of a
+			// declarator-id keep their line even when the statement does not fit.
+			umint iFirstParen = 0;
+			for (auto iChild : Node.m_Children)
+			{
+				if (Nodes[iChild].m_Kind != ECodeNodeKind::mc_Group || Nodes[iChild].m_Bracket != ECodeBracket::mc_Paren)
+					continue;
+
+				iFirstParen = Nodes[iChild].m_iFirstToken;
+
+				break;
+			}
+
+			// A trailing return type is one logical unit on its own line. Its own scope
+			// markers are only split if it does not fit there, which the join pass decides.
+			umint iTrailingReturn = TCLimitsInt<umint>::mc_Max;
+			if (iFirstParen)
+			{
+				for (umint i = iFirstParen; i <= Node.m_iLastToken; ++i)
+				{
+					if (m_Tokens.f_IsText(Tokens[i], "->") && Tokens[i].m_Kind == ECodeTokenKind::mc_Punctuator)
+					{
+						iTrailingReturn = i;
+
+						break;
+					}
+				}
+			}
+
+			umint iPreviousEnd = Node.m_iFirstToken;
+			bool bSplit = false;
+			for (auto iChild : Node.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_iLastToken > iHeadLast)
+					continue;
+
+				if (Child.m_Bracket == ECodeBracket::mc_Brace || Child.m_iLastToken < iFirstParen)
+					continue;
+
+				if (Child.m_iFirstToken > iTrailingReturn)
+					continue;
+
+				// Text between two scope markers is a logical unit of its own.
+				auto iSegment = fp_NextCode(iPreviousEnd);
+				if (iPreviousEnd != Node.m_iFirstToken && iSegment >= 0 && umint(iSegment) < Child.m_iFirstToken)
+					fp_BreakBefore(umint(iSegment), _iIndent + nTab);
+
+				// A group that opens the statement, such as a cast, keeps the statement's own
+				// first line; moving it would change the indentation everything else is
+				// measured against.
+				fp_LayoutGroup(iChild, nGroupIndent, Child.m_iFirstToken != Node.m_iFirstToken);
+				iPreviousEnd = Child.m_iLastToken;
+				bSplit = true;
+			}
+
+			// A trailing qualifier run and the terminator each end up on their own line.
+			// With no scope marker to split there is nothing to lay out, so the statement
+			// keeps its shape and an overlong line is reported instead.
+			if (bSplit && iPreviousEnd < iHeadLast)
+			{
+				auto iSegment = fp_NextCode(iPreviousEnd);
+				auto iTerminator = bHasTerminator ? Node.m_iLastToken : Node.m_iLastToken + 1;
+				if (iSegment >= 0 && umint(iSegment) <= iHeadLast && umint(iSegment) < iTerminator)
+					fp_BreakBefore(umint(iSegment), _iIndent + nTab);
+			}
+
+			if (bSplit && bHasTerminator)
+				fp_BreakBefore(Node.m_iLastToken, _iIndent);
+		}
+
+		if (!bJoinable)
+		{
+			// The head cannot be relaid out, but its inner constructs still can.
+			for (auto iChild : Node.m_Children)
+			{
+				if (Nodes[iChild].m_Kind != ECodeNodeKind::mc_Block)
+					fp_JoinNode(iChild);
+			}
+		}
+
+		if (bJoinable && iInitializerList != TCLimitsInt<umint>::mc_Max)
+			fp_LayoutInitializerList(_iNode, iInitializerList, iHeadLastWithInitializers, _iIndent + nTab);
+
+		if (iBlock != TCLimitsInt<umint>::mc_Max)
+		{
+			if (bJoinable)
+				fp_BreakBefore(Nodes[iBlock].m_iFirstToken, _iIndent);
+
+			fp_LayoutNode(iBlock, _iIndent);
+		}
+	}
+
+	void CFormattingAnalyzer::fp_LayoutNode(umint _iNode, umint _iIndent)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		switch (Node.m_Kind)
+		{
+			case ECodeNodeKind::mc_File:
+			{
+				for (auto iChild : Node.m_Children)
+					fp_LayoutNode(iChild, 0);
+
+				return;
+			}
+			case ECodeNodeKind::mc_Block:
+			{
+				auto nTab = m_Request.m_Settings.m_nTabWidth;
+				for (auto iChild : Node.m_Children)
+					fp_LayoutNode(iChild, _iIndent + nTab);
+
+				return;
+			}
+			case ECodeNodeKind::mc_Unsupported: return;
+			default: break;
+		}
+
+		if (Node.m_Kind == ECodeNodeKind::mc_Statement)
+			fp_LayoutStatement(_iNode, fp_GetStatementIndent(Node.m_iFirstToken));
+	}
+
+	void CFormattingAnalyzer::fp_RuleLineBreaks()
+	{
+		if (!m_Structure.f_IsComplete())
+			return;
+
+		fp_LayoutNode(0, 0);
 	}
 }

@@ -499,15 +499,23 @@ namespace NMib::NDevelop
 			{
 				// A brace directly after a parameter list, or at statement position, opens a
 				// block of statements. Anywhere else it is an initializer.
-				bool bBlock = bAfterCloseParen || i == _iToken;
+				// 'T x{...}' is an initializer while 'struct C {...}' is a body, and both have
+				// an identifier in front of the brace. A statement terminator at the brace's
+				// own level is what tells the two apart.
+				auto const &First = Tokens[mp_Significant[_iToken]];
+				bool bDefinition = mp_pTokens->f_IsText(First, "struct") || mp_pTokens->f_IsText(First, "class")
+					|| mp_pTokens->f_IsText(First, "union") || mp_pTokens->f_IsText(First, "enum")
+					|| mp_pTokens->f_IsText(First, "namespace")
+				;
+				bool bBlock = bAfterCloseParen || i == _iToken || bDefinition;
 				if (!bBlock)
 				{
 					auto const &Previous = Tokens[mp_Significant[i - 1]];
 					bBlock = mp_pTokens->f_IsText(Previous, "else") || mp_pTokens->f_IsText(Previous, "do")
-						|| mp_pTokens->f_IsText(Previous, "try") || mp_pTokens->f_IsText(Previous, ">")
-						|| mp_pTokens->f_IsText(Previous, "const") || mp_pTokens->f_IsText(Previous, "noexcept")
-						|| mp_pTokens->f_IsText(Previous, "override") || mp_pTokens->f_IsText(Previous, "final")
-						|| mp_pTokens->f_IsText(Previous, "namespace") || Previous.m_Kind == ECodeTokenKind::mc_Identifier
+						|| mp_pTokens->f_IsText(Previous, "try") || mp_pTokens->f_IsText(Previous, "const")
+						|| mp_pTokens->f_IsText(Previous, "noexcept") || mp_pTokens->f_IsText(Previous, "override")
+						|| mp_pTokens->f_IsText(Previous, "final")
+						|| (Previous.m_Kind == ECodeTokenKind::mc_Identifier && fp_IsBlockBrace(i))
 					;
 				}
 
@@ -666,11 +674,21 @@ namespace NMib::NDevelop
 		if (fLeft(",") || fLeft(";"))
 			return ECodeSpacing::mc_Space;
 
-		// A clause keyword is separated from its condition; a call is not from its arguments.
+		// A keyword is separated from a parenthesis that follows it; a call name is not.
+		// Operators spelled like a call, such as sizeof and decltype, stay tight.
 		if (fRight("("))
 		{
-			if (fLeft("if") || fLeft("for") || fLeft("while") || fLeft("switch") || fLeft("catch"))
-				return ECodeSpacing::mc_Space;
+			static ch8 const *const gsc_pSpacedKeywords[] =
+				{
+					"if", "for", "while", "switch", "catch", "return", "co_return", "co_await", "co_yield"
+					, "throw", "new", "delete", "case"
+				}
+			;
+			for (auto pKeyword : gsc_pSpacedKeywords)
+			{
+				if (_Tokens.f_IsText(Left, pKeyword))
+					return ECodeSpacing::mc_Space;
+			}
 
 			if (Left.m_Kind == ECodeTokenKind::mc_Identifier || fLeft(")") || fLeft("]"))
 				return ECodeSpacing::mc_None;
@@ -682,9 +700,15 @@ namespace NMib::NDevelop
 		if (fLeft(".") || fLeft("->") || fLeft("::") || fRight(".") || fRight("::"))
 			return ECodeSpacing::mc_None;
 
-		// '->' is a trailing return type as well as member access, so it is left alone.
+		// '->' is a trailing return type as well as member access. After a parameter list
+		// or a function's qualifiers it can only be the former, which takes a space.
 		if (fRight("->"))
+		{
+			if (fLeft(")") || fLeft("const") || fLeft("volatile") || fLeft("noexcept") || fLeft("override") || fLeft("final"))
+				return ECodeSpacing::mc_Space;
+
 			return ECodeSpacing::mc_Preserve;
+		}
 
 		static ch8 const *const gsc_pBinaryOperators[] =
 			{

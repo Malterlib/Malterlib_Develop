@@ -55,14 +55,17 @@ namespace
 		return fg_ApplyCodeFormattingEdits(_Source, Result.m_Edits);
 	}
 
-	void fg_ExpectFormat(CStr const &_Case, CStr const &_Source, CStr const &_Expected)
+	// Converting to a trailing return type is the one rule that changes tokens, so those
+	// cases opt out of the token check and are pinned by their golden output instead.
+	void fg_ExpectFormat(CStr const &_Case, CStr const &_Source, CStr const &_Expected, bool _bTokensPreserved = true)
 	{
 		DMibTestPath(_Case);
 		auto Formatted = fg_FormatSource(_Source, "First");
 		DMibExpect(Formatted, ==, _Expected);
 		// Formatting is idempotent: a second pass must find nothing left to do.
 		DMibExpect(fg_FormatSource(Formatted, "Second"), ==, _Expected);
-		DMibExpectTrue(fg_HasEquivalentCodeTokens(_Source, Formatted));
+		if (_bTokensPreserved)
+			DMibExpectTrue(fg_HasEquivalentCodeTokens(_Source, Formatted));
 	}
 
 	struct CCodeFormatting_Tests : CTest
@@ -404,6 +407,131 @@ namespace
 					;
 				};
 
+				DMibTestCategory("Split")
+				{
+					// The forms in Malterlib_Core_CodeStandard_Formatting.dox.
+					CStr Wide;
+					for (umint i = 0; i < 90; ++i)
+						Wide += "W";
+
+					auto fSplit = [&](CStr const &_Case, CStr const &_Source, CStr const &_Expected)
+						{
+							fg_ExpectFormat(_Case, _Source.f_Replace("@", Wide), _Expected.f_Replace("@", Wide));
+						}
+					;
+					fSplit("Call", "void f()\n{\n\tg(@, @, @);\n}\n", "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t\t, @\n\t\t)\n\t;\n}\n");
+					// A clause's parenthesis sits at the statement's own indentation.
+					fSplit
+						(
+							"Clause"
+							, "void f()\n{\n\tif (@ && @ && @)\n\t\th();\n}\n"
+							, "void f()\n{\n\tif\n\t(\n\t\t@ && @ && @\n\t)\n\t\th();\n}\n"
+						)
+					;
+					fSplit
+						(
+							"For"
+							, "void f()\n{\n\tfor (umint @ = 0; @ < 5; ++@)\n\t\th();\n}\n"
+							, "void f()\n{\n\tfor\n\t(\n\t\tumint @ = 0\n\t\t; @ < 5\n\t\t; ++@\n\t)\n\t\th();\n}\n"
+						)
+					;
+					// A definition splits its parameter list and keeps its body at statement level.
+					fSplit
+						(
+							"Definition"
+							, "void fg_F(int @, int @)\n{\n}\n"
+							, "void fg_F\n\t(\n\t\tint @\n\t\t, int @\n\t)\n{\n}\n"
+						)
+					;
+					// A trailing qualifier run is a logical unit of its own.
+					fSplit
+						(
+							"Qualifiers"
+							, "struct C\n{\n\tvoid f_F(int @, int @) const volatile = 0;\n};\n"
+							, "struct C\n{\n\tvoid f_F\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t)\n\t\tconst volatile = 0\n\t;\n};\n"
+						)
+					;
+					// Every scope marker of a split statement gets its own line.
+					fSplit
+						(
+							"Chained"
+							, "void f()\n{\n\tg(@, @).f_Call(@, @);\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t\t.f_Call\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// An element that still does not fit splits its own scope markers.
+					fSplit
+						(
+							"Nested"
+							, "void f()\n{\n\tg(@, h(@, @, @));\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, h\n\t\t\t\t(\n\t\t\t\t\t@\n\t\t\t\t\t, @\n\t\t\t\t\t, @\n\t\t\t\t)\n\t\t)\n\t;\n}\n"
+						)
+					;
+				};
+
+				DMibTestCategory("TrailingReturn")
+				{
+					// The name before the parameter list must itself exceed the limit.
+					CStr Wide;
+					for (umint i = 0; i < 180; ++i)
+						Wide += "R";
+
+					auto fSplit = [&](CStr const &_Case, CStr const &_Source, CStr const &_Expected, bool _bTokensPreserved = false)
+						{
+							fg_ExpectFormat(_Case, _Source.f_Replace("@", Wide), _Expected.f_Replace("@", Wide), _bTokensPreserved);
+						}
+					;
+					// The name does not fit before the parameter list, so the return type moves.
+					fSplit
+						(
+							"Declaration"
+							, "TCLongTemplate<@> fg_F(int _A, int _B);\n"
+							, "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n;\n"
+						)
+					;
+					fSplit
+						(
+							"Definition"
+							, "TCLongTemplate<@> fg_F(int _A, int _B)\n{\n}\n"
+							, "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n{\n}\n"
+						)
+					;
+					// The trailing type goes after the qualifiers.
+					fSplit
+						(
+							"Qualifiers"
+							, "struct C\n{\n\tTCLongTemplate<@> f_F(int _A) const volatile;\n};\n"
+							, "struct C\n{\n\tauto f_F\n\t\t(\n\t\t\tint _A\n\t\t)\n\t\tconst volatile\n\t\t-> TCLongTemplate<@>\n\t;\n};\n"
+						)
+					;
+					// Declaration specifiers stay in front of auto.
+					fSplit
+						(
+							"Specifiers"
+							, "static inline_always TCLongTemplate<@> fg_F(int _A);\n"
+							, "static inline_always auto fg_F\n\t(\n\t\tint _A\n\t)\n\t-> TCLongTemplate<@>\n;\n"
+						)
+					;
+					// A constructor has no return type to move.
+					fSplit
+						(
+							"Constructor"
+							, "CLongName<@>::CLongName(int _A, int _B);\n"
+							, "CLongName<@>::CLongName\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n;\n"
+							, true
+						)
+					;
+					// An existing trailing return type is only relaid out.
+					fSplit
+						(
+							"AlreadyTrailing"
+							, "auto fg_F(int _A, int _B) -> TCLongTemplate<@>;\n"
+							, "auto fg_F\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n\t-> TCLongTemplate<@>\n;\n"
+							, true
+						)
+					;
+				};
+
 				DMibTestCategory("TooLong")
 				{
 					DMibTestPath("DoesNotFit");
@@ -411,7 +539,8 @@ namespace
 					for (umint i = 0; i < 100; ++i)
 						Name += "A";
 
-					CStr Source = "void f()\n{\n\tg\n\t\t(\n\t\t\t" + Name + "\n\t\t\t, " + Name + "\n\t\t)\n\t;\n}\n";
+					// A statement with no scope marker to split keeps its shape and is reported.
+					CStr Source = "int a" + Name + " = 0;\n";
 					DMibExpect(fg_FormatSource(Source), ==, Source);
 				};
 			};
