@@ -314,6 +314,14 @@ namespace
 						)
 					;
 					fg_ExpectFormat("Condition", "void f()\n{\n\tif\n\t(\n\t\ta\n\t\t&& b\n\t)\n\t\tg();\n}\n", "void f()\n{\n\tif (a && b)\n\t\tg();\n}\n");
+					// A unary '!' hugs its operand, so it rejoins the group it stood in front of.
+					fg_ExpectFormat
+						(
+							"Negation"
+							, "void f()\n{\n\tif\n\t(\n\t\t!\n\t\t(\n\t\t\ta\n\t\t)\n\t\t|| !!\n\t\t(\n\t\t\tb\n\t\t)\n\t)\n\t\tg();\n}\n"
+							, "void f()\n{\n\tif (!(a) || !!(b))\n\t\tg();\n}\n"
+						)
+					;
 				};
 
 				DMibTestCategory("Bodies")

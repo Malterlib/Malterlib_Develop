@@ -2371,6 +2371,16 @@ namespace
 					if (bOwns && !fp_ClosesLambdaIntroducer(umint(iOwner)))
 						iFirst = umint(iOwner);
 				}
+
+				// A unary '!' or '~' in front belongs to its operand: '!(a && b)', '!!x'.
+				for (auto iUnary = fp_PreviousCode(iFirst); iUnary >= 0 && umint(iUnary) >= iBoundary; iUnary = fp_PreviousCode(iFirst))
+				{
+					auto const &Unary = m_Tokens.f_GetTokens()[umint(iUnary)];
+					if (!m_Tokens.f_IsText(Unary, "!") && !m_Tokens.f_IsText(Unary, "~"))
+						break;
+
+					iFirst = umint(iUnary);
+				}
 			}
 
 			if (fp_TryJoin(iFirst, Node.m_iLastToken, fp_GetStatementIndent(iFirst)))

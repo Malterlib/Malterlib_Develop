@@ -769,6 +769,26 @@ namespace NMib::NDevelop
 		if (fLeft("<") || fRight(">") || fLeft(">"))
 			return ECodeSpacing::mc_Space;
 
+		// '!' and '~' are always unary and hug their operand: '!(a && b)', '!!x'. Behind
+		// 'operator' they name a function instead, and keep that spelling.
+		if (fLeft("!") || fLeft("~"))
+		{
+			bool bOperatorName = false;
+			for (auto i = _iLeft; i; --i)
+			{
+				auto const &Token = _Tokens.f_GetTokens()[i - 1];
+				if (Token.m_Kind == ECodeTokenKind::mc_Whitespace || Token.m_Kind == ECodeTokenKind::mc_Newline || Token.m_Kind == ECodeTokenKind::mc_LineSplice)
+					continue;
+
+				bOperatorName = _Tokens.f_IsText(Token, "operator");
+
+				break;
+			}
+
+			if (!bOperatorName)
+				return ECodeSpacing::mc_None;
+		}
+
 		// Scope markers hug their contents, including a separator that ends the last element.
 		if (fLeft("(") || fLeft("[") || fLeft("{"))
 			return ECodeSpacing::mc_None;
