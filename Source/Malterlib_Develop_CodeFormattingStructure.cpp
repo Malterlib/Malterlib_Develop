@@ -754,6 +754,23 @@ namespace NMib::NDevelop
 		// Operators spelled like a call, such as sizeof and decltype, stay tight.
 		if (fRight("("))
 		{
+			// An operator function's name is written apart from its parameter list, and the
+			// call operator's own parentheses are part of that name: 'operator + (', 'operator ()'.
+			if (fLeft("operator"))
+				return ECodeSpacing::mc_Space;
+
+			for (auto i = _iLeft; i; --i)
+			{
+				auto const &Token = _Tokens.f_GetTokens()[i - 1];
+				if (Token.m_Kind == ECodeTokenKind::mc_Whitespace || Token.m_Kind == ECodeTokenKind::mc_Newline || Token.m_Kind == ECodeTokenKind::mc_LineSplice)
+					continue;
+
+				if (_Tokens.f_IsText(Token, "operator"))
+					return ECodeSpacing::mc_Space;
+
+				break;
+			}
+
 			static ch8 const *const gsc_pSpacedKeywords[] =
 				{
 					"if", "for", "while", "switch", "catch", "return", "co_return", "co_await", "co_yield"

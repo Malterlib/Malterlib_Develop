@@ -363,6 +363,7 @@ namespace
 		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_FollowsScope(umint _iToken) const;
 		bool fp_IsFunctionQualifier(umint _iToken) const;
+		umint fp_SkipFunctionQualifiers(umint _iToken) const;
 		bool fp_ClosesLambdaIntroducer(umint _iToken) const;
 		umint fp_SkipTemplateHeader(umint _iToken) const;
 		bool fp_IsCastGroup(umint _iNode) const;
@@ -1990,7 +1991,10 @@ namespace
 		auto iGap = Tokens[umint(iPrevious)].f_GetEnd();
 		auto nGap = Tokens[iInsert].m_iOffset - iGap;
 		auto bBody = m_Tokens.f_IsText(Tokens[iInsert], "{") || m_Tokens.f_IsText(Tokens[iInsert], ";");
-		CStr Replacement = Ending + fp_MakeIndent(_iIndent + nTab) + "-> " + ReturnType + Ending + fp_MakeIndent(bBody ? _iIndent : _iIndent + nTab);
+		// 'override' and 'final' are written behind the trailing type, on its line.
+		bool bVirtSpecifier = m_Tokens.f_IsText(Tokens[iInsert], "override") || m_Tokens.f_IsText(Tokens[iInsert], "final");
+		CStr Replacement = Ending + fp_MakeIndent(_iIndent + nTab) + "-> " + ReturnType;
+		Replacement += bVirtSpecifier ? CStr(" ") : Ending + fp_MakeIndent(bBody ? _iIndent : _iIndent + nTab);
 		// With the trailing type on a line of its own, 'auto' and everything up to it may
 		// already fit on one. The parameter list is then left whole: opening it is the
 		// step after this one, not a part of it.
@@ -2389,10 +2393,11 @@ namespace
 
 		if (iBlock != TCLimitsInt<umint>::mc_Max)
 		{
-			// A body opens at the statement's own indentation. After an operator split the
-			// brace belongs to a lambda on a continuation line and keeps its place.
+			// A declaration's body opens at the statement's own indentation. A lambda's does
+			// not: it belongs to an expression and sits one level in, under the lambda.
+			// After an operator split the brace is already on a continuation line.
 			if (bJoinable && !m_bOperatorSplit)
-				fp_BreakBefore(Nodes[iBlock].m_iFirstToken, _iIndent);
+				fp_BreakBefore(Nodes[iBlock].m_iFirstToken, bDeclarator ? _iIndent : _iIndent + nTab);
 
 			fp_LayoutNode(iBlock, _iIndent);
 		}
@@ -2521,6 +2526,28 @@ namespace
 				if (!nPrecedence || i == _iFirst || !fp_HasOperand(i, true) || !fp_HasOperand(i, false))
 					continue;
 
+				// Behind 'operator' the token spells the function's name, not an operation.
+				auto iName = fp_PreviousCode(i);
+				if (iName >= 0 && m_Tokens.f_IsText(Tokens[umint(iName)], "operator"))
+					continue;
+
+				// A '&' or '&&' is the function's ref-qualifier when nothing that could be an
+				// operand follows it: what comes after one is the trailing return type, the
+				// body, a pure specifier, a requires clause, or another qualifier.
+				if (m_Tokens.f_IsText(Tokens[i], "&") || m_Tokens.f_IsText(Tokens[i], "&&"))
+				{
+					auto iNext = fp_NextCode(i);
+					bool bQualifier = iNext >= 0
+						&& (m_Tokens.f_IsText(Tokens[umint(iNext)], "->")
+							|| m_Tokens.f_IsText(Tokens[umint(iNext)], "{")
+							|| m_Tokens.f_IsText(Tokens[umint(iNext)], "=")
+							|| m_Tokens.f_IsText(Tokens[umint(iNext)], "requires")
+							|| fp_IsFunctionQualifier(umint(iNext)))
+					;
+					if (bQualifier)
+						continue;
+				}
+
 				if (!iPass)
 				{
 					nLoosest = fg_Max(nLoosest, nPrecedence);
@@ -2611,6 +2638,34 @@ namespace
 		}
 
 		return _iToken;
+	}
+
+	// Steps over the run of qualifiers a declarator's parameter list may carry, including
+	// the argument one of them can take.
+	umint CFormattingAnalyzer::fp_SkipFunctionQualifiers(umint _iToken) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		aint i = aint(_iToken);
+		while (i >= 0 && fp_IsFunctionQualifier(umint(i)))
+		{
+			auto iNext = fp_NextCode(umint(i));
+			if (iNext >= 0 && m_Tokens.f_IsText(Tokens[umint(iNext)], "("))
+			{
+				for (auto const &Node : m_Structure.f_GetNodes())
+				{
+					if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_iFirstToken != umint(iNext))
+						continue;
+
+					iNext = fp_NextCode(Node.m_iLastToken);
+
+					break;
+				}
+			}
+
+			i = iNext;
+		}
+
+		return i < 0 ? _iToken : umint(i);
 	}
 
 	// A capture list, or a lambda's own template parameter list, ends one part of an
@@ -2825,6 +2880,13 @@ namespace
 				break;
 			}
 
+			// A line with a gap the standard does not settle has no single-line form to be
+			// measured against, so it is left as it stands rather than taken for one that
+			// is too wide.
+			umint nLine = 0;
+			if (!fp_MeasureJoinedWidth(iLineFirst, _iLast, nLine))
+				break;
+
 			bMustSplit = false;
 			umint iBreak = TCLimitsInt<umint>::mc_Max;
 			for (umint i = 0; !bForced && i < Breaks.f_GetLen(); ++i)
@@ -2890,6 +2952,19 @@ namespace
 			auto iNext = fp_NextCode(Scope.m_iLastToken);
 			if (iNext < 0 || umint(iNext) > _iLast)
 				break;
+
+			// A function's qualifiers belong behind the closing parenthesis, on its line,
+			// wherever there is room for them.
+			auto iResume = fp_SkipFunctionQualifiers(umint(iNext));
+			auto iLastQualifier = iResume != umint(iNext) ? fp_PreviousCode(iResume) : aint(-1);
+			if (iLastQualifier >= 0 && fp_FitsInline(Scope.m_iLastToken, umint(iLastQualifier), nLineIndent))
+			{
+				fp_TryJoin(Scope.m_iLastToken, umint(iLastQualifier), nLineIndent);
+				if (iResume > _iLast)
+					break;
+
+				iNext = aint(iResume);
+			}
 
 			// What follows the scope resumes under its closing marker.
 			iLineFirst = umint(iNext);

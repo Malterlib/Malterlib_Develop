@@ -449,9 +449,20 @@ namespace
 					// A trailing qualifier run is a logical unit of its own.
 					fSplit
 						(
+							// The qualifiers stand behind the closing parenthesis; the pure
+							// specifier is not one of them and takes the next line.
 							"Qualifiers"
 							, "struct C\n{\n\tvoid f_F(int @, int @) const volatile = 0;\n};\n"
-							, "struct C\n{\n\tvoid f_F\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t)\n\t\tconst volatile = 0\n\t;\n};\n"
+							, "struct C\n{\n\tvoid f_F\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t) const volatile\n\t\t= 0\n\t;\n};\n"
+						)
+					;
+					// An operator function's name is written apart from its parameter list, and
+					// its symbol is a name rather than an operation to be split at.
+					fSplit
+						(
+							"OperatorName"
+							, "struct C\n{\n\tvoid operator + (int @, int @) &&;\n};\n"
+							, "struct C\n{\n\tvoid operator +\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t) &&\n\t;\n};\n"
 						)
 					;
 					// Every scope marker of a split statement gets its own line.
@@ -547,7 +558,7 @@ namespace
 						(
 							"VirtSpecifier"
 							, "struct C\n{\n\tTCLongTemplate<@> f_F(int _A) override;\n};\n"
-							, "struct C\n{\n\tauto f_F(int _A)\n\t\t-> TCLongTemplate<@>\n\t\toverride\n\t;\n};\n"
+							, "struct C\n{\n\tauto f_F(int _A)\n\t\t-> TCLongTemplate<@> override\n\t;\n};\n"
 						)
 					;
 					// Declaration specifiers stay in front of auto.
