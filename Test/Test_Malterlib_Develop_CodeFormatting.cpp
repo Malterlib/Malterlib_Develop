@@ -490,6 +490,23 @@ namespace
 					;
 				};
 
+				DMibTestCategory("Clause")
+				{
+					// A clause ends at its condition, so its body opens a statement of its
+					// own. That statement is nothing but the block and ends with it: an
+					// 'else' behind it is the next statement, not part of this one.
+					fg_ExpectFormat
+						(
+							"ElseBody"
+							, "void f()\n{\n\tif (X)\n\t{\n\t}\n\telse\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t5\n\t\t\t)\n\t\t;\n\t}\n}\n"
+							, "void f()\n{\n\tif (X)\n\t{\n\t}\n\telse\n\t{\n\t\tg(5);\n\t}\n}\n"
+						)
+					;
+					// A do-while keeps its own shape across the same boundary.
+					CStr DoWhile = "void f()\n{\n\tdo\n\t{\n\t\tg(5);\n\t}\n\twhile (X);\n}\n";
+					fg_ExpectFormat("DoWhile", DoWhile, DoWhile);
+				};
+
 				DMibTestCategory("Lambda")
 				{
 					// A lambda is given a line of its own first, then its introducer is

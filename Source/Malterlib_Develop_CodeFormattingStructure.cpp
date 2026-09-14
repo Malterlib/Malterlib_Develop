@@ -578,6 +578,7 @@ namespace NMib::NDevelop
 					continue;
 				}
 
+				auto iBlockStart = i;
 				auto iBlock = fp_AddNode(ECodeNodeKind::mc_Block, iNode);
 				mp_Nodes[iBlock].m_Bracket = ECodeBracket::mc_Brace;
 				mp_Nodes[iBlock].m_iFirstToken = mp_Significant[i];
@@ -600,6 +601,10 @@ namespace NMib::NDevelop
 				bAfterCloseParen = false;
 				// A block ends the statement unless it is a lambda body, which sits inside an
 				// expression, so an operator or closer after it continues the same statement.
+				// A statement that is nothing but the block ends with it: a clause ends at
+				// its condition, so what follows its body opens a statement of its own and
+				// must not be swallowed here.
+				bool bBlockIsStatement = iBlockStart == _iToken;
 				if (i < mp_Significant.f_GetLen())
 				{
 					auto const &Next = Tokens[mp_Significant[i]];
@@ -609,6 +614,13 @@ namespace NMib::NDevelop
 						fp_Finish(iNode, mp_Significant[i]);
 
 						return i + 1;
+					}
+
+					if (bBlockIsStatement)
+					{
+						fp_Finish(iNode, mp_Significant[iClose]);
+
+						return i;
 					}
 
 					if (mp_pTokens->f_IsText(Next, "else") || mp_pTokens->f_IsText(Next, "while") || mp_pTokens->f_IsText(Next, "catch"))
