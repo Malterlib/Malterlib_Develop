@@ -148,7 +148,7 @@ further only while it is still too long:
 3. The first scope on the line is opened: its opening and closing markers take
    lines of their own and every element stands on one, laid out the same way.
    What follows the closing marker resumes under it. A function's qualifiers
-   stay behind the closing parenthesis where they fit.
+   and its pure specifier stay behind the closing parenthesis where they fit.
 4. A name that is still too long with its parameter list opened opens its own
    template argument list, and after that breaks at its member accesses, all
    at once.

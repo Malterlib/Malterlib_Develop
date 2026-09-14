@@ -2301,8 +2301,9 @@ namespace
 		auto iGap = Tokens[umint(iPrevious)].f_GetEnd();
 		auto nGap = Tokens[iInsert].m_iOffset - iGap;
 		auto bBody = m_Tokens.f_IsText(Tokens[iInsert], "{") || m_Tokens.f_IsText(Tokens[iInsert], ";");
-		// 'override' and 'final' are written behind the trailing type, on its line.
-		bool bVirtSpecifier = m_Tokens.f_IsText(Tokens[iInsert], "override") || m_Tokens.f_IsText(Tokens[iInsert], "final");
+		// 'override', 'final' and a pure specifier are written behind the trailing type, on
+		// its line.
+		bool bVirtSpecifier = m_Tokens.f_IsText(Tokens[iInsert], "override") || m_Tokens.f_IsText(Tokens[iInsert], "final") || m_Tokens.f_IsText(Tokens[iInsert], "=");
 		CStr Replacement = Ending + fp_MakeIndent(_iIndent + nTab) + "-> " + ReturnType;
 		Replacement += bVirtSpecifier ? CStr(" ") : Ending + fp_MakeIndent(bBody ? _iIndent : _iIndent + nTab);
 		// With the trailing type on a line of its own, 'auto' and everything up to it may
@@ -2988,8 +2989,28 @@ namespace
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		aint i = aint(_iToken);
-		while (i >= 0 && fp_IsFunctionQualifier(umint(i)))
+		while (i >= 0)
 		{
+			// A pure specifier or a defaulted or deleted definition ends the declarator the
+			// same way and stands behind the parenthesis with the qualifiers: ') const = 0'.
+			if (m_Tokens.f_IsText(Tokens[umint(i)], "="))
+			{
+				auto iValue = fp_NextCode(umint(i));
+				if (iValue < 0)
+					break;
+
+				auto const &Value = Tokens[umint(iValue)];
+				if (!m_Tokens.f_IsText(Value, "0") && !m_Tokens.f_IsText(Value, "default") && !m_Tokens.f_IsText(Value, "delete"))
+					break;
+
+				i = fp_NextCode(umint(iValue));
+
+				break;
+			}
+
+			if (!fp_IsFunctionQualifier(umint(i)))
+				break;
+
 			auto iNext = fp_NextCode(umint(i));
 			if (iNext >= 0 && m_Tokens.f_IsText(Tokens[umint(iNext)], "("))
 			{

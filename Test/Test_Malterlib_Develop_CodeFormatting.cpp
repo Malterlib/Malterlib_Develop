@@ -457,11 +457,11 @@ namespace
 					// A trailing qualifier run is a logical unit of its own.
 					fSplit
 						(
-							// The qualifiers stand behind the closing parenthesis; the pure
-							// specifier is not one of them and takes the next line.
+							// The qualifiers and the pure specifier stand behind the closing
+							// parenthesis.
 							"Qualifiers"
 							, "struct C\n{\n\tvoid f_F(int @, int @) const volatile = 0;\n};\n"
-							, "struct C\n{\n\tvoid f_F\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t) const volatile\n\t\t= 0\n\t;\n};\n"
+							, "struct C\n{\n\tvoid f_F\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t) const volatile = 0\n\t;\n};\n"
 						)
 					;
 					// An operator function's name is written apart from its parameter list, and
@@ -698,6 +698,13 @@ namespace
 					// With the trailing type on its own line the signature fits, and the
 					// parameter list is left whole: splitting it is the step after this one.
 					fSplit("Declaration", "TCLongTemplate<@> fg_F(int _A, int _B);\n", "auto fg_F(int _A, int _B)\n\t-> TCLongTemplate<@>\n;\n");
+					fSplit
+						(
+							"PureSpecifier"
+							, "struct C\n{\n\tvirtual TCLongTemplate<@> f_F(int _A) const = 0;\n};\n"
+							, "struct C\n{\n\tvirtual auto f_F(int _A) const\n\t\t-> TCLongTemplate<@> = 0\n\t;\n};\n"
+						)
+					;
 					fSplit("Definition", "TCLongTemplate<@> fg_F(int _A, int _B)\n{\n}\n", "auto fg_F(int _A, int _B)\n\t-> TCLongTemplate<@>\n{\n}\n");
 					// The trailing type goes after the qualifiers.
 					fSplit
