@@ -479,6 +479,35 @@ namespace
 					;
 				};
 
+				DMibTestCategory("Lambda")
+				{
+					// A lambda is given a line of its own first, then its introducer is
+					// separated from its parameters, and only then its return type.
+					CStr Head = "void f()\n{\n\tm_fOnClose = g_ActorFunctorWeak / ";
+					CStr Split = "void f()\n{\n\tm_fOnClose = g_ActorFunctorWeak /\n\t\t";
+					CStr Body = "\n\t{\n\t\treturn;\n\t}\n\t;\n}\n";
+					CStr Captures = "[this, pConnectionWeak, Sequence, _bRetry, _SomeMoreCaptureNames, _AndYetAnotherOne]";
+					CStr Params = "(NWeb::EWebSocketStatus _ReasonForTheClosure, NStr::CStr _MessageDescribingTheClose, NWeb::EWebSocketCloseOrigin _OriginOfTheClose)";
+					fg_ExpectFormat("Whole", Head + "[this]" + Params + " -> TCFuture<void>" + Body, Split + "[this]" + Params + " -> TCFuture<void>" + Body);
+					fg_ExpectFormat
+						(
+							"Introducer"
+							, Head + Captures + Params + " -> TCFuture<void>" + Body
+							, Split + Captures + "\n\t\t" + Params + " -> TCFuture<void>" + Body
+						)
+					;
+					// An explicit template parameter list is part of the introducer, so all
+					// three parts take a line together or none of them does.
+					CStr Template = "<typename ...tfp_CParams, typename tf_CActor>";
+					fg_ExpectFormat
+						(
+							"TemplateParameters"
+							, Head + Captures + Template + Params + " -> TCFuture<void>" + Body
+							, Split + Captures + "\n\t\t" + Template + "\n\t\t" + Params + " -> TCFuture<void>" + Body
+						)
+					;
+				};
+
 				DMibTestCategory("TrailingReturn")
 				{
 					// The name before the parameter list must itself exceed the limit.

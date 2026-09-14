@@ -362,6 +362,7 @@ namespace
 		bool fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations, bool _bMustSplit = false);
 		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_FollowsScope(umint _iToken) const;
+		bool fp_IsFunctionQualifier(umint _iToken) const;
 		umint fp_SkipTemplateHeader(umint _iToken) const;
 		bool fp_IsCastGroup(umint _iNode) const;
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent, bool _bMustSplit = false);
@@ -2170,19 +2171,71 @@ namespace
 			}
 		}
 
+		// The first parenthesis is a declarator's parameter list when a name stands in front
+		// of it. Behind a capture list it opens a lambda, and the statement around it is an
+		// expression that has no declaration to protect or return type to move.
+		auto iBeforeParen = iFirstParenGroupStart ? fp_PreviousCode(iFirstParenGroupStart) : aint(-1);
+		bool bDeclarator = iBeforeParen >= 0 && Tokens[umint(iBeforeParen)].m_Kind == ECodeTokenKind::mc_Identifier;
+		// A name can end in a template argument list, and nothing before it is ever broken.
+		// A lambda's own template parameter list ends the same way but names nothing.
+		bool bNamed = bDeclarator
+			|| (iBeforeParen >= 0 && m_Structure.f_IsAngleBracket(umint(iBeforeParen)) && !fp_FollowsScope(umint(iBeforeParen)))
+		;
+
 		// A trailing return type is one logical unit on its own line; its own scope markers
-		// are only split when it does not fit there.
+		// are only split when it does not fit there. A lambda writes one of its own and a
+		// member access is spelled the same way, so the arrow only counts when nothing but
+		// the function's qualifiers stands between it and the parameter list.
 		umint iTrailingReturn = TCLimitsInt<umint>::mc_Max;
-		if (iFirstParenGroup)
+		if (bDeclarator)
 		{
-			for (umint i = iFirstParenGroup; i <= Node.m_iLastToken; ++i)
-			{
-				if (Tokens[i].m_Kind == ECodeTokenKind::mc_Punctuator && m_Tokens.f_IsText(Tokens[i], "->"))
+			static ch8 const *const gsc_pQualifiers[] =
 				{
-					iTrailingReturn = i;
+					"const", "volatile", "noexcept", "override", "final", "&", "&&"
+				}
+			;
+			bool bAfterQualifier = false;
+			for (auto i = fp_NextCode(iFirstParenGroup); i >= 0 && umint(i) <= Node.m_iLastToken; )
+			{
+				if (m_Tokens.f_IsText(Tokens[umint(i)], "->"))
+				{
+					iTrailingReturn = umint(i);
 
 					break;
 				}
+
+				// A qualifier can carry an argument, as 'noexcept(...)' does, and that is
+				// stepped over whole rather than mistaken for the end of the qualifiers.
+				if (bAfterQualifier && m_Tokens.f_IsText(Tokens[umint(i)], "("))
+				{
+					umint iEnd = TCLimitsInt<umint>::mc_Max;
+					for (auto iChild : Node.m_Children)
+					{
+						if (Nodes[iChild].m_iFirstToken == umint(i))
+						{
+							iEnd = Nodes[iChild].m_iLastToken;
+
+							break;
+						}
+					}
+
+					if (iEnd == TCLimitsInt<umint>::mc_Max)
+						break;
+
+					bAfterQualifier = false;
+					i = fp_NextCode(iEnd);
+
+					continue;
+				}
+
+				bAfterQualifier = false;
+				for (auto pQualifier : gsc_pQualifiers)
+					bAfterQualifier |= m_Tokens.f_IsText(Tokens[umint(i)], pQualifier);
+
+				if (!bAfterQualifier)
+					break;
+
+				i = fp_NextCode(umint(i));
 			}
 		}
 
@@ -2296,7 +2349,7 @@ namespace
 				}
 			}
 
-			m_iSplitFirstParen = iFirstParenGroupStart;
+			m_iSplitFirstParen = bNamed ? iFirstParenGroupStart : 0;
 			m_iSplitTrailingReturn = iTrailingReturn;
 			m_bOperatorSplit = false;
 			// A statement with no scope marker to split keeps its shape; only a statement
@@ -2496,8 +2549,14 @@ namespace
 				continue;
 
 			auto iAfter = fp_NextCode(Node.m_iLastToken);
+			if (iAfter < 0)
+				return false;
 
-			return iAfter >= 0 && (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAfter)], "(") || m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAfter)], "{"));
+			// The capture list is followed by the parameter list, by the body, or by the
+			// lambda's own template parameter list.
+			auto const &After = m_Tokens.f_GetTokens()[umint(iAfter)];
+
+			return m_Tokens.f_IsText(After, "(") || m_Tokens.f_IsText(After, "{") || m_Tokens.f_IsText(After, "<");
 		}
 
 		return false;
@@ -2551,6 +2610,24 @@ namespace
 		return _iToken;
 	}
 
+	// The words that may stand between a parameter list and a trailing return type.
+	bool CFormattingAnalyzer::fp_IsFunctionQualifier(umint _iToken) const
+	{
+		static ch8 const *const gsc_pQualifiers[] =
+			{
+				"const", "volatile", "noexcept", "mutable", "override", "final", "&", "&&"
+			}
+		;
+		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		for (auto pQualifier : gsc_pQualifiers)
+		{
+			if (m_Tokens.f_IsText(Token, pQualifier))
+				return true;
+		}
+
+		return false;
+	}
+
 	// A bracket's closing marker is where one scope ends and the next may start on a line
 	// of its own. Anything else in front of a scope owns it: a name and its argument list
 	// are one call, and the line cannot be broken between them. A template argument list
@@ -2558,8 +2635,25 @@ namespace
 	bool CFormattingAnalyzer::fp_FollowsScope(umint _iToken) const
 	{
 		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		if (m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]"))
+			return true;
 
-		return m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]");
+		// A lambda's template parameter list is a scope of its own rather than part of a
+		// name, which is what a template argument list behind an identifier is.
+		if (!m_Structure.f_IsAngleBracket(_iToken))
+			return false;
+
+		for (auto const &Node : m_Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != _iToken)
+				continue;
+
+			auto iBefore = fp_PreviousCode(Node.m_iFirstToken);
+
+			return iBefore >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBefore)], "]");
+		}
+
+		return false;
 	}
 
 	// A parenthesised type in front of an operand is a cast: nothing separates the closing
@@ -2576,7 +2670,9 @@ namespace
 		if (iBefore >= 0)
 		{
 			auto const &Before = Tokens[umint(iBefore)];
-			if (Before.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Before, ")") || m_Tokens.f_IsText(Before, "]"))
+			// An argument list closes a name and a template parameter list closes a lambda's
+			// introducer. What follows either is a call, never a cast.
+			if (Before.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Before, ")") || m_Tokens.f_IsText(Before, "]") || m_Structure.f_IsAngleBracket(umint(iBefore)))
 				return false;
 		}
 
@@ -2628,6 +2724,54 @@ namespace
 			Scopes.f_Insert(iChild);
 		}
 
+		// Where the line may break: in front of a scope that follows another scope's closing
+		// marker, and in front of a trailing return type that follows a parameter list. They
+		// are taken in the order they stand, so a lambda gives its parameter list a line of
+		// its own before it gives one to its return type.
+		TCVector<umint> Breaks;
+		// A lambda's capture list, template parameter list and parameter list are the one
+		// introducer: they stand together on a line or each takes one of its own.
+		TCVector<bool> Introducer;
+		for (umint i = 0; i < Scopes.f_GetLen(); ++i)
+		{
+			auto iBefore = fp_PreviousCode(Nodes[Scopes[i]].m_iFirstToken);
+			if (iBefore < 0 || umint(iBefore) < _iFirst || !fp_FollowsScope(umint(iBefore)))
+				continue;
+
+			// A capture list, or a template parameter list that only a lambda can end, is
+			// what one part of an introducer stands behind.
+			auto const &Before = m_Tokens.f_GetTokens()[umint(iBefore)];
+			Breaks.f_Insert(Nodes[Scopes[i]].m_iFirstToken);
+			Introducer.f_Insert(m_Tokens.f_IsText(Before, "]") || m_Structure.f_IsAngleBracket(umint(iBefore)));
+		}
+
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto nLevel = m_TokenDepth[_iFirst];
+		for (umint i = _iFirst; i <= _iLast; ++i)
+		{
+			if (m_TokenDepth[i] != nLevel || !m_Tokens.f_IsText(Tokens[i], "->"))
+				continue;
+
+			auto iBefore = fp_PreviousCode(i);
+			if (iBefore < 0 || umint(iBefore) < _iFirst)
+				continue;
+
+			if (m_Tokens.f_IsText(Tokens[umint(iBefore)], ")") || fp_IsFunctionQualifier(umint(iBefore)))
+			{
+				Breaks.f_Insert(i);
+				Introducer.f_Insert(false);
+			}
+		}
+
+		for (umint i = 1; i < Breaks.f_GetLen(); ++i)
+		{
+			for (umint j = i; j && Breaks[j - 1] > Breaks[j]; --j)
+			{
+				fg_Swap(Breaks[j - 1], Breaks[j]);
+				fg_Swap(Introducer[j - 1], Introducer[j]);
+			}
+		}
+
 		umint iLineFirst = _iFirst;
 		umint nLineIndent = _iIndent;
 		umint iScope = 0;
@@ -2644,33 +2788,44 @@ namespace
 			}
 
 			bMustSplit = false;
-			// A scope standing behind another scope's closing marker follows a complete
-			// construct, and the line may break between the two. A scope behind a name
-			// belongs to that name, so the line cannot be broken there: splitting a call
-			// means opening its argument list, not moving the list down whole.
 			umint iBreak = TCLimitsInt<umint>::mc_Max;
-			for (umint i = iScope; !bForced && i < Scopes.f_GetLen(); ++i)
+			for (umint i = 0; !bForced && i < Breaks.f_GetLen(); ++i)
 			{
-				auto iBefore = fp_PreviousCode(Nodes[Scopes[i]].m_iFirstToken);
-				if (iBefore < 0 || umint(iBefore) < iLineFirst || !fp_FollowsScope(umint(iBefore)))
+				if (Breaks[i] <= iLineFirst)
+					continue;
+
+				auto iBefore = fp_PreviousCode(Breaks[i]);
+				if (iBefore < 0 || umint(iBefore) < iLineFirst)
 					continue;
 
 				if (!fp_FitsInline(iLineFirst, umint(iBefore), nLineIndent))
 					break;
 
 				iBreak = i;
+
+				break;
 			}
 
 			if (iBreak != TCLimitsInt<umint>::mc_Max)
 			{
-				auto const &Scope = Nodes[Scopes[iBreak]];
-				auto iBefore = fp_PreviousCode(Scope.m_iFirstToken);
+				auto iBefore = fp_PreviousCode(Breaks[iBreak]);
 				fp_TryJoin(iLineFirst, umint(iBefore), nLineIndent);
-				fp_BreakBefore(Scope.m_iFirstToken, nContinuation);
+				fp_BreakBefore(Breaks[iBreak], nContinuation);
 				bSplit = true;
-				iLineFirst = Scope.m_iFirstToken;
+				iLineFirst = Breaks[iBreak];
+				// The rest of one introducer follows at once, so its parts never end up on
+				// two lines where the source had three parts.
+				while (Introducer[iBreak] && iBreak + 1 < Breaks.f_GetLen() && Introducer[iBreak + 1])
+				{
+					++iBreak;
+					fp_TryJoin(iLineFirst, umint(fp_PreviousCode(Breaks[iBreak])), nContinuation);
+					fp_BreakBefore(Breaks[iBreak], nContinuation);
+					iLineFirst = Breaks[iBreak];
+				}
+
 				nLineIndent = nContinuation;
-				iScope = iBreak;
+				while (iScope < Scopes.f_GetLen() && Nodes[Scopes[iScope]].m_iFirstToken < iLineFirst)
+					++iScope;
 
 				continue;
 			}
@@ -2692,9 +2847,8 @@ namespace
 			if (!fp_LayoutGroup(Scopes[iScope - 1], nMarkerIndent, !bStartsLine))
 				continue;
 
-			nLineIndent = nMarkerIndent;
-
 			bSplit = true;
+			nLineIndent = nMarkerIndent;
 			auto iNext = fp_NextCode(Scope.m_iLastToken);
 			if (iNext < 0 || umint(iNext) > _iLast)
 				break;

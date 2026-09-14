@@ -252,8 +252,10 @@ namespace NMib::NDevelop
 		if (!mp_pTokens->f_IsText(Open, "<"))
 			return 0;
 
+		// A template argument list follows a name. A lambda writes its own template
+		// parameter list behind the capture list, which is the other thing a '<' can follow.
 		auto const &Previous = Tokens[mp_Significant[_iToken - 1]];
-		if (Previous.m_Kind != ECodeTokenKind::mc_Identifier)
+		if (Previous.m_Kind != ECodeTokenKind::mc_Identifier && !mp_pTokens->f_IsText(Previous, "]"))
 			return 0;
 
 		// Malterlib writes a comparison with spaces and a template argument list tight
