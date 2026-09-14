@@ -569,6 +569,21 @@ namespace
 					;
 				};
 
+				DMibTestCategory("Calls")
+				{
+					CStr Wide;
+					for (umint i = 0; i < 70; ++i)
+						Wide += "W";
+
+					// A call's argument list is opened before the name's template argument list,
+					// inside an element as much as at statement level.
+					CStr Source = CStr("void f()\n{\n\tg(TCSharedPointer<TCVector<@> const>(fg_Construct<TCVector<@>>(a, b)));\n}\n").f_Replace("@", Wide);
+					CStr Expected = CStr("void f()\n{\n\tg\n\t\t(\n\t\t\tTCSharedPointer<TCVector<@> const>\n\t\t\t(\n\t\t\t\tfg_Construct<TCVector<@>>(a, b)\n\t\t\t)\n\t\t)\n\t;\n}\n")
+						.f_Replace("@", Wide)
+					;
+					fg_ExpectFormat("ArgumentsBeforeName", Source, Expected);
+				};
+
 				DMibTestCategory("Members")
 				{
 					CStr Wide;

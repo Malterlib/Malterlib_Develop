@@ -3249,6 +3249,30 @@ namespace
 				if (bBeforeName && bNamedScope)
 					continue;
 
+				// A name's template argument list stays whole while the argument list behind
+				// it can be opened: 'TCFoo<T>(...)' opens its parentheses first, and the
+				// name only gives when it still does not fit in front of them.
+				if (Child.m_Bracket == ECodeBracket::mc_Angle)
+				{
+					auto iAfter = fp_NextCode(Child.m_iLastToken);
+					bool bNamesCall = false;
+					for (auto iOther : Node.m_Children)
+					{
+						auto const &Other = Nodes[iOther];
+						if (Other.m_Kind != ECodeNodeKind::mc_Group || Other.m_Bracket != ECodeBracket::mc_Paren || Other.m_iLastToken > _iLast)
+							continue;
+
+						if (iAfter < 0 || Other.m_iFirstToken != umint(iAfter))
+							continue;
+
+						auto iInner = fp_NextCode(Other.m_iFirstToken);
+						bNamesCall = iInner >= 0 && umint(iInner) != Other.m_iLastToken && !fp_FollowsScope(Child.m_iLastToken);
+					}
+
+					if (bNamesCall)
+						continue;
+				}
+
 				Scopes.f_Insert(iChild);
 			}
 		}
