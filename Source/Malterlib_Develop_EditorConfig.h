@@ -7,6 +7,7 @@
 #include <Mib/Container/Map>
 #include <Mib/Container/Set>
 #include <Mib/Concurrency/ActorFunctorWeak>
+#include <Mib/Concurrency/ConcurrencyDefines>
 #include <Mib/Storage/Optional>
 #include <Mib/Storage/SharedPointer>
 
@@ -51,8 +52,14 @@ namespace NMib::NDevelop
 
 	struct CEditorConfigResolver : NConcurrency::CActor
 	{
-		// An empty boundary permits discovery up to the filesystem root.
-		explicit CEditorConfigResolver(NStr::CStr const &_Boundary = {});
+		// An empty boundary permits discovery up to the filesystem root. Loads run on the
+		// blocking actors given, which resolvers may share, or on one of the resolver's own.
+		explicit CEditorConfigResolver
+			(
+				NStr::CStr const &_Boundary = {}
+				, NStorage::TCSharedPointer<NConcurrency::CSharedRoundRobinBlockingActors> const &_pBlockingActors = {}
+			)
+		;
 		CEditorConfigResolver(FEditorConfigLoader &&_fLoader, NStr::CStr const &_Boundary = {});
 		~CEditorConfigResolver() override;
 
@@ -74,6 +81,6 @@ namespace NMib::NDevelop
 		FEditorConfigLoader mp_fLoader;
 		NStr::CStr mp_Boundary;
 		NStorage::TCSharedPointer<NPrivate::CEditorConfigCache> mp_pCache;
-		NConcurrency::CBlockingActorCheckout mp_BlockingActor;	// Loads queue on one thread; many resolves in flight must not each take one.
+		NStorage::TCSharedPointer<NConcurrency::CSharedRoundRobinBlockingActors> mp_pBlockingActors;	// Bounded; many resolves in flight must not each take a thread.
 	};
 }

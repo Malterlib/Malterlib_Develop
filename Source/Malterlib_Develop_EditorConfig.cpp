@@ -213,11 +213,13 @@ namespace NMib::NDevelop
 		mp_pData->f_ApplyBelow(_RelativeDirectory, o_Properties.m_Properties, o_Properties.m_Settled, o_Properties.m_Uncertain);
 	}
 
-	CEditorConfigResolver::CEditorConfigResolver(CStr const &_Boundary)
+	CEditorConfigResolver::CEditorConfigResolver(CStr const &_Boundary, TCSharedPointer<CSharedRoundRobinBlockingActors> const &_pBlockingActors)
 		: mp_Boundary(_Boundary ? CFile::fs_GetFullPath(_Boundary, CFile::fs_GetCurrentDirectory()) : CStr())
 		, mp_pCache(fg_Construct())
-		, mp_BlockingActor(fg_BlockingActor())
+		, mp_pBlockingActors(_pBlockingActors)
 	{
+		if (!mp_pBlockingActors)
+			mp_pBlockingActors = fg_Construct(umint(1));
 	}
 
 	CEditorConfigResolver::CEditorConfigResolver(FEditorConfigLoader &&_fLoader, CStr const &_Boundary)
@@ -239,7 +241,7 @@ namespace NMib::NDevelop
 		{
 			Contents = co_await
 				(
-					g_Dispatch(mp_BlockingActor) / [Path = fg_Move(_Path)]() -> TCOptional<CStr>
+					g_Dispatch(mp_pBlockingActors->f_Next()) / [Path = fg_Move(_Path)]() -> TCOptional<CStr>
 					{
 						if (!CFile::fs_FileExists(Path))
 							return {};

@@ -40,10 +40,11 @@ directory tree once. `f_ResolveBelow` judges a directory for every file under
 it: a section whose pattern covers all of them settles its properties, one that
 may cover some leaves them uncertain, and a key no document above mentions is
 neither, since a document deeper down may still set it. A walk uses that to
-decide whether entering a directory can find anything. Loads run on one blocking actor per resolver, however many
-resolves are in flight. Overlapping resolves
-share pending loads for the same configuration. Failures reach every waiting
-caller and are not cached, allowing a later call to retry.
+decide whether entering a directory can find anything. Loads run on the
+`CSharedRoundRobinBlockingActors` the resolver was constructed with, which
+resolvers may share, or on one of its own, however many resolves are in flight.
+Overlapping resolves share pending loads for the same configuration. Failures
+reach every waiting caller and are not cached, allowing a later call to retry.
 
 After the source changes, await `Resolver(&CEditorConfigResolver::f_ClearCache)`
 or create a resolver per immutable snapshot. Clearing starts a new cache
