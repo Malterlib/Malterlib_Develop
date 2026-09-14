@@ -363,6 +363,7 @@ namespace
 		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_FollowsScope(umint _iToken) const;
 		bool fp_IsFunctionQualifier(umint _iToken) const;
+		bool fp_ClosesLambdaIntroducer(umint _iToken) const;
 		umint fp_SkipTemplateHeader(umint _iToken) const;
 		bool fp_IsCastGroup(umint _iNode) const;
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent, bool _bMustSplit = false);
@@ -2044,7 +2045,9 @@ namespace
 				{
 					auto const &Owner = m_Tokens.f_GetTokens()[umint(iOwner)];
 					bool bOwns = Owner.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Owner, ")") || m_Tokens.f_IsText(Owner, "]") || m_Tokens.f_IsText(Owner, ">");
-					if (bOwns)
+					// A lambda's introducer parts are units of their own, so one never pulls
+					// the next onto its line the way a name pulls its argument list.
+					if (bOwns && !fp_ClosesLambdaIntroducer(umint(iOwner)))
 						iFirst = umint(iOwner);
 				}
 			}
@@ -2608,6 +2611,41 @@ namespace
 		}
 
 		return _iToken;
+	}
+
+	// A capture list, or a lambda's own template parameter list, ends one part of an
+	// introducer. What follows stands on its own rather than belonging to what came before.
+	bool CFormattingAnalyzer::fp_ClosesLambdaIntroducer(umint _iToken) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		if (m_Structure.f_IsAngleBracket(_iToken))
+			return fp_FollowsScope(_iToken);
+
+		if (!m_Tokens.f_IsText(Tokens[_iToken], "]"))
+			return false;
+
+		for (auto const &Node : m_Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Square || Node.m_iLastToken != _iToken)
+				continue;
+
+			// A subscript stands behind what it indexes; a capture list stands on its own.
+			auto iBefore = fp_PreviousCode(Node.m_iFirstToken);
+			if (iBefore >= 0)
+			{
+				auto const &Before = Tokens[umint(iBefore)];
+				if (Before.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Before, ")") || m_Tokens.f_IsText(Before, "]"))
+					return false;
+			}
+
+			auto iAfter = fp_NextCode(_iToken);
+
+			return iAfter >= 0
+				&& (m_Tokens.f_IsText(Tokens[umint(iAfter)], "(") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "{") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "<"))
+			;
+		}
+
+		return false;
 	}
 
 	// The words that may stand between a parameter list and a trailing return type.

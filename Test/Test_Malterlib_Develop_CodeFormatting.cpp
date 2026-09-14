@@ -496,6 +496,14 @@ namespace
 							, Split + Captures + "\n\t\t" + Params + " -> TCFuture<void>" + Body
 						)
 					;
+					// A directive fixes the capture list's lines, and the parameter list behind
+					// it keeps one of its own: a capture list does not own what follows it
+					// the way a name owns its argument list.
+					CStr Directive = "void f()\n{\n\tg\n\t\t(\n\t\t\t[\n\t\t\t\tKeepAlive = _Context.f_KeepAlive()\n#if DDebug\n\t\t\t\t, Actor = fg_ThisActor(_p)\n#endif\n\t\t\t]\n"
+						"\t\t\t(CThreadLocal &_ThreadLocal) mutable\n\t\t\t{\n\t\t\t\treturn;\n\t\t\t}\n\t\t)\n\t;\n}\n"
+					;
+					fg_ExpectFormat("CaptureDirective", Directive, Directive);
+
 					// An explicit template parameter list is part of the introducer, so all
 					// three parts take a line together or none of them does.
 					CStr Template = "<typename ...tfp_CParams, typename tf_CActor>";
