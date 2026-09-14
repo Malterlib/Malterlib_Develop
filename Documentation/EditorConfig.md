@@ -36,7 +36,11 @@ projects and preloaded snapshots without introducing a Git dependency.
 
 The resolver caches both present and missing documents, and the chain of
 documents that applies to a directory, so the files of one directory walk the
-directory tree once. Loads run on one blocking actor per resolver, however many
+directory tree once. `f_ResolveBelow` judges a directory for every file under
+it: a section whose pattern covers all of them settles its properties, one that
+may cover some leaves them uncertain, and a key no document above mentions is
+neither, since a document deeper down may still set it. A walk uses that to
+decide whether entering a directory can find anything. Loads run on one blocking actor per resolver, however many
 resolves are in flight. Overlapping resolves
 share pending loads for the same configuration. Failures reach every waiting
 caller and are not cached, allowing a later call to retry.

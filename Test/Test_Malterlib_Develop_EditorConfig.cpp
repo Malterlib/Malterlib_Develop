@@ -115,6 +115,57 @@ namespace
 					co_return {};
 				};
 
+				// A directory is judged for every file below it: a section that covers all of
+				// them settles a property, one that may cover some leaves it uncertain.
+				DMibTestCategory("Below") -> TCFuture<void>
+				{
+					auto Capture = co_await (g_CaptureExceptions % "Below");
+
+					TCMap<CStr, CStr> Files;
+					Files["/repo/.editorconfig"] = "root = true\n[*.cpp]\nmalterlib_format = malterlib\n[**/Cache/**]\nmalterlib_format = unset\n"
+						"[**/Cache/**.keep]\nmalterlib_format = malterlib\n[**/Build/**]\nmalterlib_format = unset\n"
+					;
+					Files["/repo/src/.editorconfig"] = "[*]\ncustom = value\n";
+					TCActor<CEditorConfigResolver> Resolver = fg_Construct
+						(
+							g_ActorFunctorWeak / [Files](CStr _Path) -> TCFuture<TCOptional<CStr>>
+							{
+								if (auto pContents = Files.f_FindEqual(_Path))
+									co_return *pContents;
+
+								co_return {};
+							}
+							, "/repo"
+						)
+					;
+					auto DestroyResolver = co_await fg_AsyncDestroy(Resolver);
+
+					auto Source = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo/src");
+					DMibExpectTrue(Source.m_Properties.f_FindEqual("malterlib_format") == nullptr);
+					DMibExpectTrue(Source.m_Uncertain.f_FindEqual("malterlib_format") != nullptr);
+					DMibExpect(Source.m_Properties["custom"], ==, "value");
+
+					auto Cache = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo/src/Cache");
+					DMibExpectTrue(Cache.m_Properties.f_FindEqual("malterlib_format") == nullptr);
+					// The later section may opt some files back in.
+					DMibExpectTrue(Cache.m_Uncertain.f_FindEqual("malterlib_format") != nullptr);
+
+					// Unset for everything below, with nothing that may opt files back in.
+					auto Build = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo/src/Build");
+					DMibExpectTrue(Build.m_Properties.f_FindEqual("malterlib_format") == nullptr);
+					DMibExpectTrue(Build.m_Settled.f_FindEqual("malterlib_format") != nullptr);
+					DMibExpectTrue(Build.m_Uncertain.f_FindEqual("malterlib_format") == nullptr);
+
+					auto Root = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo");
+					DMibExpectTrue(Root.m_Uncertain.f_FindEqual("malterlib_format") != nullptr);
+					DMibExpectTrue(Root.m_Properties.f_FindEqual("custom") == nullptr);
+					// No document speaks of this key at all, so nothing is known about it.
+					DMibExpectTrue(Root.m_Settled.f_FindEqual("other") == nullptr);
+					DMibExpectTrue(Root.m_Uncertain.f_FindEqual("other") == nullptr);
+
+					co_return {};
+				};
+
 				DMibTestCategory("Boundary") -> TCFuture<void>
 				{
 					auto Capture = co_await (g_CaptureExceptions % "Testing Boundary resolution");
