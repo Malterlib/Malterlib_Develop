@@ -528,13 +528,37 @@ namespace
 							, "void f()\n{\n\tauto R = Left.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Start, Mid)\n\t\t+ Right.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Mid, End)\n\t;\n}\n"
 						)
 					;
-					// A '*' behind a template argument list is a declarator, not a multiplication,
-					// and the line break the source keeps after it is one the standard does not
-					// settle, so the declaration keeps its lines.
+					// An explicit instantiation moves its return type like any declaration: a
+					// '*' behind a template argument list is a declarator, not a multiplication,
+					// and spaced closers collapse to one '>>'.
 					CStr Pointer = "template TCCounter<TCOnScopeExit<TCFunction<void ()> >, false, 0> *\n"
 						"TCConstruct<TCCounter<@>, TCFunction<void ()> >::f_Create<TCCounter<@>, CAllocator &>(CAllocator &);\n"
 					;
-					fSplit("PointerDeclarator", Pointer, Pointer);
+					CStr PointerResult = "template auto TCConstruct\n\t<\n\t\tTCCounter<@>\n\t\t, TCFunction<void ()>\n\t>\n\t::f_Create<TCCounter<@>, CAllocator &>(CAllocator &)\n"
+						"\t-> TCCounter<TCOnScopeExit<TCFunction<void ()>>, false, 0> *\n;\n"
+					;
+					fg_ExpectFormat("ExplicitInstantiation", Pointer.f_Replace("@", Wide), PointerResult.f_Replace("@", Wide), false);
+					fg_ExpectFormat("SpacedClosers", "TCMap<CStr, TCVector<CStr> > g_Map;\n", "TCMap<CStr, TCVector<CStr>> g_Map;\n");
+					// A macro written on a line of its own inside a list stands next to a name,
+					// which the standard does not settle, so the list keeps its lines.
+					CStr Macro = "template\n<\n\tauto tf_pMember\n\tDMibIfNotSupported(, uint32 tf_NameHash)\n\t, typename tf_CActor\n>\nvoid fg_F();\n";
+					fg_ExpectFormat("MacroInList", Macro, Macro);
+					// An attribute macro behind a return type is not part of it, and the
+					// declaration is not converted around it.
+					CStr Attribute = "template TCFuture<CStr> DMibWorkaround fg_Export(TCActor<CTrustManagerInterface> _TrustManager, CStr _UserID, bool _bIncludePrivate@);\n";
+					CStr AttributeResult = "template TCFuture<CStr> DMibWorkaround fg_Export\n\t(\n\t\tTCActor<CTrustManagerInterface> _TrustManager\n"
+						"\t\t, CStr _UserID\n\t\t, bool _bIncludePrivate@\n\t)\n;\n"
+					;
+					fSplit("AttributeMacro", Attribute, AttributeResult);
+					// A class's 'final' stays behind its template argument list's closing
+					// marker, like a function's qualifiers behind its parameter list.
+					fSplit
+						(
+							"FinalAfterArguments"
+							, "struct TCFoo<@, @> final : public CBase\n{\n};\n"
+							, "struct TCFoo\n\t<\n\t\t@\n\t\t, @\n\t> final\n\t: public CBase\n{\n};\n"
+						)
+					;
 				};
 
 				DMibTestCategory("Members")

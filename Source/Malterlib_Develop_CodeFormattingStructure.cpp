@@ -874,6 +874,29 @@ namespace NMib::NDevelop
 			}
 		}
 
+		// A keyword and the name beside it are separated by one space: 'auto' and the name
+		// it declares, 'template' and an instantiated name, 'return' and its operand. Two
+		// plain names are not settled: a macro written on a line of its own inside a list
+		// stands next to a name too, and keeps that line.
+		if (Left.m_Kind == ECodeTokenKind::mc_Identifier && Right.m_Kind == ECodeTokenKind::mc_Identifier)
+		{
+			static ch8 const *const gsc_pKeywords[] =
+				{
+					"auto", "template", "extern", "static", "inline", "constexpr", "consteval", "constinit", "virtual", "explicit"
+					, "friend", "typename", "const", "volatile", "mutable", "struct", "class", "union", "enum", "namespace", "using"
+					, "return", "co_return", "co_await", "co_yield", "throw", "new", "delete", "case", "goto", "sizeof", "alignof"
+					, "void", "bool", "int", "char", "short", "long", "unsigned", "signed", "float", "double", "operator", "requires"
+				}
+			;
+			for (auto pKeyword : gsc_pKeywords)
+			{
+				if (_Tokens.f_IsText(Left, pKeyword) || _Tokens.f_IsText(Right, pKeyword))
+					return ECodeSpacing::mc_Space;
+			}
+
+			return ECodeSpacing::mc_Preserve;
+		}
+
 		static ch8 const *const gsc_pBinaryOperators[] =
 			{
 				"==", "!=", "<=", ">=", "<=>", "||", "&&", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="

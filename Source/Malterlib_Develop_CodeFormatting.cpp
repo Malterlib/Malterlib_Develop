@@ -481,7 +481,7 @@ namespace
 		bool fp_LayoutHead(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
 		void fp_FindLooseOperators(umint _iFirst, umint _iLast, NContainer::TCVector<umint> &o_Operators) const;
 		void fp_PrepareTokenDepth();
-		bool fp_ConvertTrailingReturn(umint _iNode, umint _iIndent);
+		bool fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent);
 		void fp_BreakBefore(umint _iToken, umint _iIndent);
 		void fp_BreakAfter(umint _iToken, umint _iIndent);
 		void fp_MarkInline(umint _iFirst, umint _iLast);
@@ -1103,6 +1103,18 @@ namespace
 			if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 				continue;
 
+			// Two nested template argument lists close as one '>>', unless the layout puts
+			// the second closer on a line of its own.
+			if (m_Structure.f_IsAngleBracket(i) && m_Tokens.f_IsText(Token, ">"))
+			{
+				auto iPrevious = fp_PreviousCode(i);
+				bool bBreak = i < m_GapState.f_GetLen() && m_GapState[i] == uint8(EGap::mc_Break);
+				if (!bBreak && iPrevious >= 0 && m_Structure.f_IsAngleBracket(umint(iPrevious)) && m_Tokens.f_IsText(Tokens[umint(iPrevious)], ">"))
+					fp_RemoveSpaceBefore(i, "angle-space", "nested template argument lists close as one '>>'");
+
+				continue;
+			}
+
 			if (m_Tokens.f_IsText(Token, ","))
 			{
 				fp_RemoveSpaceBefore(i, "comma-space", "the comma operator has no space before it");
@@ -1404,9 +1416,9 @@ namespace
 			fp_RuleTrailingWhitespace();
 			fp_RuleLineEndings();
 			fp_RuleFinalNewline();
-			fp_RuleTokenSpacing();
 			fp_RuleBlankLines();
 			fp_RuleLineBreaks();
+			fp_RuleTokenSpacing();
 			fp_EmitLayout();
 
 			fp_LimitJoinedLines();
@@ -1548,7 +1560,14 @@ namespace
 						return false;
 				}
 
-				if (!bNewline)
+				// Two closers of nested template argument lists are written as one '>>'
+				// whatever the source has between them.
+				bool bClosers = m_Structure.f_IsAngleBracket(iPrevious) && m_Structure.f_IsAngleBracket(i)
+					&& m_Tokens.f_IsText(Tokens[iPrevious], ">") && m_Tokens.f_IsText(Token, ">")
+				;
+				if (bClosers)
+					nColumns += 0;
+				else if (!bNewline)
 					nColumns += nGap;
 				else
 				{
@@ -1957,7 +1976,7 @@ namespace
 	// otherwise fit. Converting alone is always eight columns longer, so it is only ever
 	// worth doing together with putting the trailing type on its own line. The conversion is
 	// recorded as text; the layout of the converted declaration is made on the result.
-	bool CFormattingAnalyzer::fp_ConvertTrailingReturn(umint _iNode, umint _iIndent)
+	bool CFormattingAnalyzer::fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent)
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
 		auto const &Node = Nodes[_iNode];
@@ -1988,7 +2007,7 @@ namespace
 		// Whether the name already fits in front of the parameter list decides, further
 		// down, whether converting is worth anything when the trailing type on its own
 		// line does not make the signature fit.
-		bool bNameFits = fp_FitsInline(Node.m_iFirstToken, umint(iBeforeOpen), _iIndent);
+		bool bNameFits = fp_FitsInline(_iDeclFirst, umint(iBeforeOpen), _iIndent);
 
 		// The declarator-id is the last name before the parameter list, extended backwards
 		// only through '::'. A return type in front of it looks the same, so stopping at
@@ -2016,10 +2035,24 @@ namespace
 			}
 		;
 
-		if (Tokens[umint(iBeforeOpen)].m_Kind != ECodeTokenKind::mc_Identifier)
+		// The name may carry its own template argument list, as an explicit instantiation
+		// or a specialization does: 'f_Create<...>(...)'.
+		umint iDeclarator = umint(iBeforeOpen);
+		if (m_Structure.f_IsAngleBracket(iDeclarator) && m_Tokens.f_IsText(Tokens[iDeclarator], ">"))
+		{
+			auto iOpenAngle = fSkipAngleBackwards(aint(iDeclarator));
+			if (iOpenAngle < 0)
+				return false;
+
+			auto iName = fp_PreviousCode(umint(iOpenAngle));
+			if (iName < 0 || Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
+				return false;
+
+			iDeclarator = umint(iName);
+		}
+		else if (Tokens[iDeclarator].m_Kind != ECodeTokenKind::mc_Identifier)
 			return false;
 
-		umint iDeclarator = umint(iBeforeOpen);
 		auto iWalk = fp_PreviousCode(iDeclarator);
 		if (iWalk >= 0 && m_Tokens.f_IsText(Tokens[umint(iWalk)], "~"))
 		{
@@ -2056,7 +2089,7 @@ namespace
 				, "inline_large", "inline_extralarge", "mark_nodebug"
 			}
 		;
-		umint iReturn = Node.m_iFirstToken;
+		umint iReturn = _iDeclFirst;
 		while (iReturn < iDeclarator)
 		{
 			auto const &Token = Tokens[iReturn];
@@ -2067,10 +2100,19 @@ namespace
 			if (m_Tokens.f_IsText(Token, "template"))
 			{
 				// 'template <...>' introduces a declaration and is stepped over. 'template
-				// Type Name(...)' is an explicit instantiation, which names a declaration
-				// made elsewhere and has no return type of its own to move.
+				// Type Name(...)' is an explicit instantiation, whose 'template' is a
+				// specifier like any other: the return type behind it moves the same way.
 				auto iAfter = fp_SkipTemplateHeader(iReturn);
-				if (iAfter == iReturn || iAfter >= iDeclarator)
+				if (iAfter == iReturn)
+				{
+					auto iNext = fp_NextCode(iReturn);
+					if (iNext < 0)
+						return false;
+
+					iAfter = umint(iNext);
+				}
+
+				if (iAfter >= iDeclarator)
 					return false;
 
 				iReturn = iAfter;
@@ -2127,6 +2169,10 @@ namespace
 		if (umint(iReturnLast) == iReturn && m_Tokens.f_IsText(Tokens[iReturn], "auto"))
 			return false;
 
+		umint nReturnWidth = 0;
+		if (!fp_MeasureJoinedWidth(iReturn, umint(iReturnLast), nReturnWidth))
+			return false;
+
 		// Everything before the name has to read as a type. An expression statement also
 		// ends in a call, and rewriting one of those as a declaration would destroy it.
 		auto iBeforeDeclarator = fp_PreviousCode(iDeclarator);
@@ -2144,9 +2190,34 @@ namespace
 				, "static_cast", "dynamic_cast", "const_cast", "reinterpret_cast"
 			}
 		;
+		// A name that follows a complete type at the type's own level is not part of it:
+		// an attribute macro stands there, and moving it along would misplace it. Only the
+		// words a type is spelled with may follow another name.
+		static ch8 const *const gsc_pTypeWords[] =
+			{
+				"const", "volatile", "typename", "struct", "class", "union", "enum", "unsigned", "signed"
+				, "short", "long", "int", "char", "double", "float", "bool", "void"
+			}
+		;
+		umint nAngle = 0;
+		bool bAfterName = false;
 		for (umint i = iReturn; i <= umint(iReturnLast); ++i)
 		{
 			auto const &Token = Tokens[i];
+			// Whatever a template argument list holds, a function type's parameter list
+			// included, is part of the type around it.
+			if (m_Structure.f_IsAngleBracket(i))
+			{
+				nAngle += m_Tokens.f_IsText(Token, "<") ? 1 : 0;
+				nAngle -= m_Tokens.f_IsText(Token, ">") ? 1 : 0;
+				bAfterName = !nAngle;
+
+				continue;
+			}
+
+			if (nAngle || Token.m_Kind == ECodeTokenKind::mc_Whitespace)
+				continue;
+
 			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
 			{
 				for (auto pKeyword : gsc_pStatementKeywords)
@@ -2155,17 +2226,25 @@ namespace
 						return false;
 				}
 
+				bool bTypeWord = false;
+				for (auto pWord : gsc_pTypeWords)
+					bTypeWord |= m_Tokens.f_IsText(Token, pWord);
+
+				if (bAfterName && !bTypeWord)
+					return false;
+
+				bAfterName = true;
+
 				continue;
 			}
+
+			bAfterName = false;
 
 			if (Token.m_Kind == ECodeTokenKind::mc_Number)
 				continue;
 
 			if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 				return false;
-
-			if (m_Structure.f_IsAngleBracket(i))
-				continue;
 
 			bool bTypePunctuation = m_Tokens.f_IsText(Token, "::")
 				|| m_Tokens.f_IsText(Token, "*")
@@ -2236,8 +2315,9 @@ namespace
 
 		// Converting costs eight columns of its own. It pays for itself when it makes the
 		// signature fit, and otherwise only when the name would not fit in front of the
-		// parameter list at all.
-		if (!bFits && bNameFits)
+		// parameter list at all and the return type is wider than the 'auto' that replaces
+		// it: moving 'void' frees no room on the line.
+		if (!bFits && (bNameFits || nReturnWidth <= CStr("auto").f_GetLen()))
 			return false;
 
 		auto nReturn = Tokens[umint(iReturnLast)].f_GetEnd() - iReturnStart;
@@ -2423,7 +2503,14 @@ namespace
 		// of it. Behind a capture list it opens a lambda, and the statement around it is an
 		// expression that has no declaration to protect or return type to move.
 		auto iBeforeParen = iFirstParenGroupStart ? fp_PreviousCode(iFirstParenGroupStart) : aint(-1);
+		// Without any parameter list the statement is a declaration too, such as a class
+		// head, unless its body is a lambda's: 'Dispatch = [&] { ... }'.
 		bool bDeclarator = iBeforeParen >= 0 && Tokens[umint(iBeforeParen)].m_Kind == ECodeTokenKind::mc_Identifier;
+		if (!iFirstParenGroupStart && iBlock != TCLimitsInt<umint>::mc_Max)
+		{
+			auto iBeforeBrace = fp_PreviousCode(Nodes[iBlock].m_iFirstToken);
+			bDeclarator = iBeforeBrace < 0 || !fp_ClosesLambdaIntroducer(umint(iBeforeBrace));
+		}
 		// A name can end in a template argument list, and nothing before it is ever broken.
 		// A lambda's own template parameter list ends the same way but names nothing.
 		bool bNamed = bDeclarator
@@ -2435,7 +2522,7 @@ namespace
 		// member access is spelled the same way, so the arrow only counts when nothing but
 		// the function's qualifiers stands between it and the parameter list.
 		umint iTrailingReturn = TCLimitsInt<umint>::mc_Max;
-		if (bDeclarator)
+		if (bDeclarator && iFirstParenGroupStart)
 		{
 			static ch8 const *const gsc_pQualifiers[] =
 				{
@@ -2531,7 +2618,7 @@ namespace
 		if (m_bProbing)
 		{
 			if (bJoinable && !bFits)
-				fp_ConvertTrailingReturn(_iNode, _iIndent);
+				fp_ConvertTrailingReturn(_iNode, iDeclFirst, _iIndent);
 
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
 				fp_LayoutNode(iBlock, _iIndent);
@@ -2606,7 +2693,10 @@ namespace
 
 			m_iSplitFirstParen = 0;
 			m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
-			if (bSplit && bHasTerminator)
+			// A split statement's terminator takes a line of its own, except behind a
+			// declaration's body, where it stays on the closing brace's line: '};'.
+			bool bBodyTerminator = iBlock != TCLimitsInt<umint>::mc_Max && bDeclarator;
+			if (bSplit && bHasTerminator && !bBodyTerminator)
 				fp_BreakBefore(Node.m_iLastToken, _iIndent);
 		}
 
@@ -3331,8 +3421,17 @@ namespace
 				break;
 
 			// A function's qualifiers belong behind the closing parenthesis, on its line,
-			// wherever there is room for them.
-			auto iResume = fp_SkipFunctionQualifiers(umint(iNext));
+			// wherever there is room for them, and a class's 'final' behind its template
+			// argument list the same way.
+			auto iResume = umint(iNext);
+			if (Scope.m_Bracket == ECodeBracket::mc_Paren)
+				iResume = fp_SkipFunctionQualifiers(umint(iNext));
+			else if (Scope.m_Bracket == ECodeBracket::mc_Angle && m_Tokens.f_IsText(Tokens[umint(iNext)], "final"))
+			{
+				auto iAfter = fp_NextCode(umint(iNext));
+				iResume = iAfter < 0 ? _iLast + 1 : umint(iAfter);
+			}
+
 			auto iLastQualifier = iResume != umint(iNext) ? fp_PreviousCode(iResume) : aint(-1);
 			if (iLastQualifier >= 0 && fp_FitsInline(Scope.m_iLastToken, umint(iLastQualifier), nLineIndent))
 			{

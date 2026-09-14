@@ -91,6 +91,7 @@ result is stable; either check failing is a formatter failure, not an edit.
 | `clause-space` | Exactly one space between `if`, `for`, `while`, `switch`, or `catch` and its `(` on the same line. |
 | `comma-space` | No space before a comma, one space after it on the same line. |
 | `operator-space` | One space around unambiguous binary operators. |
+| `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
 | `block-blank-line` | Removes blank lines directly after an opening brace. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it. |
@@ -118,7 +119,9 @@ A `<` opens a template argument list only when it is written tight against the
 name before it, or across a line break; Malterlib spells a comparison with
 spaces, so the loose spelling stays an operator. A `>>` that ends a template
 argument list is read the way C++ reads it, as two `>` tokens, so that each list
-has a closing marker of its own. A brace holding a statement terminator at its
+has a closing marker of its own, and two closers written apart are joined back
+into one `>>` unless the layout gives the second a line of its own. A brace
+holding a statement terminator at its
 own level is a block, which is how a lambda body inside an argument list is told
 apart from a braced initializer.
 
@@ -152,7 +155,10 @@ further only while it is still too long:
 
 A declaration whose name does not fit in front of its parameter list first has
 its return type moved behind that list, as `auto ... -> Type`, when the
-converted signature fits on one line or the name would not fit otherwise. The
+converted signature fits on one line or the name would not fit otherwise and
+the type is wider than the `auto` that replaces it. An explicit instantiation
+is converted the same way. A bare name behind a complete type, such as an
+attribute macro, keeps the declaration from being converted. The
 conversion is the one rule that changes tokens. It is decided on the original
 source, and the layout is then made on the converted source, so the lines the
 plan writes are the lines a later pass sees.
