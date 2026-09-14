@@ -389,6 +389,15 @@ namespace NMib::NDevelop
 		return mp_Source;
 	}
 
+	void CCodeTokenStream::f_SplitToken(umint _iToken, umint _nFirstLength)
+	{
+		auto Second = mp_Tokens[_iToken];
+		Second.m_iOffset += _nFirstLength;
+		Second.m_nLength -= _nFirstLength;
+		mp_Tokens[_iToken].m_nLength = _nFirstLength;
+		mp_Tokens.f_InsertBefore(_iToken + 1, Second);
+	}
+
 	void CCodeTokenStream::fp_Lex()
 	{
 		CLexerCursor Cursor{mp_Source.f_GetStr(), umint(mp_Source.f_GetLen()), 0};

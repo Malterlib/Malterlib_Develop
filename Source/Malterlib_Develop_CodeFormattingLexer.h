@@ -57,6 +57,11 @@ namespace NMib::NDevelop
 		NStr::CStr f_GetText(CCodeToken const &_Token) const;
 		NStr::CStr const &f_GetSource() const;
 
+		// Splits a punctuator into two adjacent tokens of the same kind. C++ reads a '>>' that
+		// ends a template argument list as two '>' tokens, and the structure builder spells it
+		// that way so that each list has a closing marker of its own.
+		void f_SplitToken(umint _iToken, umint _nFirstLength);
+
 	private:
 		void fp_Lex();
 

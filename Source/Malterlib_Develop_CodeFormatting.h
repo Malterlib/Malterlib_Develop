@@ -125,7 +125,8 @@ namespace NMib::NDevelop
 	NStr::CStr fg_ApplyCodeFormattingEdits(NStr::CStr const &_Source, NContainer::TCVector<CCodeFormattingEdit> const &_Edits);
 
 	// True when the two sources have the same significant token sequence, ignoring layout.
-	// Every rule in the current matrix is whitespace-only, so this holds for every plan.
+	// Every rule but the trailing return type conversion is whitespace-only, so this holds
+	// between a plan's result and the source with only those conversions applied.
 	bool fg_HasEquivalentCodeTokens(NStr::CStr const &_First, NStr::CStr const &_Second);
 
 	// Describes the first token difference between two sources, for formatter diagnostics.

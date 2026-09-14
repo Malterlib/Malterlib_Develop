@@ -81,10 +81,36 @@ namespace NMib::NDevelop
 		return !m_bHasComment && !m_bHasDirective && !m_bHasBlock && !m_bHasMultiLineToken && !m_bHasMultiLineBrace && m_Kind != ECodeNodeKind::mc_Unsupported;
 	}
 
-	CCodeStructure::CCodeStructure(CCodeTokenStream const &_Tokens)
+	CCodeStructure::CCodeStructure(CCodeTokenStream &_Tokens)
 		: mp_pTokens(&_Tokens)
 	{
+		fp_CollectSignificant();
+		if (fp_SplitSharedAngleClosers())
+			fp_CollectSignificant();
+
 		auto const &Tokens = _Tokens.f_GetTokens();
+		mp_bAngleBracket.f_SetLen(Tokens.f_GetLen());
+		for (auto &Value : mp_bAngleBracket)
+			Value = 0;
+
+		auto iRoot = fp_AddNode(ECodeNodeKind::mc_File, 0);
+		if (mp_Significant.f_IsEmpty())
+		{
+			mp_Nodes[iRoot].m_Kind = ECodeNodeKind::mc_File;
+
+			return;
+		}
+
+		mp_Nodes[iRoot].m_iFirstToken = mp_Significant.f_GetFirst();
+		auto iNext = fp_BuildBlock(iRoot, 0, false);
+		mp_Nodes[iRoot].m_iLastToken = mp_Significant[fg_Min(iNext, mp_Significant.f_GetLen() - 1)];
+	}
+
+	void CCodeStructure::fp_CollectSignificant()
+	{
+		auto const &Tokens = mp_pTokens->f_GetTokens();
+		mp_Significant.f_Clear();
+		mp_GapFlags.f_Clear();
 		uint8 Flags = EGapFlag_None;
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 		{
@@ -105,22 +131,39 @@ namespace NMib::NDevelop
 			mp_GapFlags.f_Insert(Flags);
 			Flags = EGapFlag_None;
 		}
+	}
 
-		mp_bAngleBracket.f_SetLen(Tokens.f_GetLen());
-		for (auto &Value : mp_bAngleBracket)
-			Value = 0;
-
-		auto iRoot = fp_AddNode(ECodeNodeKind::mc_File, 0);
-		if (mp_Significant.f_IsEmpty())
+	// C++ reads a '>>' that ends a template argument list as two '>' tokens. Spelling it that
+	// way gives each list a closing marker of its own, so the layout can put the two markers
+	// on separate lines like any other pair of nested scopes. Returns true when a token was split.
+	bool CCodeStructure::fp_SplitSharedAngleClosers()
+	{
+		auto const &Tokens = mp_pTokens->f_GetTokens();
+		TCVector<umint> Splits;
+		for (umint i = 0; i < mp_Significant.f_GetLen(); ++i)
 		{
-			mp_Nodes[iRoot].m_Kind = ECodeNodeKind::mc_File;
+			auto iClose = fp_MatchAngleGroup(i);
+			if (!iClose)
+				continue;
 
-			return;
+			auto iToken = mp_Significant[iClose];
+			if (mp_pTokens->f_IsText(Tokens[iToken], ">>") || mp_pTokens->f_IsText(Tokens[iToken], ">>="))
+				Splits.f_Insert(iToken);
 		}
 
-		mp_Nodes[iRoot].m_iFirstToken = mp_Significant.f_GetFirst();
-		auto iNext = fp_BuildBlock(iRoot, 0, false);
-		mp_Nodes[iRoot].m_iLastToken = mp_Significant[fg_Min(iNext, mp_Significant.f_GetLen() - 1)];
+		if (Splits.f_IsEmpty())
+			return false;
+
+		Splits.f_Sort();
+		for (umint i = Splits.f_GetLen(); i; --i)
+		{
+			if (i < Splits.f_GetLen() && Splits[i - 1] == Splits[i])
+				continue;
+
+			mp_pTokens->f_SplitToken(Splits[i - 1], 1);
+		}
+
+		return true;
 	}
 
 	TCVector<CCodeNode> const &CCodeStructure::f_GetNodes() const
@@ -308,16 +351,14 @@ namespace NMib::NDevelop
 
 			if (mp_pTokens->f_IsText(Token, "<"))
 				++nDepth;
-			else if (mp_pTokens->f_IsText(Token, "<<"))
-				nDepth += 2;
 			else if (mp_pTokens->f_IsText(Token, ">"))
 			{
 				if (!--nDepth)
 					return i;
 			}
-			else if (mp_pTokens->f_IsText(Token, ">>"))
+			else if (mp_pTokens->f_IsText(Token, ">>") || mp_pTokens->f_IsText(Token, ">>="))
 			{
-				// From the inner list's view a '>>' closes this level and leaves the other
+				// Before the token is split, a '>>' closes this level and leaves the other
 				// half to the list around it.
 				if (nDepth < 2)
 					return i;
@@ -389,17 +430,6 @@ namespace NMib::NDevelop
 				return i + 1;
 			}
 
-			// Closing two nested template argument lists is spelled as one '>>' token, so
-			// the inner list stops on it and leaves the outer one to close there as well.
-			if (_Bracket == ECodeBracket::mc_Angle && mp_pTokens->f_IsText(Token, ">>"))
-			{
-				mp_bAngleBracket[mp_Significant[i]] = 1;
-				mp_nPendingAngleClose = 1;
-				fp_Finish(iNode, mp_Significant[i]);
-
-				return i;
-			}
-
 			// A top-level separator is where the canonical split form starts a new line.
 			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && (mp_pTokens->f_IsText(Token, ",") || mp_pTokens->f_IsText(Token, ";")))
 			{
@@ -445,13 +475,6 @@ namespace NMib::NDevelop
 			if (fp_MatchAngleGroup(i))
 			{
 				i = fp_BuildGroup(iNode, i, ECodeBracket::mc_Angle);
-				if (mp_nPendingAngleClose && _Bracket == ECodeBracket::mc_Angle)
-				{
-					--mp_nPendingAngleClose;
-					fp_Finish(iNode, mp_Significant[i]);
-
-					return i + 1;
-				}
 
 				continue;
 			}
@@ -655,8 +678,6 @@ namespace NMib::NDevelop
 			if (fp_MatchAngleGroup(i))
 			{
 				i = fp_BuildGroup(iNode, i, ECodeBracket::mc_Angle);
-				// A '>>' that closed a nested list has no outer list here to close.
-				mp_nPendingAngleClose = 0;
 				bAfterCloseParen = false;
 
 				continue;
@@ -795,7 +816,24 @@ namespace NMib::NDevelop
 					return ECodeSpacing::mc_Space;
 			}
 
-			if (Left.m_Kind == ECodeTokenKind::mc_Identifier || fLeft(")") || fLeft("]"))
+			// Directly inside a template argument list a name in front of a parameter list
+			// can spell a function type, 'TCFunction<FCallback (int)>', which is written
+			// with a space, as well as a call in a value argument, which is not.
+			if (Left.m_Kind == ECodeTokenKind::mc_Identifier)
+			{
+				auto const &Nodes = _Structure.f_GetNodes();
+				for (auto const &Node : Nodes)
+				{
+					if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_iFirstToken != _iRight)
+						continue;
+
+					return Nodes[Node.m_iParent].m_Bracket == ECodeBracket::mc_Angle ? ECodeSpacing::mc_Preserve : ECodeSpacing::mc_None;
+				}
+
+				return ECodeSpacing::mc_None;
+			}
+
+			if (fLeft(")") || fLeft("]"))
 				return ECodeSpacing::mc_None;
 
 			return ECodeSpacing::mc_Preserve;

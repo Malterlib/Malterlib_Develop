@@ -58,7 +58,7 @@ namespace NMib::NDevelop
 	struct CCodeStructure
 	{
 		CCodeStructure() = default;
-		explicit CCodeStructure(CCodeTokenStream const &_Tokens);
+		explicit CCodeStructure(CCodeTokenStream &_Tokens);
 
 		NContainer::TCVector<CCodeNode> const &f_GetNodes() const;
 		CCodeNode const &f_GetRoot() const;
@@ -72,6 +72,8 @@ namespace NMib::NDevelop
 		bool f_IsAngleBracket(umint _iToken) const;
 
 	private:
+		void fp_CollectSignificant();
+		bool fp_SplitSharedAngleClosers();
 		umint fp_AddNode(ECodeNodeKind _Kind, umint _iParent);
 		void fp_Finish(umint _iNode, umint _iLastToken);
 		umint fp_BuildBlock(umint _iNode, umint _iToken, bool _bBraced);
@@ -82,12 +84,11 @@ namespace NMib::NDevelop
 
 		void fp_Note(umint _iNode, umint _iSignificant);
 
-		CCodeTokenStream const *mp_pTokens = nullptr;
+		CCodeTokenStream *mp_pTokens = nullptr;
 		NContainer::TCVector<umint> mp_Significant;		// Indices of significant tokens, in order.
 		NContainer::TCVector<uint8> mp_GapFlags;		// What the trivia before each significant token contains.
 		NContainer::TCVector<uint8> mp_bAngleBracket;	// Indexed by token, set for resolved template brackets.
 		umint mp_iIncompleteOffset = 0;
-		umint mp_nPendingAngleClose = 0;				// A '>>' closing a nested list still has to close the list around it.
 		NContainer::TCVector<CCodeNode> mp_Nodes;
 		bool mp_bComplete = true;
 	};

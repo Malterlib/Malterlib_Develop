@@ -490,6 +490,82 @@ namespace
 					;
 				};
 
+				DMibTestCategory("Templates")
+				{
+					CStr Wide;
+					for (umint i = 0; i < 80; ++i)
+						Wide += "W";
+
+					auto fSplit = [&](CStr const &_Case, CStr const &_Source, CStr const &_Expected)
+						{
+							fg_ExpectFormat(_Case, _Source.f_Replace("@", Wide), _Expected.f_Replace("@", Wide));
+						}
+					;
+					// Two lists closing with one '>>' are two scopes: the inner one is opened
+					// only when the outer one's element still does not fit, and each closing
+					// marker stands under the list it ends.
+					fSplit
+						(
+							"NestedOpened"
+							, "template TCSharedPointer<TCPromiseData<TCVector<@, @>>>::~TCSharedPointer();\n"
+							, "template TCSharedPointer\n\t<\n\t\tTCPromiseData\n\t\t<\n\t\t\tTCVector<@, @>\n\t\t>\n\t>\n\t::~TCSharedPointer()\n;\n"
+						)
+					;
+					// The parameter list is opened first; the name's own argument list only
+					// when the name still does not fit in front of it.
+					fSplit
+						(
+							"NameAfterParameters"
+							, "template void fg_Delete<TCVector<@, @>, CAllocator &>(CAllocator &, TCVector<@, @> *);\n"
+							, "template void fg_Delete\n\t<\n\t\tTCVector<@, @>\n\t\t, CAllocator &\n\t>\n\t(\n\t\tCAllocator &\n\t\t, TCVector<@, @> *\n\t)\n;\n"
+						)
+					;
+					// An operator behind a '>>' is still at the statement's own level.
+					fSplit
+						(
+							"OperatorAfterSharedCloser"
+							, "void f()\n{\n\tauto R = Left.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Start, Mid) + Right.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Mid, End);\n}\n"
+							, "void f()\n{\n\tauto R = Left.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Start, Mid)\n\t\t+ Right.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Mid, End)\n\t;\n}\n"
+						)
+					;
+					// A '*' behind a template argument list is a declarator, not a multiplication,
+					// and the line break the source keeps after it is one the standard does not
+					// settle, so the declaration keeps its lines.
+					CStr Pointer = "template TCCounter<TCOnScopeExit<TCFunction<void ()> >, false, 0> *\n"
+						"TCConstruct<TCCounter<@>, TCFunction<void ()> >::f_Create<TCCounter<@>, CAllocator &>(CAllocator &);\n"
+					;
+					fSplit("PointerDeclarator", Pointer, Pointer);
+				};
+
+				DMibTestCategory("Members")
+				{
+					CStr Wide;
+					for (umint i = 0; i < 60; ++i)
+						Wide += "W";
+
+					auto fSplit = [&](CStr const &_Case, CStr const &_Source, CStr const &_Expected)
+						{
+							fg_ExpectFormat(_Case, _Source.f_Replace("@", Wide), _Expected.f_Replace("@", Wide));
+						}
+					;
+					// Member accesses are the last thing to give: only a line that is still too
+					// long with every scope on it opened is broken at them, all at once.
+					fSplit
+						(
+							"LastResort"
+							, "void f()\n{\n\ta@.b@.c@.f_Call(1);\n}\n"
+							, "void f()\n{\n\ta@\n\t\t.b@\n\t\t.c@\n\t\t.f_Call(1)\n\t;\n}\n"
+						)
+					;
+					fSplit
+						(
+							"ScopeFirst"
+							, "void f()\n{\n\ta.b.f_Call(@, @, @);\n}\n"
+							, "void f()\n{\n\ta.b.f_Call\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t\t, @\n\t\t)\n\t;\n}\n"
+						)
+					;
+				};
+
 				DMibTestCategory("Braced")
 				{
 					// A braced initializer is opened like any other scope.
@@ -595,9 +671,10 @@ namespace
 					;
 					// Declaration specifiers stay in front of auto.
 					fSplit("Specifiers", "static inline_always TCLongTemplate<@> fg_F(int _A);\n", "static inline_always auto fg_F(int _A)\n\t-> TCLongTemplate<@>\n;\n");
-					// A constructor has no return type to move. Its parameter list stands behind
-					// the name, so splitting there means opening the list.
-					fSplit("Constructor", "CLongName<@>::CLongName(int _A, int _B);\n", "CLongName<@>::CLongName\n\t(\n\t\tint _A\n\t\t, int _B\n\t)\n;\n", true);
+					// A constructor has no return type to move. Its name does not fit even with
+					// the parameter list opened, so the name opens its own template argument
+					// list, and the parameter list then fits on the line the name ends on.
+					fSplit("Constructor", "CLongName<@>::CLongName(int _A, int _B);\n", "CLongName\n\t<\n\t\t@\n\t>\n\t::CLongName(int _A, int _B)\n;\n", true);
 					// An expression statement also ends in a call, and must never be rewritten
 					// as a declaration.
 					fSplit
@@ -635,6 +712,21 @@ namespace
 					// A statement with no scope marker to split keeps its shape and is reported.
 					CStr Source = "int a" + Name + " = 0;\n";
 					DMibExpect(fg_FormatSource(Source), ==, Source);
+
+					// A function type inside a template argument is written with a space the
+					// standard does not settle, and that space counts: a declaration that would
+					// be one column too long with it stays open.
+					DMibTestCategory("FunctionTypeSpace")
+					{
+						CStr Split = "\tvoid CClient::f_SetLazyStartApp\n\t\t(\n\t\t\tNFunction::TCFunction"
+							"<FStopApp (NEncoding::CEJsonSorted const &_Params, EDistributedAppCommandFlag _Flags)> const &_fLazyStartApp"
+						;
+						for (umint i = Split.f_GetLen(); i < 208; ++i)
+							Split += "X";
+
+						Split = "namespace N\n{\n" + Split + "\n\t\t)\n\t{\n\t}\n}\n";
+						DMibExpect(fg_FormatSource(Split), ==, Split);
+					};
 				};
 			};
 

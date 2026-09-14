@@ -104,8 +104,8 @@ member access. An operator immediately following the `operator` keyword is a
 declarator name and is left alone.
 
 `indentation` normalizes indentation characters, not indentation depth. The
-depth model for split statements, continuations, and clause parentheses is not
-implemented yet, so existing structure is preserved rather than guessed.
+depth of a split statement's continuations and clause parentheses is decided by
+`line-break`, described under [Line structure](#line-structure).
 
 ## Line structure
 
@@ -116,30 +116,59 @@ unsupported node whose layout is preserved.
 
 A `<` opens a template argument list only when it is written tight against the
 name before it, or across a line break; Malterlib spells a comparison with
-spaces, so the loose spelling stays an operator. A brace holding a statement
-terminator at its own level is a block, which is how a lambda body inside an
-argument list is told apart from a braced initializer.
+spaces, so the loose spelling stays an operator. A `>>` that ends a template
+argument list is read the way C++ reads it, as two `>` tokens, so that each list
+has a closing marker of its own. A brace holding a statement terminator at its
+own level is a block, which is how a lambda body inside an argument list is told
+apart from a braced initializer.
 
 `fg_GetCanonicalSpacing` gives the inline separator between two adjacent tokens.
 It decides only the spellings the standard settles, and answers `mc_Preserve`
 elsewhere, which is what keeps a rewrite from guessing at an ambiguous
 construct such as `->`, which is both member access and a trailing return type.
 
-`line-break` currently only joins. A construct collapses to one line when it
-fits at its starting column and contains no comment, preprocessor directive,
-multiline token, block, or braced initializer written across lines. A braced
-initializer is excluded because it is data, most of it written one element per
-line on purpose, including Malterlib's `_o=` and `_j=` command-line DSL. A
-template header, a `requires` clause, a label, and the statement a clause guards
-each keep their own line.
+`line-break` lays every statement out in two phases. The statement is first
+taken as if it were written on one line, with every gap at its inline spelling:
+a gap the source already writes on one line keeps its width, and one holding a
+line break is measured at the width joining it writes. A statement that fits at
+its own indentation is written that way, whatever lines the source had. One
+that does not is split, outermost break first, and each resulting line is split
+further only while it is still too long:
 
-Two constructs that each fit can still overflow the line they share, so the plan
-is applied, every line is measured again, and any join landing on an overlong
-line is dropped, repeating until no join makes a line too long.
+1. The loosest binary operators at the line's own bracket level each start a
+   line. The first operator stays on the line before a lambda it takes.
+2. A scope standing behind another scope's closing marker, such as a lambda's
+   parameter list behind its capture list, and a trailing return type behind a
+   parameter list, each move down whole. A lambda's capture list, template
+   parameter list and parameter list are one introducer: they stand together
+   on a line or each takes one of its own.
+3. The first scope on the line is opened: its opening and closing markers take
+   lines of their own and every element stands on one, laid out the same way.
+   What follows the closing marker resumes under it. A function's qualifiers
+   stay behind the closing parenthesis where they fit.
+4. A name that is still too long with its parameter list opened opens its own
+   template argument list, and after that breaks at its member accesses, all
+   at once.
 
-Splitting an overlong construct into the canonical multi-line form is not
-implemented yet. Until it is, an overlong line is reported by `line-length` and
-left alone.
+A declaration whose name does not fit in front of its parameter list first has
+its return type moved behind that list, as `auto ... -> Type`, when the
+converted signature fits on one line or the name would not fit otherwise. The
+conversion is the one rule that changes tokens. It is decided on the original
+source, and the layout is then made on the converted source, so the lines the
+plan writes are the lines a later pass sees.
+
+The decisions are kept per gap between tokens and written out once, so no
+decision depends on an edit already made, or on where the source happened to
+break its lines. A construct that contains a comment, a preprocessor directive,
+a multiline token, a block, or a braced initializer written across lines keeps
+its lines; only its inner constructs are brought back to one line where they
+fit. A braced initializer written across lines is excluded because it is data,
+most of it written one element per line on purpose, including Malterlib's `_o=`
+and `_j=` command-line DSL. A template header, a `requires` clause, a label, and
+the statement a clause guards each keep their own line.
+
+A line that nothing above can shorten, such as one long literal, is reported by
+`line-length` and left alone.
 
 ## Protected regions
 
