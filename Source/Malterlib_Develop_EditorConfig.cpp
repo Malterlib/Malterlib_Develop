@@ -69,24 +69,63 @@ namespace
 
 			mp_Nodes.f_Insert().m_Kind = EKind::mc_Accept;
 			mp_iStart = fp_Compile(Pattern.f_GetStr(), Pattern.f_GetStr() + Pattern.f_GetLen(), 0);
+			for (umint i = 0; i < mp_Nodes.f_GetLen(); ++i)
+			{
+				for (umint iVariant = 0; iVariant < 2; ++iVariant)
+					fp_CollectClosure(i, iVariant != 0, mp_Nodes[i].m_Closure[iVariant]);
+			}
 		}
 
-		bool f_Match(CStr const &_Path) const
+		// The working sets of one match. One file meets many patterns, so the caller owns
+		// them and every match reuses their capacity. A state is in a set when its stamp is
+		// the set's generation, which makes emptying a set one increment.
+		struct CScratch
 		{
-			auto Path = fg_GetGlobUnicode(mp_bHasSeparator ? _Path : CFile::fs_GetFile(_Path));
-			TCVector<umint> Active, Next;
-			TCVector<uint8> Visited;
-			Visited.f_SetLen(mp_Nodes.f_GetLen());
-			for (auto &Value : Visited)
-				Value = 0;
-			fp_AddStates(mp_iStart, true, Active, Visited);
+			TCVector<umint> m_Active;
+			TCVector<umint> m_Next;
+			TCVector<umint> m_Stamps;
+			umint m_Generation = 0;
+		};
+
+		// A pattern without a separator matches the file's name alone; the caller converts
+		// the path and the name once and passes both.
+		bool f_Match(CUStr const &_Path, CUStr const &_FileName, CScratch &_Scratch) const
+		{
+			auto const &Path = mp_bHasSeparator ? _Path : _FileName;
+			auto &Active = _Scratch.m_Active;
+			auto &Next = _Scratch.m_Next;
+			auto &Stamps = _Scratch.m_Stamps;
+			if (Stamps.f_GetLen() < mp_Nodes.f_GetLen())
+			{
+				Stamps.f_SetLen(mp_Nodes.f_GetLen());
+				for (auto &Stamp : Stamps)
+					Stamp = 0;
+
+				_Scratch.m_Generation = 0;
+			}
+
+			auto fAddStates = [&](umint _iState, bool _bComponentStart, TCVector<umint> &o_States)
+				{
+					for (auto iReached : mp_Nodes[_iState].m_Closure[_bComponentStart ? 1 : 0])
+					{
+						if (Stamps[iReached] == _Scratch.m_Generation)
+							continue;
+
+						Stamps[iReached] = _Scratch.m_Generation;
+						o_States.f_Insert(iReached);
+					}
+				}
+			;
+
+			Active.f_Clear();
+			++_Scratch.m_Generation;
+			fAddStates(mp_iStart, true, Active);
 
 			auto pEnd = Path.f_GetStr() + Path.f_GetLen();
 			for (auto pParse = Path.f_GetStr(); pParse != pEnd; ++pParse)
 			{
 				Next.f_Clear();
-				for (auto &Value : Visited)
-					Value = 0;
+				++_Scratch.m_Generation;
 
 				for (auto iState : Active)
 				{
@@ -121,11 +160,12 @@ namespace
 					if (bMatches)
 					{
 						bool bRepeat = Node.m_Kind == EKind::mc_Star || Node.m_Kind == EKind::mc_RecursiveStar;
-						fp_AddStates(bRepeat ? iState : Node.m_iNext, *pParse == '/', Next, Visited);
+						fAddStates(bRepeat ? iState : Node.m_iNext, *pParse == '/', Next);
 					}
 				}
 
-				Active = fg_Move(Next);
+				// Swapping keeps both buffers' capacity for the next character.
+				fg_Swap(Active, Next);
 				if (Active.f_IsEmpty())
 					return false;
 			}
@@ -166,6 +206,7 @@ namespace
 			bool m_bNegated = false;
 			TCVector<CRange> m_Ranges;
 			TCVector<umint> m_Alternatives;
+			TCVector<umint> m_Closure[2];		// The consuming states reached without consuming; [1] at a component start.
 		};
 
 		static ch32 const *fsp_SetEnd(ch32 const *_pStart, ch32 const *_pEnd)
@@ -288,13 +329,21 @@ namespace
 			return Sequence.f_IsEmpty() ? _iNext : Sequence[0];
 		}
 
-		void fp_AddStates(umint _iState, bool _bComponentStart, TCVector<umint> &o_States, TCVector<uint8> &o_Visited) const
+		// The consuming states reachable from a state without consuming a character: through
+		// branches, empty nodes, the repeat of a star, and, at a component start, the
+		// separator a recursive star may swallow. Computed once per node when compiling.
+		void fp_CollectClosure(umint _iState, bool _bComponentStart, TCVector<umint> &o_States) const
 		{
 			struct CPending
 			{
 				umint m_iState = 0;
 				bool m_bSkipSeparator = false;
 			};
+
+			TCVector<uint8> o_Visited;
+			o_Visited.f_SetLen(mp_Nodes.f_GetLen());
+			for (auto &Value : o_Visited)
+				Value = 0;
 
 			TCVector<CPending> Pending = {{_iState, false}};
 			while (!Pending.f_IsEmpty())
@@ -397,19 +446,37 @@ namespace NMib::NDevelop::NPrivate
 			}
 		}
 
+		static bool fs_IsUnset(CStr const &_Value)
+		{
+			if (_Value.f_GetLen() != 5)
+				return false;
+
+			auto pValue = _Value.f_GetStr();
+			for (auto pExpected = "unset"; *pExpected; ++pExpected, ++pValue)
+			{
+				if (*pValue != *pExpected && *pValue != *pExpected - ('a' - 'A'))
+					return false;
+			}
+
+			return true;
+		}
+
 		void f_Apply(CStr const &_RelativePath, TCMap<CStr, CStr> &o_Properties) const
 		{
 			if (m_bRoot)
 				o_Properties.f_Clear();
 
+			auto Path = fg_GetGlobUnicode(_RelativePath);
+			auto FileName = fg_GetGlobUnicode(CFile::fs_GetFile(_RelativePath));
+			CGlobMatcher::CScratch Scratch;
 			for (auto const &Section : m_Sections)
 			{
-				if (!Section.m_Glob.f_Match(_RelativePath))
+				if (!Section.m_Glob.f_Match(Path, FileName, Scratch))
 					continue;
 
 				for (auto const &Property : Section.m_Properties.f_Entries())
 				{
-					if (Property.f_Value().f_LowerCase() == "unset")
+					if (fs_IsUnset(Property.f_Value()))
 						o_Properties.f_Remove(Property.f_Key());
 					else
 						o_Properties[Property.f_Key()] = Property.f_Value();
@@ -429,7 +496,15 @@ namespace NMib::NDevelop::NPrivate
 			TCVector<TCPromise<TCOptional<CEditorConfig>>> m_Waiters;
 		};
 
+		// The configurations that apply to the files of one directory, outermost first.
+		struct CChainEntry
+		{
+			CStr m_Directory;
+			CEditorConfig m_Configuration;
+		};
+
 		TCMap<CStr, TCSharedPointer<CEntry>> m_Entries;
+		TCMap<CStr, TCSharedPointer<TCVector<CChainEntry>>> m_Chains;
 	};
 
 }
@@ -456,6 +531,7 @@ namespace NMib::NDevelop
 	CEditorConfigResolver::CEditorConfigResolver(CStr const &_Boundary)
 		: mp_Boundary(_Boundary ? CFile::fs_GetFullPath(_Boundary, CFile::fs_GetCurrentDirectory()) : CStr())
 		, mp_pCache(fg_Construct())
+		, mp_BlockingActor(fg_BlockingActor())
 	{
 	}
 
@@ -476,10 +552,9 @@ namespace NMib::NDevelop
 			Contents = co_await mp_fLoader(fg_Move(_Path));
 		else
 		{
-			auto BlockingActor = fg_BlockingActor();
 			Contents = co_await
 				(
-					g_Dispatch(BlockingActor) / [Path = fg_Move(_Path)]() -> TCOptional<CStr>
+					g_Dispatch(mp_BlockingActor) / [Path = fg_Move(_Path)]() -> TCOptional<CStr>
 					{
 						if (!CFile::fs_FileExists(Path))
 							return {};
@@ -527,7 +602,7 @@ namespace NMib::NDevelop
 	{
 		auto Capture = co_await (g_CaptureExceptions % "Resolving EditorConfig properties");
 		auto pCache = mp_pCache;
-		CStr FilePath = CFile::fs_GetFullPath(_FilePath, CFile::fs_GetCurrentDirectory());
+		CStr FilePath = CFile::fs_IsPathAbsolute(_FilePath) ? _FilePath : CFile::fs_GetFullPath(_FilePath, CFile::fs_GetCurrentDirectory());
 		if (mp_Boundary)
 		{
 			auto Relative = CFile::fs_MakePathRelative(FilePath, mp_Boundary);
@@ -537,42 +612,49 @@ namespace NMib::NDevelop
 			}
 		}
 
-		struct CEntry
+		// The files of one directory share the chain of configurations above them, and a
+		// module holds many files per directory, so the chain is walked once per directory.
+		auto FileDirectory = CFile::fs_GetPath(FilePath);
+		TCSharedPointer<TCVector<NPrivate::CEditorConfigCache::CChainEntry>> pChain;
+		if (auto pCached = pCache->m_Chains.f_FindEqual(FileDirectory))
+			pChain = *pCached;
+		else
 		{
-			CStr m_Directory;
-			CEditorConfig m_Configuration;
-		};
-
-		TCVector<CEntry> Entries;
-		auto Directory = CFile::fs_GetPath(FilePath);
-		while (Directory)
-		{
-			auto ConfigurationPath = Directory / ".editorconfig";
-			auto Configuration = co_await fp_GetConfiguration(pCache, fg_Move(ConfigurationPath));
-			if (Configuration)
+			pChain = fg_Construct();
+			auto Directory = FileDirectory;
+			while (Directory)
 			{
-				Entries.f_Insert({Directory, *Configuration});
-				if (Configuration->f_IsRoot())
+				auto ConfigurationPath = Directory / ".editorconfig";
+				auto Configuration = co_await fp_GetConfiguration(pCache, fg_Move(ConfigurationPath));
+				if (Configuration)
+				{
+					pChain->f_Insert({Directory, *Configuration});
+					if (Configuration->f_IsRoot())
+						break;
+				}
+
+				if (mp_Boundary)
+				{
+					auto Relative = CFile::fs_MakePathRelative(Directory, mp_Boundary);
+					if (!Relative || Relative == ".")
+						break;
+				}
+
+				auto Parent = CFile::fs_GetPath(Directory);
+				if (Parent == Directory)
 					break;
+				Directory = fg_Move(Parent);
 			}
 
-			if (mp_Boundary)
-			{
-				auto Relative = CFile::fs_MakePathRelative(Directory, mp_Boundary);
-				if (!Relative || Relative == ".")
-					break;
-			}
-
-			auto Parent = CFile::fs_GetPath(Directory);
-			if (Parent == Directory)
-				break;
-			Directory = fg_Move(Parent);
+			// The cache may have been replaced while the chain was loading.
+			if (pCache == mp_pCache)
+				pCache->m_Chains(FileDirectory, pChain);
 		}
 
 		CEditorConfigProperties Properties;
-		for (umint i = Entries.f_GetLen(); i; --i)
+		for (umint i = pChain->f_GetLen(); i; --i)
 		{
-			auto const &Entry = Entries[i - 1];
+			auto const &Entry = (*pChain)[i - 1];
 			Entry.m_Configuration.f_Apply(CFile::fs_MakePathRelative(FilePath, Entry.m_Directory), Properties);
 		}
 

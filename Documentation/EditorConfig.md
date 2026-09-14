@@ -34,7 +34,10 @@ path by value. An empty optional means missing; an empty string means a present,
 empty document. An expired loader actor reports an error. This supports virtual
 projects and preloaded snapshots without introducing a Git dependency.
 
-The resolver caches both present and missing documents. Overlapping resolves
+The resolver caches both present and missing documents, and the chain of
+documents that applies to a directory, so the files of one directory walk the
+directory tree once. Loads run on one blocking actor per resolver, however many
+resolves are in flight. Overlapping resolves
 share pending loads for the same configuration. Failures reach every waiting
 caller and are not cached, allowing a later call to retry.
 

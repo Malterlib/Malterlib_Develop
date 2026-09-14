@@ -53,5 +53,6 @@ namespace NMib::NDevelop
 		FEditorConfigLoader mp_fLoader;
 		NStr::CStr mp_Boundary;
 		NStorage::TCSharedPointer<NPrivate::CEditorConfigCache> mp_pCache;
+		NConcurrency::CBlockingActorCheckout mp_BlockingActor;	// Loads queue on one thread; many resolves in flight must not each take one.
 	};
 }
