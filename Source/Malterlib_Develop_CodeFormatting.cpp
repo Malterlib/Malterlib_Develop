@@ -1673,7 +1673,7 @@ namespace
 	bool CFormattingAnalyzer::fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore)
 	{
 		auto const &Node = m_Structure.f_GetNodes()[_iNode];
-		if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket == ECodeBracket::mc_Brace)
+		if (Node.m_Kind != ECodeNodeKind::mc_Group)
 			return false;
 
 		// An empty group has nothing to put on its own line. Reporting that keeps the
@@ -2794,27 +2794,49 @@ namespace
 		auto nContinuation = _bClause || !_bIndent ? _iIndent : _iIndent + nTab;
 		bool bStatement = Node.m_Kind == ECodeNodeKind::mc_Statement;
 		bool bSplit = false;
+		// A declaration is never split before its name while it has another way to fit:
+		// its parameter list can be opened, or its return type moved behind that list. An
+		// explicit instantiation has neither, and then its argument list is the only scope
+		// it has, so that is where it breaks.
+		bool bNamedScope = false;
 		TCVector<umint> Scopes;
-		for (auto iChild : Node.m_Children)
+		for (umint iPass = 0; iPass < 2; ++iPass)
 		{
-			auto const &Child = Nodes[iChild];
-			if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_Bracket == ECodeBracket::mc_Brace)
-				continue;
+			for (auto iChild : Node.m_Children)
+			{
+				// A braced initializer is a scope like any other: it can be opened. Closing one
+				// that is already open is what it never does, which its own multi-line flag
+				// already refuses.
+				auto const &Child = Nodes[iChild];
+				if (Child.m_Kind != ECodeNodeKind::mc_Group)
+					continue;
 
-			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken > _iLast)
-				continue;
+				if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken > _iLast)
+					continue;
 
-			// A declaration is never split before its name, and a trailing return type is
-			// one unit on its own line.
-			if (bStatement && (Child.m_iLastToken < m_iSplitFirstParen || Child.m_iFirstToken > m_iSplitTrailingReturn))
-				continue;
+				// A trailing return type is one unit on its own line.
+				if (bStatement && Child.m_iFirstToken > m_iSplitTrailingReturn)
+					continue;
 
-			// A cast converts what follows it, so its parentheses belong to that operand
-			// rather than being a scope of their own.
-			if (fp_IsCastGroup(iChild))
-				continue;
+				// A cast converts what follows it, so its parentheses belong to that operand
+				// rather than being a scope of their own.
+				if (fp_IsCastGroup(iChild))
+					continue;
 
-			Scopes.f_Insert(iChild);
+				bool bBeforeName = bStatement && Child.m_iLastToken < m_iSplitFirstParen;
+				if (!iPass)
+				{
+					auto iInner = fp_NextCode(Child.m_iFirstToken);
+					bNamedScope |= !bBeforeName && iInner >= 0 && umint(iInner) != Child.m_iLastToken;
+
+					continue;
+				}
+
+				if (bBeforeName && bNamedScope)
+					continue;
+
+				Scopes.f_Insert(iChild);
+			}
 		}
 
 		// Where the line may break: in front of a scope that follows another scope's closing

@@ -490,6 +490,21 @@ namespace
 					;
 				};
 
+				DMibTestCategory("Braced")
+				{
+					// A braced initializer is opened like any other scope.
+					CStr Wide;
+					for (umint i = 0; i < 90; ++i)
+						Wide += "W";
+
+					CStr Braced = CStr("void f()\n{\n\treturn CVersions{fg_Max(@), fg_Min(@)};\n}\n").f_Replace("@", Wide);
+					CStr Opened = CStr("void f()\n{\n\treturn CVersions\n\t\t{\n\t\t\tfg_Max(@)\n\t\t\t, fg_Min(@)\n\t\t}\n\t;\n}\n").f_Replace("@", Wide);
+					fg_ExpectFormat("Opened", Braced, Opened);
+					// One that is already open is never closed again, however short it is.
+					CStr Short = "void f()\n{\n\treturn CVersions\n\t\t{\n\t\t\t1\n\t\t\t, 2\n\t\t}\n\t;\n}\n";
+					fg_ExpectFormat("Kept", Short, Short);
+				};
+
 				DMibTestCategory("Clause")
 				{
 					// A clause ends at its condition, so its body opens a statement of its
