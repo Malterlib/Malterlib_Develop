@@ -262,6 +262,36 @@ namespace
 					fg_ExpectFormat("PureVirtual", "struct C\n{\n\tvirtual void f() = 0;\n};\n", "struct C\n{\n\tvirtual void f() = 0;\n};\n");
 				};
 
+				DMibTestCategory("TokenSpace")
+				{
+					// A member access and a scope marker hug their operands; a keyword stands
+					// apart from its parenthesis; a label's colon hugs it; a unary sign hugs its
+					// operand and a binary one is written apart.
+					fg_ExpectFormat("MemberAccess", "void f()\n{\n\ta . f( ) -> g( 1 ) ;\n}\n", "void f()\n{\n\ta.f()->g(1);\n}\n");
+					fg_ExpectFormat("Keyword", "void f()\n{\n\tif constexpr(a)\n\t\treturn(b);\n}\n", "void f()\n{\n\tif constexpr (a)\n\t\treturn (b);\n}\n");
+					fg_ExpectFormat
+						(
+							"Label"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1 : return;\n\tdefault : break;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1: return;\n\tdefault: break;\n\t}\n}\n"
+						)
+					;
+					fg_ExpectFormat("Sign", "void f()\n{\n\tx = - 1 + y - - z;\n}\n", "void f()\n{\n\tx = -1 + y - -z;\n}\n");
+					// A gap holding a comment is not on one line, and an ambiguous pair keeps
+					// its spelling.
+					fg_ExpectFormat("Kept", "void f()\n{\n\tx = a /* c */ .b;\n\ty = c * d;\n}\n", "void f()\n{\n\tx = a /* c */ .b;\n\ty = c * d;\n}\n");
+					// A template header is spaced whatever the source had, a trailing return
+					// type's arrow stands apart on both sides, and a comparison passed to a
+					// macro hugs the separators around it.
+					fg_ExpectFormat("Header", "template < typename t_C >\nvoid fg_F();\n", "template <typename t_C>\nvoid fg_F();\n");
+					fg_ExpectFormat("TrailingArrow", "auto fg_F(int _A)->int\n{\n}\n", "auto fg_F(int _A) -> int\n{\n}\n");
+					fg_ExpectFormat("MacroOperator", "void f()\n{\n\tDMibExpect(a, < , b);\n}\n", "void f()\n{\n\tDMibExpect(a, <, b);\n}\n");
+					// A path in a macro argument, a function type in an alias, and an operator
+					// function's name all keep their spelling.
+					CStr Spelled = "using FCall = void (int);\nbool operator ==(C const &) const;\nvoid f()\n{\n\tDMibLog(Mib/Core/Log, \"x\");\n}\n";
+					fg_ExpectFormat("Spelled", Spelled, Spelled);
+				};
+
 				DMibTestCategory("BlankLines")
 				{
 					fg_ExpectFormat("AfterBrace", "void f()\n{\n\n\tint a;\n}\n", "void f()\n{\n\tint a;\n}\n");
@@ -372,7 +402,9 @@ namespace
 					// A bare name in front of the list is a call as well as a constructor, a
 					// default argument is an expression, a call's argument is not settled, and
 					// neither is a '&&' behind a template argument list in front of a name.
-					fg_ExpectFormat("BareName", "struct C\n{\n\tC(CStr &\n\t\t_A);\n};\n", "struct C\n{\n\tC(CStr &\n\t\t_A);\n};\n");
+					fg_ExpectFormat("BareName", "void f()\n{\n\tC(CStr &\n\t\t_A);\n}\n", "void f()\n{\n\tC(CStr &\n\t\t_A);\n}\n");
+					// In a class body there are no calls, so a bare name declares.
+					fg_ExpectFormat("MemberDeclaration", "struct C\n{\n\tC(CStr &\n\t\t_A);\n};\n", "struct C\n{\n\tC(CStr &_A);\n};\n");
 					fg_ExpectFormat("DefaultArgument", "void fg_F(int _A = a &\n\tb);\n", "void fg_F(int _A = a &\n\tb);\n");
 					fg_ExpectFormat("CallArgument", "void f()\n{\n\tg(a &\n\t\tb);\n}\n", "void f()\n{\n\tg(a &\n\t\tb);\n}\n");
 					fg_ExpectFormat("Ternary", "void f()\n{\n\tx = y ? g(a &\n\t\tb) : c;\n}\n", "void f()\n{\n\tx = y ? g(a &\n\t\tb) : c;\n}\n");

@@ -94,6 +94,7 @@ failure, not an edit.
 | `comma-space` | No space before a comma, one space after it on the same line. |
 | `operator-space` | One space around unambiguous binary operators. |
 | `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
+| `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon and a unary sign hug, a trailing return type's arrow stands apart. |
 | `block-blank-line` | Removes blank lines directly after an opening brace. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
@@ -122,6 +123,12 @@ behind an attribute on the clause's line, and behind a comment trailing the
 statement's last line. A nested `if` is two statements to the structure
 builder, so a block that shields a dangling `else` keeps its braces, and so do
 the bodies of `do`, `switch`, `try`, and `catch`.
+
+`token-space` applies `fg_GetCanonicalSpacing`, the same answers the line-break
+rule joins with, to every pair of adjacent tokens on one line, and leaves a pair
+alone where that function does not settle the spelling. An operator function's
+name is left alone too, since the sources spell it both ways, and so is a `/`
+written tight between two names, which is a path in a macro argument.
 
 `indentation` normalizes indentation characters, not indentation depth. The
 depth of a split statement's continuations and clause parentheses is decided by

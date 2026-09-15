@@ -63,6 +63,20 @@ namespace
 	// Wider than any line: what a block measures as, so that no range holding one fits.
 	constexpr umint gc_nBlockWidth = umint(1) << 24;
 
+	bool fg_IsCodeToken(CCodeToken const &_Token)
+	{
+		switch (_Token.m_Kind)
+		{
+			case ECodeTokenKind::mc_Identifier:
+			case ECodeTokenKind::mc_Number:
+			case ECodeTokenKind::mc_CharLiteral:
+			case ECodeTokenKind::mc_StringLiteral:
+			case ECodeTokenKind::mc_Punctuator:
+				return true;
+			default: return false;
+		}
+	}
+
 	bool fg_IsSpaceOrTab(ch8 _Char)
 	{
 		return _Char == ' ' || _Char == '\t';
@@ -1172,6 +1186,42 @@ namespace
 
 			fp_EnsureSingleSpace(i, true, "operator-space", "binary operators have one space before them");
 			fp_EnsureSingleSpace(i, false, "operator-space", "binary operators have one space after them");
+		}
+
+		// Every other pair of tokens on one line takes the spelling the standard settles
+		// for it, where it settles one: a member access and a scope marker hug their
+		// operands, a keyword stands apart from its parenthesis. A gap the layout breaks
+		// is its own, and one holding anything but spaces is not on one line.
+		for (umint i = 1; i < Tokens.f_GetLen(); ++i)
+		{
+			if (!fg_IsCodeToken(Tokens[i]))
+				continue;
+
+			auto iPrevious = fp_PreviousCode(i);
+			if (iPrevious < 0 || fp_IsBreakGap(i))
+				continue;
+
+			bool bOneLine = true;
+			for (auto iGap = umint(iPrevious) + 1; iGap < i; ++iGap)
+				bOneLine &= Tokens[iGap].m_Kind == ECodeTokenKind::mc_Whitespace;
+
+			if (!bOneLine)
+				continue;
+
+			// An operator function's name is spelled both ways in the sources, 'operator =('
+			// as well as 'operator () (', so the gaps in it keep what they have.
+			bool bOperatorName = false;
+			for (auto iBack = iPrevious; iBack >= 0 && !bOperatorName && umint(iPrevious) - umint(iBack) < 5; iBack = fp_PreviousCode(umint(iBack)))
+				bOperatorName = m_Tokens.f_IsText(Tokens[umint(iBack)], "operator");
+
+			if (bOperatorName)
+				continue;
+
+			auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iPrevious), i);
+			if (Spacing == ECodeSpacing::mc_Space)
+				fp_EnsureSingleSpace(i, true, "token-space", "these tokens are written with one space between them");
+			else if (Spacing == ECodeSpacing::mc_None)
+				fp_RemoveSpaceBefore(i, "token-space", "these tokens are written without a space between them");
 		}
 	}
 
@@ -3622,18 +3672,7 @@ namespace
 	// member access: 'fg_Get()->f_Call()'.
 	bool CFormattingAnalyzer::fp_IsTrailingReturnArrow(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		if (!m_Tokens.f_IsText(Tokens[_iToken], "->"))
-			return false;
-
-		auto iBefore = fp_PreviousCode(_iToken);
-		while (iBefore >= 0 && fp_IsFunctionQualifier(umint(iBefore)))
-			iBefore = fp_PreviousCode(umint(iBefore));
-
-		if (iBefore < 0 || !m_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
-			return false;
-
-		return fg_ClosesParameterList(m_Tokens, m_Structure, umint(iBefore));
+		return fg_IsTrailingReturnArrow(m_Tokens, m_Structure, _iToken);
 	}
 
 	bool CFormattingAnalyzer::fp_ClosesLambdaIntroducer(umint _iToken) const

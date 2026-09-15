@@ -111,4 +111,7 @@ namespace NMib::NDevelop
 
 	// True when the ')' at _iClose ends a parameter list rather than a call's arguments.
 	bool fg_ClosesParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose);
+
+	// True when the '->' at _iArrow introduces a trailing return type rather than a member access.
+	bool fg_IsTrailingReturnArrow(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iArrow);
 }
