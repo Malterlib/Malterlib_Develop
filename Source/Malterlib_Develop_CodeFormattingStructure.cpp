@@ -833,6 +833,10 @@ namespace
 	{
 		auto const &Tokens = _Tokens.f_GetTokens();
 		auto i = aint(_iToken);
+		// The keyword alone ends no name: what follows it is the rest of one.
+		if (_Tokens.f_IsText(Tokens[umint(i)], "operator"))
+			return false;
+
 		bool bParen = _Tokens.f_IsText(Tokens[umint(i)], ")");
 		if (bParen || _Tokens.f_IsText(Tokens[umint(i)], "]"))
 		{
@@ -1118,6 +1122,11 @@ namespace
 			break;
 		}
 
+		// An operator function's name ends in front of its parameter list, whatever the name
+		// is spelled with, and such a function has one wherever it is declared.
+		if (fg_NamesOperator(_Tokens, _Structure, umint(iName)))
+			return true;
+
 		// A name that ends in a template argument list starts in front of that list.
 		if (_Structure.f_IsAngleBracket(umint(iName)) && _Tokens.f_IsText(Tokens[umint(iName)], ">"))
 		{
@@ -1159,7 +1168,15 @@ namespace
 			iName = iOperator;
 		}
 		else if (fg_IsAnyText(_Tokens, Tokens[umint(iName)], gc_pExpressionKeywords))
-			return false;
+		{
+			// 'operator co_await', 'operator new' and 'operator delete' are named by the
+			// keyword an expression uses, and are declarations for all that.
+			auto iOperator = fg_PreviousCode(_Tokens, umint(iName));
+			if (iOperator < 0 || !_Tokens.f_IsText(Tokens[umint(iOperator)], "operator"))
+				return false;
+
+			iName = iOperator;
+		}
 
 		// What the statement spells in front of the name is a type or a specifier when it
 		// is made of names, qualification, template argument lists, and declarators.

@@ -138,7 +138,13 @@ a literal's suffix, or the type a conversion yields, qualified and with template
 arguments where it has them. That name stands apart from the keyword and from
 the parameter list behind it, so the forms are `operator = (`, `operator () (`,
 `operator [] (`, `operator ""_f (`, and `operator NStr::CStr ()`. A name is not
-a call, so the parenthesis of an ordinary one stays where it is.
+a call, so the parenthesis of an ordinary one stays where it is. What such a
+name stands in front of is a parameter list wherever the function is declared,
+which is also what tells the arrow behind it, a trailing return type's, from
+the member access that `->` otherwise is: neither `operator co_await`, named by
+a keyword an expression uses, nor `operator ""_f`, named by a suffix behind a
+literal, spells a type in front of the list the way an ordinary declaration
+does.
 
 An operator with an operand on both sides of it is written apart from both,
 whatever they are spelled with: `5 * 5`, `nFlags & mc_Mask`, `a + (b | c)`.

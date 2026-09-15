@@ -410,6 +410,16 @@ namespace
 					// macro hugs the separators around it.
 					fg_ExpectFormat("Header", "template < typename t_C >\nvoid fg_F();\n", "template <typename t_C>\nvoid fg_F();\n");
 					fg_ExpectFormat("TrailingArrow", "auto fg_F(int _A)->int\n{\n}\n", "auto fg_F(int _A) -> int\n{\n}\n");
+					// An operator function's arrow is one too, whatever names it: a keyword an
+					// expression uses, or a literal's suffix. Its parameter list is one wherever
+					// the function is declared, which is what the arrow behind it follows.
+					fg_ExpectFormat
+						(
+							"OperatorArrow"
+							, "struct C\n{\n\tauto operator co_await () &&->CAwaiter;\n};\n\nauto operator \"\"_x(ch8 const *_p)->CStr;\n"
+							, "struct C\n{\n\tauto operator co_await () && -> CAwaiter;\n};\n\nauto operator \"\"_x (ch8 const *_p) -> CStr;\n"
+						)
+					;
 					fg_ExpectFormat("MacroOperator", "void f()\n{\n\tDMibExpect(a, < , b);\n}\n", "void f()\n{\n\tDMibExpect(a, <, b);\n}\n");
 					// A path in a macro argument and a function type in an alias keep their
 					// spelling.
