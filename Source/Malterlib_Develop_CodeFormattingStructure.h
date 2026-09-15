@@ -105,4 +105,10 @@ namespace NMib::NDevelop
 
 	// True for a '*', '&' or '&&' that declares a pointer or reference rather than operating on two values.
 	bool fg_IsDeclaratorToken(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken);
+
+	// True when the ']' at _iToken closes a lambda's capture list rather than a subscript.
+	bool fg_IsCaptureList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose);
+
+	// True when the ')' at _iClose ends a parameter list rather than a call's arguments.
+	bool fg_ClosesParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose);
 }

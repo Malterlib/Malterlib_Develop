@@ -423,6 +423,64 @@ namespace
 					CStr Commented = "void f()\n{\n\tauto g = [&] {\n\t\t// why\n\t\th();\n\t};\n}\n";
 					fg_ExpectFormat("CommentedLambda", Commented, Commented);
 					fg_ExpectFormat("CommentedBody", "void f() {\n\t// why\n\tg();\n}\n", "void f()\n{\n\t// why\n\tg();\n}\n");
+					// A call holding a lambda body is written split: the body opens under its
+					// introducer at the element's indentation, its lines follow it, what
+					// comes after the call resumes under the closing parenthesis, and the
+					// terminator takes a line of its own.
+					CStr Call = "void f()\n{\n\tfg_Dispatch (\n\t\t[Promises = fg_Move(m_Promises), Result]() mutable {\n\t\t\tfor (auto &Promise : Promises)\n"
+						"\t\t\t\tPromise.f_SetResult(Result);\n\t\t})\n\t.f_DiscardResult();\n}\n"
+					;
+					CStr CallResult = "void f()\n{\n\tfg_Dispatch\n\t\t(\n\t\t\t[Promises = fg_Move(m_Promises), Result]() mutable\n\t\t\t{\n\t\t\t\tfor (auto &Promise : Promises)\n"
+						"\t\t\t\t\tPromise.f_SetResult(Result);\n\t\t\t}\n\t\t)\n\t\t.f_DiscardResult()\n\t;\n}\n"
+					;
+					fg_ExpectFormat("LambdaArgument", Call, CallResult);
+					fg_ExpectFormat
+						(
+							"LambdaArgumentOneLine"
+							, "void f()\n{\n\tg(a, [&] { h(); });\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\ta\n\t\t\t, [&]\n\t\t\t{\n\t\t\t\th();\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// The scope holding the body is the one opened; what stands in front of it
+					// stays on the line, a call's arguments and a member access included.
+					fg_ExpectFormat
+						(
+							"BlockScopeHead"
+							, "void f()\n{\n\tfg_Move(x).f_OnResultSet([&] { g(); });\n}\n"
+							, "void f()\n{\n\tfg_Move(x).f_OnResultSet\n\t\t(\n\t\t\t[&]\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// An arrow behind a call's arguments is a member access, not a trailing
+					// return type.
+					fg_ExpectFormat
+						(
+							"MemberArrow"
+							, "void f()\n{\n\tfg_GetSys()->f_GetLogger().f_SetDispatcher([&](int _a) { g(); });\n}\n"
+							, "void f()\n{\n\tfg_GetSys()->f_GetLogger().f_SetDispatcher\n\t\t(\n\t\t\t[&](int _a)\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"TrailingReturnAfterHeader"
+							, "template <typename t_C>\nauto fg_F(int _A, int _B)\n\t-> TCFuture<int>\n;\n"
+							, "template <typename t_C>\nauto fg_F(int _A, int _B) -> TCFuture<int>;\n"
+						)
+					;
+					// A body already on a line of its own moves with its element.
+					fg_ExpectFormat
+						(
+							"BodyFollowsElement"
+							, "void f()\n{\n\tif\n\t\t(\n\t\t\tg\n\t\t\t(\n\t\t\t\t[&]\n\t\t\t\t{\n\t\t\t\t\th();\n\t\t\t\t}\n\t\t\t)\n\t\t)\n\t{\n\t}\n}\n"
+							, "void f()\n{\n\tif\n\t(\n\t\tg\n\t\t(\n\t\t\t[&]\n\t\t\t{\n\t\t\t\th();\n\t\t\t}\n\t\t)\n\t)\n\t{\n\t}\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"NestedLambdaArgument"
+							, "void f()\n{\n\tco_await g(h([&]() -> TCFuture<void> {\n\t\tco_return {};\n\t}));\n}\n"
+							, "void f()\n{\n\tco_await g\n\t\t(\n\t\t\th\n\t\t\t(\n\t\t\t\t[&]() -> TCFuture<void>\n\t\t\t\t{\n\t\t\t\t\tco_return {};\n\t\t\t\t}\n\t\t\t)\n\t\t)\n\t;\n}\n"
+						)
+					;
 				};
 
 				DMibTestCategory("Bodies")
@@ -773,6 +831,17 @@ namespace
 						"\t\t\t(CThreadLocal &_ThreadLocal) mutable\n\t\t\t{\n\t\t\t\treturn;\n\t\t\t}\n\t\t)\n\t;\n}\n"
 					;
 					fg_ExpectFormat("CaptureDirective", Directive, Directive);
+					// A bare name behind a capture list, such as an attribute macro, trails the
+					// list on its line, and the parameter list starts the next one.
+					CStr Wide;
+					for (umint i = 0; i < 90; ++i)
+						Wide += "W";
+
+					CStr Macro = "void f()\n{\n\tg([" + Wide + ", " + Wide + "] mark_no_coroutine_debug() mutable { h(); });\n}\n";
+					CStr MacroResult = "void f()\n{\n\tg\n\t\t(\n\t\t\t[\n\t\t\t\t" + Wide + "\n\t\t\t\t, " + Wide +
+						"\n\t\t\t] mark_no_coroutine_debug\n\t\t\t() mutable\n\t\t\t{\n\t\t\t\th();\n\t\t\t}\n\t\t)\n\t;\n}\n"
+					;
+					fg_ExpectFormat("CaptureMacro", Macro, MacroResult);
 
 					// An explicit template parameter list is part of the introducer, so all
 					// three parts take a line together or none of them does.

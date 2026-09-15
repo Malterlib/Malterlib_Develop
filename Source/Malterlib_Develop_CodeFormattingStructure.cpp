@@ -777,33 +777,6 @@ namespace
 		return iFound;
 	}
 
-	// A capture list stands where an operand cannot: a subscript follows a name, a call, a
-	// template argument list, another subscript, or a literal.
-	bool fg_IsCaptureList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)
-	{
-		auto const &Tokens = _Tokens.f_GetTokens();
-		for (auto const &Node : _Structure.f_GetNodes())
-		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Square || Node.m_iLastToken != _iClose)
-				continue;
-
-			auto iBefore = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
-			if (iBefore < 0)
-				return true;
-
-			auto const &Before = Tokens[umint(iBefore)];
-			if (Before.m_Kind == ECodeTokenKind::mc_Identifier)
-				return fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords);
-
-			if (Before.m_Kind != ECodeTokenKind::mc_Punctuator)
-				return false;
-
-			return !_Tokens.f_IsText(Before, ")") && !_Tokens.f_IsText(Before, "]") && !_Structure.f_IsAngleBracket(umint(iBefore));
-		}
-
-		return false;
-	}
-
 	// Whether the group is a parameter list: a template header's, a lambda's, a catch
 	// clause's, or a function's. A function's is one when something is declared in front
 	// of the name, since C++ then reads the parenthesis as a parameter list even where an
@@ -896,6 +869,32 @@ namespace
 				if (!fg_IsSignificant(Token.m_Kind))
 					continue;
 
+				// A template header written on one line is no argument list to the builder,
+				// which only reads a '<' tight against a name that way, so its brackets are
+				// matched here and stepped over.
+				if (_Tokens.f_IsText(Token, "template"))
+				{
+					auto iOpen = fg_NextCode(_Tokens, i);
+					if (iOpen >= 0 && _Tokens.f_IsText(Tokens[umint(iOpen)], "<"))
+					{
+						umint nDepth = 0;
+						for (i = umint(iOpen); i <= umint(iBefore); ++i)
+						{
+							if (_Tokens.f_IsText(Tokens[i], "<"))
+								++nDepth;
+							else if (_Tokens.f_IsText(Tokens[i], ">"))
+								--nDepth;
+							else if (_Tokens.f_IsText(Tokens[i], ">>"))
+								nDepth = nDepth < 2 ? 0 : nDepth - 2;
+
+							if (!nDepth)
+								break;
+						}
+					}
+
+					continue;
+				}
+
 				bool bNested = false;
 				for (auto iChild : Parent.m_Children)
 				{
@@ -962,6 +961,46 @@ namespace
 
 namespace NMib::NDevelop
 {
+	// A capture list stands where an operand cannot: a subscript follows a name, a call, a
+	// template argument list, another subscript, or a literal.
+	bool fg_IsCaptureList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		for (auto const &Node : _Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Square || Node.m_iLastToken != _iClose)
+				continue;
+
+			auto iBefore = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+			if (iBefore < 0)
+				return true;
+
+			auto const &Before = Tokens[umint(iBefore)];
+			if (Before.m_Kind == ECodeTokenKind::mc_Identifier)
+				return fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords);
+
+			if (Before.m_Kind != ECodeTokenKind::mc_Punctuator)
+				return false;
+
+			return !_Tokens.f_IsText(Before, ")") && !_Tokens.f_IsText(Before, "]") && !_Structure.f_IsAngleBracket(umint(iBefore));
+		}
+
+		return false;
+	}
+
+	bool fg_ClosesParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)
+	{
+		auto const &Nodes = _Structure.f_GetNodes();
+		for (umint iNode = 0; iNode < Nodes.f_GetLen(); ++iNode)
+		{
+			auto const &Node = Nodes[iNode];
+			if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Paren && Node.m_iLastToken == _iClose)
+				return fg_IsParameterList(_Tokens, _Structure, iNode);
+		}
+
+		return false;
+	}
+
 	// A '*', '&' or '&&' declares a pointer or reference where only a type can stand in
 	// front of it: behind 'const', 'volatile', or another declarator; behind a name or a
 	// template argument list when nothing that could be an operand follows it, or when
@@ -1204,10 +1243,14 @@ namespace NMib::NDevelop
 			return ECodeSpacing::mc_None;
 
 		// '->' is a trailing return type as well as member access. After a parameter list
-		// or a function's qualifiers it can only be the former, which takes a space.
+		// or a function's qualifiers it can only be the former, which takes a space; after
+		// a call's arguments it can only be the latter, which takes none.
 		if (fRight("->"))
 		{
-			if (fLeft(")") || fLeft("const") || fLeft("volatile") || fLeft("noexcept") || fLeft("override") || fLeft("final"))
+			if (fLeft(")"))
+				return fg_ClosesParameterList(_Tokens, _Structure, _iLeft) ? ECodeSpacing::mc_Space : ECodeSpacing::mc_None;
+
+			if (fLeft("const") || fLeft("volatile") || fLeft("noexcept") || fLeft("override") || fLeft("final"))
 				return ECodeSpacing::mc_Space;
 
 			return ECodeSpacing::mc_Preserve;

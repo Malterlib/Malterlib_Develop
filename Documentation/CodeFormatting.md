@@ -179,9 +179,17 @@ plan writes are the lines a later pass sees.
 The decisions are kept per gap between tokens and written out once, so no
 decision depends on an edit already made, or on where the source happened to
 break its lines. A construct that contains a comment, a preprocessor directive,
-a multiline token, a block, or a braced initializer written across lines keeps
-its lines; only its inner constructs are brought back to one line where they
-fit. A braced initializer written across lines is excluded because it is data,
+a multiline token, or a braced initializer written across lines keeps its
+lines; only its inner constructs are brought back to one line where they fit.
+A lambda body inside a call is different: a block never fits on a line, so the
+call is written split, the scope holding the body is the one opened while what
+stands in front of it stays on the line where it fits, the body opens under its
+introducer at the element's indentation with its lines following it, what
+comes after the call resumes under the closing parenthesis, and the terminator
+takes a line of its own. A bare name behind a capture list, such as an
+attribute macro, trails the list on its line. An arrow behind a call's
+arguments is a member access, and only one behind a parameter list a trailing
+return type. A braced initializer written across lines is excluded because it is data,
 most of it written one element per line on purpose, including Malterlib's `_o=`
 and `_j=` command-line DSL. A template header, a `requires` clause, a label, and
 the statement a clause guards each keep their own line.

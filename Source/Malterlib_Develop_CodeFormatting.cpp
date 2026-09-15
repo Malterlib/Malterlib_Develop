@@ -60,6 +60,9 @@ namespace
 		DMibError("Invalid {}: '{}' (expected true or false)"_f << _Name << _Value);
 	}
 
+	// Wider than any line: what a block measures as, so that no range holding one fits.
+	constexpr umint gc_nBlockWidth = umint(1) << 24;
+
 	bool fg_IsSpaceOrTab(ch8 _Char)
 	{
 		return _Char == ' ' || _Char == '\t';
@@ -474,6 +477,7 @@ namespace
 		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_FollowsScope(umint _iToken) const;
 		bool fp_IsFunctionQualifier(umint _iToken) const;
+		bool fp_IsTrailingReturnArrow(umint _iToken) const;
 		umint fp_SkipFunctionQualifiers(umint _iToken) const;
 		bool fp_ClosesLambdaIntroducer(umint _iToken) const;
 		umint fp_SkipTemplateHeader(umint _iToken) const;
@@ -492,7 +496,10 @@ namespace
 		bool fp_IsGuard(umint _iNode) const;
 		void fp_LayoutBlockLines(umint _iNode, umint _iIndent);
 		void fp_PlaceBody(umint _iNode, umint _iBlock, umint _iIndent, bool _bDeclarator);
+		bool fp_PlaceBlock(umint _iBlock, umint _iIndent, umint _nReference);
 		void fp_ShiftBlock(umint _iBlock, aint _nDelta);
+		void fp_PrepareBlockEnds();
+		umint fp_GetSourceLineIndent(umint _iToken) const;
 		void fp_MarkInline(umint _iFirst, umint _iLast);
 		void fp_EmitLayout();
 		bool fp_IsRangeJoinable(umint _iNode, umint _iFirst, umint _iLast) const;
@@ -520,6 +527,7 @@ namespace
 		umint m_iSplitFirstParen = 0;							// A declaration is never split before its name.
 		umint m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
 		NContainer::TCVector<umint> m_TokenDepth;				// Bracket nesting of each token, for finding a range's own level.
+		NContainer::TCVector<umint> m_iBlockEnd;				// Indexed by token: the closing brace of the block the token opens, or the token count.
 		NContainer::TCVector<uint8> m_GapState;					// Indexed by token: what the gap in front of it becomes.
 		NContainer::TCVector<umint> m_GapIndent;				// The indentation a break in front of the token takes.
 		NContainer::TCVector<CCodeFormattingEdit> m_Structural;	// Return types moved behind their parameter lists.
@@ -1546,6 +1554,17 @@ namespace
 		umint iPrevious = _iFirstToken;
 		for (umint i = _iFirstToken; i <= _iLastToken; ++i)
 		{
+			// A block never fits on a line: it counts as wider than any line, its interior
+			// is not measured, and what follows resumes behind its closing brace.
+			if (i < m_iBlockEnd.f_GetLen() && m_iBlockEnd[i] <= _iLastToken)
+			{
+				nColumns += gc_nBlockWidth;
+				i = m_iBlockEnd[i];
+				iPrevious = i;
+
+				continue;
+			}
+
 			auto const &Token = Tokens[i];
 			auto Kind = Token.m_Kind;
 			if (Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice || Kind == ECodeTokenKind::mc_Whitespace)
@@ -1605,7 +1624,7 @@ namespace
 	bool CFormattingAnalyzer::fp_TryJoin(umint _iFirstToken, umint _iLastToken, umint _iStartColumn)
 	{
 		umint nColumns = 0;
-		if (!fp_MeasureJoinedWidth(_iFirstToken, _iLastToken, nColumns))
+		if (!fp_MeasureJoinedWidth(_iFirstToken, _iLastToken, nColumns) || nColumns >= gc_nBlockWidth)
 			return false;
 
 		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
@@ -1814,16 +1833,25 @@ namespace
 				return false;
 		}
 
-		// A block, a braced initializer written across lines, or anything else that fixes
-		// its own lines makes the construct around it unable to render inline. The node
-		// flags are propagated from descendants, so the direct children answer for all.
+		// A braced initializer written across lines, or anything else that fixes its own
+		// lines, makes the construct around it unable to render inline. The node flags are
+		// propagated from descendants, so the direct children answer for all. A block is
+		// the exception: a lambda body inside a group opens on a line of its own, and the
+		// construct around it is laid out as a split one.
 		for (auto iChild : m_Structure.f_GetNodes()[_iNode].m_Children)
 		{
 			auto const &Child = m_Structure.f_GetNodes()[iChild];
 			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken > _iLast)
 				continue;
 
-			if (Child.m_Kind == ECodeNodeKind::mc_Block || !Child.f_IsJoinable())
+			bool bFixed = Child.m_Kind == ECodeNodeKind::mc_Block
+				|| Child.m_Kind == ECodeNodeKind::mc_Unsupported
+				|| Child.m_bHasComment
+				|| Child.m_bHasDirective
+				|| Child.m_bHasMultiLineToken
+				|| Child.m_bHasMultiLineBrace
+			;
+			if (bFixed)
 				return false;
 		}
 
@@ -1833,7 +1861,7 @@ namespace
 	bool CFormattingAnalyzer::fp_FitsInline(umint _iFirst, umint _iLast, umint _iIndent) const
 	{
 		umint nColumns = 0;
-		if (!fp_MeasureJoinedWidth(_iFirst, _iLast, nColumns))
+		if (!fp_MeasureJoinedWidth(_iFirst, _iLast, nColumns) || nColumns >= gc_nBlockWidth)
 			return false;
 
 		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
@@ -2485,7 +2513,6 @@ namespace
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
 		auto const &Node = Nodes[_iNode];
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
 		NContainer::TCVector<umint> Entries;
 		Entries.f_Insert(_iFirst);
 		for (umint i = _iFirst + 1; i <= _iLast; ++i)
@@ -2506,20 +2533,10 @@ namespace
 			if (!fp_IsRangeJoinable(_iNode, Entries[iEntry], iEnd))
 				continue;
 
+			// An entry is a unit of its own: its scope markers align with it, as a call's
+			// do inside a split expression, and a lambda body in it opens under it.
 			fp_BreakBefore(Entries[iEntry], _iIndent);
-			if (fp_FitsInline(Entries[iEntry], iEnd, _iIndent))
-			{
-				fp_MarkInline(Entries[iEntry], iEnd);
-
-				continue;
-			}
-
-			for (auto iChild : Node.m_Children)
-			{
-				auto const &Child = Nodes[iChild];
-				if (Child.m_iFirstToken >= Entries[iEntry] && Child.m_iLastToken <= iEnd)
-					fp_LayoutGroup(iChild, _iIndent + nTab);
-			}
+			fp_LayoutRange(_iNode, Entries[iEntry], iEnd, _iIndent, false, false);
 		}
 	}
 
@@ -2587,7 +2604,7 @@ namespace
 		// member access is spelled the same way, so the arrow only counts when nothing but
 		// the function's qualifiers stands between it and the parameter list.
 		umint iTrailingReturn = TCLimitsInt<umint>::mc_Max;
-		if (bDeclarator && iFirstParenGroupStart)
+		if (bDeclarator && iFirstParenGroupStart && fg_ClosesParameterList(m_Tokens, m_Structure, iFirstParenGroup))
 		{
 			static ch8 const *const gsc_pQualifiers[] =
 				{
@@ -2821,20 +2838,32 @@ namespace
 	void CFormattingAnalyzer::fp_PlaceBody(umint _iNode, umint _iBlock, umint _iIndent, bool _bDeclarator)
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
-		auto const &Block = Nodes[_iBlock];
-		auto iBrace = Block.m_iFirstToken;
-		if (Block.m_Kind != ECodeNodeKind::mc_Block || m_bOperatorSplit || iBrace == Nodes[_iNode].m_iFirstToken || fp_IsFirstOnLine(iBrace))
+		auto iBrace = Nodes[_iBlock].m_iFirstToken;
+		if (m_bOperatorSplit || iBrace == Nodes[_iNode].m_iFirstToken || fp_IsFirstOnLine(iBrace))
 			return;
 
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
-		umint nIndent = _bDeclarator ? _iIndent : _iIndent + nTab;
-		auto nDelta = aint(nIndent) - aint(_iIndent);
-		if (nDelta && (Block.m_bHasComment || Block.m_bHasDirective || Block.m_bHasMultiLineToken))
-			return;
+		fp_PlaceBlock(_iBlock, _bDeclarator ? _iIndent : _iIndent + nTab, _iIndent);
+	}
 
-		fp_OwnLineBefore(iBrace, nIndent);
+	// Opens the block on a line of its own at the indentation, moving the lines inside it
+	// by the distance from the indentation they were written against. A comment or a
+	// directive inside could not follow such a move, so the block then stays where it is.
+	bool CFormattingAnalyzer::fp_PlaceBlock(umint _iBlock, umint _iIndent, umint _nReference)
+	{
+		auto const &Block = m_Structure.f_GetNodes()[_iBlock];
+		if (Block.m_Kind != ECodeNodeKind::mc_Block)
+			return false;
+
+		auto nDelta = aint(_iIndent) - aint(_nReference);
+		if (nDelta && (Block.m_bHasComment || Block.m_bHasDirective || Block.m_bHasMultiLineToken))
+			return false;
+
+		fp_OwnLineBefore(Block.m_iFirstToken, _iIndent);
 		if (nDelta)
 			fp_ShiftBlock(_iBlock, nDelta);
+
+		return true;
 	}
 
 	// Moves every line the block's tokens start by the given number of columns.
@@ -3022,7 +3051,41 @@ namespace
 			m_GapIndent[i] = 0;
 		}
 
+		fp_PrepareBlockEnds();
 		fp_LayoutNode(0, 0);
+	}
+
+	void CFormattingAnalyzer::fp_PrepareBlockEnds()
+	{
+		auto nTokens = m_Tokens.f_GetTokens().f_GetLen();
+		m_iBlockEnd.f_SetLen(nTokens);
+		for (auto &iEnd : m_iBlockEnd)
+			iEnd = nTokens;
+
+		for (auto const &Node : m_Structure.f_GetNodes())
+		{
+			if (Node.m_Kind == ECodeNodeKind::mc_Block && Node.m_Bracket == ECodeBracket::mc_Brace)
+				m_iBlockEnd[Node.m_iFirstToken] = Node.m_iLastToken;
+		}
+	}
+
+	// The indentation of the line the token stands on in the source, whatever the layout
+	// has decided since: the lines a body was written against.
+	umint CFormattingAnalyzer::fp_GetSourceLineIndent(umint _iToken) const
+	{
+		auto const &Source = m_Request.m_Source;
+		auto iLine = m_Lines.f_FindLine(m_Tokens.f_GetTokens()[_iToken].m_iOffset);
+		auto iStart = m_Lines.f_GetLineStart(iLine);
+		auto iEnd = m_Lines.f_GetLineContentEnd(iLine);
+		auto iIndent = iStart;
+		while (iIndent < iEnd && fg_IsSpaceOrTab(Source.f_GetStr()[iIndent]))
+			++iIndent;
+
+		umint nColumns = 0;
+		if (!fg_MeasureTextColumns(Source.f_GetStr() + iStart, iIndent - iStart, m_Request.m_Settings.m_nTabWidth, nColumns))
+			return 0;
+
+		return nColumns;
 	}
 }
 
@@ -3268,6 +3331,25 @@ namespace
 
 	// A capture list, or a lambda's own template parameter list, ends one part of an
 	// introducer. What follows stands on its own rather than belonging to what came before.
+	// An arrow introduces a trailing return type when a parameter list, or a function's
+	// qualifiers behind one, stands in front of it; behind a call's arguments it is a
+	// member access: 'fg_Get()->f_Call()'.
+	bool CFormattingAnalyzer::fp_IsTrailingReturnArrow(umint _iToken) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		if (!m_Tokens.f_IsText(Tokens[_iToken], "->"))
+			return false;
+
+		auto iBefore = fp_PreviousCode(_iToken);
+		while (iBefore >= 0 && fp_IsFunctionQualifier(umint(iBefore)))
+			iBefore = fp_PreviousCode(umint(iBefore));
+
+		if (iBefore < 0 || !m_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
+			return false;
+
+		return fg_ClosesParameterList(m_Tokens, m_Structure, umint(iBefore));
+	}
+
 	bool CFormattingAnalyzer::fp_ClosesLambdaIntroducer(umint _iToken) const
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
@@ -3400,7 +3482,7 @@ namespace
 			// An arrow behind a parameter list or a function's qualifiers introduces a
 			// trailing return type, which is a break of its own and not a member access.
 			auto const &Before = Tokens[umint(iBefore)];
-			if (m_Tokens.f_IsText(Tokens[i], "->") && (m_Tokens.f_IsText(Before, ")") || fp_IsFunctionQualifier(umint(iBefore))))
+			if (m_Tokens.f_IsText(Tokens[i], "->") && fp_IsTrailingReturnArrow(i))
 				continue;
 
 			bool bOperand = Before.m_Kind == ECodeTokenKind::mc_Identifier
@@ -3565,7 +3647,7 @@ namespace
 			if (iBefore < 0 || umint(iBefore) < _iFirst)
 				continue;
 
-			if (m_Tokens.f_IsText(Tokens[umint(iBefore)], ")") || fp_IsFunctionQualifier(umint(iBefore)))
+			if (fp_IsTrailingReturnArrow(i))
 			{
 				Breaks.f_Insert(i);
 				Introducer.f_Insert(false);
@@ -3648,6 +3730,21 @@ namespace
 				continue;
 			}
 
+			// A scope holding a lambda body is the one to open, since the body starts a line
+			// of its own whatever else is done: what stands in front of that scope stays on
+			// the line where it fits, earlier scopes included.
+			for (umint i = iScope; i < Scopes.f_GetLen(); ++i)
+			{
+				if (!Nodes[Scopes[i]].m_bHasBlock)
+					continue;
+
+				auto iHead = fp_PreviousCode(Nodes[Scopes[i]].m_iFirstToken);
+				if (i > iScope && iHead >= 0 && umint(iHead) >= iLineFirst && fp_FitsInline(iLineFirst, umint(iHead), nLineIndent))
+					iScope = i;
+
+				break;
+			}
+
 			// Nothing on the line can be moved down whole, so the next scope is opened. With
 			// no scope left, the line's member accesses are the last thing that can give.
 			if (iScope >= Scopes.f_GetLen())
@@ -3721,6 +3818,15 @@ namespace
 				auto iAfter = fp_NextCode(umint(iNext));
 				iResume = iAfter < 0 ? _iLast + 1 : umint(iAfter);
 			}
+			else if (Scope.m_Bracket == ECodeBracket::mc_Square && Tokens[umint(iNext)].m_Kind == ECodeTokenKind::mc_Identifier)
+			{
+				// A bare name behind a capture list, such as an attribute macro, trails the
+				// list on its line; the parameter list behind the name starts the next one.
+				auto iAfter = fp_NextCode(umint(iNext));
+				bool bTrails = iAfter >= 0 && m_Tokens.f_IsText(Tokens[umint(iAfter)], "(") && fg_IsCaptureList(m_Tokens, m_Structure, Scope.m_iLastToken);
+				if (bTrails)
+					iResume = umint(iAfter);
+			}
 
 			auto iLastQualifier = iResume != umint(iNext) ? fp_PreviousCode(iResume) : aint(-1);
 			if (iLastQualifier >= 0 && fp_FitsInline(Scope.m_iLastToken, umint(iLastQualifier), nLineIndent))
@@ -3744,6 +3850,33 @@ namespace
 	// first, and a resulting line is only broken further when it is still too long.
 	bool CFormattingAnalyzer::fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations, bool _bMustSplit)
 	{
+		// A lambda body inside the range opens on a line of its own at the range's
+		// indentation, its lines following it from where the source wrote them, and what
+		// stands in front of it is a line that ends there. What follows the body keeps its
+		// place behind the closing brace.
+		auto const &Nodes = m_Structure.f_GetNodes();
+		for (auto iChild : Nodes[_iNode].m_Children)
+		{
+			auto const &Child = Nodes[iChild];
+			if (Child.m_Kind != ECodeNodeKind::mc_Block || Child.m_iFirstToken < _iFirst || Child.m_iLastToken > _iLast)
+				continue;
+
+			auto iBrace = Child.m_iFirstToken;
+			auto nReference = fp_GetSourceLineIndent(_iFirst);
+			auto iHeadLast = fp_PreviousCode(iBrace);
+			if (iHeadLast >= 0 && umint(iHeadLast) >= _iFirst)
+				fp_LayoutRange(_iNode, _iFirst, umint(iHeadLast), _iIndent, _bClause, _bIndentContinuations);
+
+			// A body already on a line of its own still moves with its element, so that
+			// its depth follows the element's new indentation.
+			if (!fp_IsFirstOnLine(iBrace) || fp_GetStatementIndent(iBrace) != _iIndent)
+				fp_PlaceBlock(iChild, _iIndent, nReference);
+
+			fp_LayoutNode(iChild, _iIndent);
+
+			return true;
+		}
+
 		// Fitting is not the same as being written that way: a range the layout keeps on
 		// one line is put there, so the result does not depend on where the source broke.
 		if (!_bMustSplit && fp_FitsInline(_iFirst, _iLast, _iIndent))
