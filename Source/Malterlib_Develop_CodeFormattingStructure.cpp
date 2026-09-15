@@ -825,6 +825,22 @@ namespace
 		return _Tokens.f_IsText(_Token, "*") || _Tokens.f_IsText(_Token, "&") || _Tokens.f_IsText(_Token, "&&");
 	}
 
+	// A '&' or '&&' behind a parameter list, with only the cv-qualifiers of the function
+	// between, is its ref-qualifier: 'f_Get() const &noexcept'. It declares nothing, and
+	// what follows it is the rest of the declaration rather than a name.
+	bool fg_IsRefQualifier(CCodeTokenStream const &_Tokens, umint _iToken)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		if (!fg_IsDeclaratorText(_Tokens, Tokens[_iToken]))
+			return false;
+
+		auto iBefore = fg_PreviousCode(_Tokens, _iToken);
+		while (iBefore >= 0 && (_Tokens.f_IsText(Tokens[umint(iBefore)], "const") || _Tokens.f_IsText(Tokens[umint(iBefore)], "volatile")))
+			iBefore = fg_PreviousCode(_Tokens, umint(iBefore));
+
+		return iBefore >= 0 && _Tokens.f_IsText(Tokens[umint(iBefore)], ")");
+	}
+
 	// Keywords that stand in front of a name or a parenthesis without declaring anything.
 	ch8 const *const gc_pExpressionKeywords[] =
 		{
@@ -1473,7 +1489,7 @@ namespace NMib::NDevelop
 
 		auto const &Previous = Tokens[umint(iPrevious)];
 		if (_Tokens.f_IsText(Previous, "const") || _Tokens.f_IsText(Previous, "volatile"))
-			return true;
+			return !fg_IsRefQualifier(_Tokens, _iToken);
 
 		if (fg_IsDeclaratorText(_Tokens, Previous))
 			return !_Tokens.f_IsText(Previous, "&&") && fg_IsDeclaratorToken(_Tokens, _Structure, umint(iPrevious));
@@ -1854,7 +1870,7 @@ namespace NMib::NDevelop
 				"const", "volatile", "noexcept", "override", "final", "mutable", "requires", "&", "&&"
 			}
 		;
-		bool bAfterDeclarator = fLeft(")");
+		bool bAfterDeclarator = fLeft(")") || fg_IsRefQualifier(_Tokens, _iLeft);
 		for (auto pQualifier : gsc_pQualifiers)
 			bAfterDeclarator |= fLeft(pQualifier) && !fLeft("&") && !fLeft("&&");
 

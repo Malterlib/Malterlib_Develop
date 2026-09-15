@@ -220,7 +220,11 @@ A `*`, `&`, or `&&` is a declarator, separated from its type and hugging the
 name it declares, where only a type can stand in front of it: behind `const`,
 `volatile`, or another declarator; behind a name or a template argument list
 when a separator, a closing marker, an ellipsis, or `=` follows it; and inside
-a parameter list, outside a default argument. A parameter list is a template
+a parameter list, outside a default argument. Behind a parameter list, with
+only the function's cv-qualifiers between, the same token is its ref-qualifier
+instead. That declares nothing, so what follows it is the rest of the
+declaration rather than a name, and stands apart from it: `f_Get() const &
+noexcept`. A parameter list is a template
 header's, a lambda's, a catch clause's, or a function's. A function's
 parenthesis is its parameter list when a specifier or a type stands in front of
 the name, as C++ reads it, and behind a bare name only when a body, an

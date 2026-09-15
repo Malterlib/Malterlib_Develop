@@ -269,6 +269,15 @@ namespace
 					fg_ExpectFormat("OperatorName", "struct C\n{\n\tbool operator==(C const &_Other) const;\n};\n", "struct C\n{\n\tbool operator==(C const &_Other) const;\n};\n");
 					// Declarators keep their Malterlib spelling; they are not expression operators.
 					fg_ExpectFormat("Declarator", "void f(CStr const &_A, CStr &&_B);\n", "void f(CStr const &_A, CStr &&_B);\n");
+					// A ref-qualifier declares nothing, so what follows it is the rest of the
+					// declaration rather than a name, and stands apart from it.
+					fg_ExpectFormat
+						(
+							"RefQualifier"
+							, "struct C\n{\n\tCStr f_A() const &noexcept;\n\tCStr f_B() const &;\n\tCStr const &f_C() const;\n};\n"
+							, "struct C\n{\n\tCStr f_A() const & noexcept;\n\tCStr f_B() const &;\n\tCStr const &f_C() const;\n};\n"
+						)
+					;
 					// A template header stands in front of a constructor's name in place of a
 					// return type, so what the parenthesis behind it holds is declared.
 					fg_ExpectFormat
