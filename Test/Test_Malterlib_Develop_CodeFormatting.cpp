@@ -269,6 +269,25 @@ namespace
 					fg_ExpectFormat("OperatorName", "struct C\n{\n\tbool operator==(C const &_Other) const;\n};\n", "struct C\n{\n\tbool operator==(C const &_Other) const;\n};\n");
 					// Declarators keep their Malterlib spelling; they are not expression operators.
 					fg_ExpectFormat("Declarator", "void f(CStr const &_A, CStr &&_B);\n", "void f(CStr const &_A, CStr &&_B);\n");
+					// A template header stands in front of a constructor's name in place of a
+					// return type, so what the parenthesis behind it holds is declared.
+					fg_ExpectFormat
+						(
+							"ConstructorTemplate"
+							, "struct C\n{\n\ttemplate <typename tf_CP0>\n\tC(tf_CP0 && _P0);\n};\n"
+							, "struct C\n{\n\ttemplate <typename tf_CP0>\n\tC(tf_CP0 &&_P0);\n};\n"
+						)
+					;
+					// A deduction guide is a declaration too, so its arrow is written apart
+					// like a trailing return type's. Without a header in front of it the name
+					// is spelled like a call, and the arrow keeps what it has.
+					fg_ExpectFormat
+						(
+							"DeductionGuide"
+							, "template <typename t_C>\nC(T<t_C>)->C<t_C>;\n\nC(CVoidTag)->C<void>;\n"
+							, "template <typename t_C>\nC(T<t_C>) -> C<t_C>;\n\nC(CVoidTag)->C<void>;\n"
+						)
+					;
 					fg_ExpectFormat("Pointer", "void f()\n{\n\tauto *pA = &B;\n\tauto C = *pA * 2;\n}\n", "void f()\n{\n\tauto *pA = &B;\n\tauto C = *pA * 2;\n}\n");
 					fg_ExpectFormat("PureVirtual", "struct C\n{\n\tvirtual void f() = 0;\n};\n", "struct C\n{\n\tvirtual void f() = 0;\n};\n");
 				};

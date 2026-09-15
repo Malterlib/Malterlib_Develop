@@ -224,7 +224,12 @@ a parameter list, outside a default argument. A parameter list is a template
 header's, a lambda's, a catch clause's, or a function's. A function's
 parenthesis is its parameter list when a specifier or a type stands in front of
 the name, as C++ reads it, and behind a bare name only when a body, an
-initializer list, a qualifier, or a defaulted or deleted definition follows.
+initializer list, a qualifier, or a defaulted or deleted definition follows. A
+template header counts as standing in front of the name: it is what a
+constructor template, which has no return type, spells there, as in
+`template <typename tf_CP0>` above `C(tf_CP0 &&_P0)`, and it is what tells a
+deduction guide's arrow, written apart like a trailing return type's, from the
+member access that `C(x)->y` is without one.
 `cFoo<T> && cBar<T>` and `TCFoo<T> &&_Other` spell the same tokens, so a `&&`
 behind a template argument list in front of a name keeps its spelling. The
 line-break rule never splits at a declarator.

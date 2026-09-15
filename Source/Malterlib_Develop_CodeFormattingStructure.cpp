@@ -912,6 +912,9 @@ namespace
 				auto iOpen = fg_NextCode(_Tokens, i);
 				if (iOpen >= 0 && _Tokens.f_IsText(Tokens[umint(iOpen)], "<"))
 				{
+					// A header declares what follows it, which is what a constructor template
+					// has in front of its name in place of a return type.
+					bSpelled = true;
 					umint nDepth = 0;
 					for (i = umint(iOpen); i <= _iLast; ++i)
 					{
