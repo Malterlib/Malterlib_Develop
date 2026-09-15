@@ -122,7 +122,9 @@ statement ending in `;` with nothing but whitespace between the guard and it,
 behind an attribute on the clause's line, and behind a comment trailing the
 statement's last line. A nested `if` is two statements to the structure
 builder, so a block that shields a dangling `else` keeps its braces, and so do
-the bodies of `do`, `switch`, `try`, and `catch`.
+the bodies of `do`, `switch`, `try`, and `catch`. The decision reaches every
+guarded statement, a lambda's body included, whose block belongs to the group
+the lambda is written in rather than to the statement around it.
 
 `token-space` applies `fg_GetCanonicalSpacing`, the same answers the line-break
 rule joins with, to every pair of adjacent tokens on one line, and leaves a pair

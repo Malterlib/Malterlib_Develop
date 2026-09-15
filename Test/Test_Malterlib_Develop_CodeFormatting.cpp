@@ -555,8 +555,10 @@ namespace
 					fg_ExpectFormat
 						(
 							"LambdaBody"
-							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\t\tfor (auto &E : R)\n\t\t\t\t\t{\n\t\t\t\t\t\tE.f_Go();\n\t\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
-							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\tfor (auto &E : R)\n\t\t\t\t{\n\t\t\t\t\tE.f_Go();\n\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\t\tfor (auto &E : R)\n\t\t\t\t\t{\n"
+								"\t\t\t\t\t\tE.f_Go();\n\t\t\t\t\t\tE.f_Done();\n\t\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\tfor (auto &E : R)\n\t\t\t\t{\n"
+								"\t\t\t\t\tE.f_Go();\n\t\t\t\t\tE.f_Done();\n\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
 						)
 					;
 					// A statement whose own lines are fixed keeps the one it starts too: a
@@ -575,6 +577,16 @@ namespace
 					// source wrote them on.
 					fg_ExpectFormat("Dropped", "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t}\n\telse\n\t{\n\t\th();\n\t}\n}\n", "void f()\n{\n\tif (a)\n\t\tg();\n\telse\n\t\th();\n}\n", false);
 					fg_ExpectFormat("OneLine", "void f()\n{\n\tif (a) { g(); } else { h(); }\n}\n", "void f()\n{\n\tif (a)\n\t\tg();\n\telse\n\t\th();\n}\n", false);
+					// A lambda's body belongs to the group it is written in, which is how the
+					// walk that decides the conversions reaches the statements inside it.
+					fg_ExpectFormat
+						(
+							"InLambdaBody"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\tfor (auto &E : R)\n\t\t\t\t{\n\t\t\t\t\tE.f_Go();\n\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\tfor (auto &E : R)\n\t\t\t\t\tE.f_Go();\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							, false
+						)
+					;
 					fg_ExpectFormat
 						(
 							"Loop"

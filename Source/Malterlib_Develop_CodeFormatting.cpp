@@ -483,6 +483,7 @@ namespace
 		void fp_RuleLineBreaks();
 		void fp_LayoutNode(umint _iNode, umint _iIndent);
 		void fp_LayoutStatement(umint _iNode, umint _iIndent);
+		void fp_ProbeBodies(umint _iNode, umint _iIndent);
 		void fp_LayoutInitializerList(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent);
 		umint fp_FindInitializerList(umint _iNode, umint _iFirstParen, umint _iLast) const;
 		bool fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore = true);
@@ -2690,6 +2691,27 @@ namespace
 		}
 	}
 
+	// The conversions are decided by a walk over the statements and the blocks they own. A
+	// lambda's body belongs to the group it is written in rather than to the statement
+	// around it, so the walk reaches one through the groups of that statement.
+	void CFormattingAnalyzer::fp_ProbeBodies(umint _iNode, umint _iIndent)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		for (auto iChild : Nodes[_iNode].m_Children)
+		{
+			if (Nodes[iChild].m_Kind != ECodeNodeKind::mc_Group)
+				continue;
+
+			for (auto iInner : Nodes[iChild].m_Children)
+			{
+				if (Nodes[iInner].m_Kind == ECodeNodeKind::mc_Block)
+					fp_LayoutNode(iInner, _iIndent);
+			}
+
+			fp_ProbeBodies(iChild, _iIndent);
+		}
+	}
+
 	void CFormattingAnalyzer::fp_LayoutStatement(umint _iNode, umint _iIndent)
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
@@ -2869,6 +2891,8 @@ namespace
 				fp_PlaceBody(_iNode, iBlock, _iIndent, bDeclarator);
 				fp_LayoutNode(iBlock, _iIndent);
 			}
+
+			fp_ProbeBodies(_iNode, _iIndent);
 
 			return;
 		}
