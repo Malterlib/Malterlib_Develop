@@ -521,6 +521,33 @@ namespace
 					;
 				};
 
+				DMibTestCategory("BodyOwner")
+				{
+					// A body that already has a line of its own still opens where its head
+					// puts it: a lambda's one level in, whether the lambda is assigned,
+					// returned or handed to an operator.
+					fg_ExpectFormat
+						(
+							"OwnLine"
+							, "void f()\n{\n\tauto g = [&]\n\t{\n\t\th();\n\t}\n\t;\n\treturn [&]\n\t{\n\t\ti();\n\t}\n\t;\n}\n"
+							, "void f()\n{\n\tauto g = [&]\n\t\t{\n\t\t\th();\n\t\t}\n\t;\n\treturn [&]\n\t\t{\n\t\t\ti();\n\t\t}\n\t;\n}\n"
+						)
+					;
+					// Whose body it is the capture list in front of the brace says, not the
+					// first parenthesis of the statement, which here opens a call.
+					fg_ExpectFormat
+						(
+							"Operand"
+							, "void f()\n{\n\tm_Promise.f_Future() > [P](CResult &&_R)\n\t{\n\t\tP.f_Set(fg_Move(_R));\n\t}\n\t;\n}\n"
+							, "void f()\n{\n\tm_Promise.f_Future() > [P](CResult &&_R)\n\t\t{\n\t\t\tP.f_Set(fg_Move(_R));\n\t\t}\n\t;\n}\n"
+						)
+					;
+					// A subscript operator's name ends in brackets of its own, which name a
+					// declaration and no lambda: its body opens at the statement's level.
+					CStr Subscript = "auto C::operator [](int &&_Key) -> int\n{\n\treturn 0;\n}\n";
+					fg_ExpectFormat("SubscriptOperator", Subscript, Subscript);
+				};
+
 				DMibTestCategory("Depth")
 				{
 					// Every statement of a block stands at the block's own level, whatever

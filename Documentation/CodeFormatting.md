@@ -231,11 +231,15 @@ A line that nothing above can shorten, such as one long literal, is reported by
 `line-length` and left alone.
 
 A block's braces and each of its statements take a line of their own. A body
-that shares a line with its head opens under it, a declaration's at the
-statement's indentation and a lambda's one level in, and takes its lines along
-so that their depth still follows the brace, a comment on a line of its own
-among them; a body with a multiline token inside, whose lines could not follow,
-stays where it is.
+opens where its head puts it, a declaration's at the statement's indentation
+and a lambda's one level in, and takes its lines along so that their depth
+still follows the brace, a comment on a line of its own among them; a body with
+a multiline token inside, whose lines could not follow, stays where it is. That
+holds whether the body shares a line with its head or already has one of its
+own. Whose body it is the capture list in front of the brace says, not the
+first parenthesis of the statement, which may open a call the lambda is handed
+to; a subscript operator's name ends in brackets of its own and names a
+declaration, no lambda.
 
 Every statement of a block stands at the block's own level, whatever depth the
 source gave the line it starts, and the closing brace stands at the level of

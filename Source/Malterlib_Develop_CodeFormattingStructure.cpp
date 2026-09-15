@@ -948,6 +948,20 @@ namespace
 	// of the name, since C++ then reads the parenthesis as a parameter list even where an
 	// initializer would also parse, and otherwise when what follows the list can only
 	// follow a function.
+	// The 'operator' of a subscript operator's name, whose brackets are the only thing a
+	// ']' in front of a parameter list can close besides a capture list.
+	aint fg_NameSubscriptOperator(CCodeTokenStream const &_Tokens, umint _iClose)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto iOpen = fg_PreviousCode(_Tokens, _iClose);
+		if (iOpen < 0 || !_Tokens.f_IsText(Tokens[umint(iOpen)], "["))
+			return -1;
+
+		auto iOperator = fg_PreviousCode(_Tokens, umint(iOpen));
+
+		return iOperator >= 0 && _Tokens.f_IsText(Tokens[umint(iOperator)], "operator") ? iOperator : aint(-1);
+	}
+
 	bool fg_IsParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup)
 	{
 		auto const &Nodes = _Structure.f_GetNodes();
@@ -970,8 +984,9 @@ namespace
 		if (_Tokens.f_IsText(Tokens[umint(iName)], "catch"))
 			return true;
 
-		// A lambda stands anywhere an expression does.
-		if (_Tokens.f_IsText(Tokens[umint(iName)], "]"))
+		// A lambda stands anywhere an expression does; a subscript operator's name is a
+		// declaration's, and what stands in front of it is read as one.
+		if (_Tokens.f_IsText(Tokens[umint(iName)], "]") && fg_NameSubscriptOperator(_Tokens, umint(iName)) < 0)
 			return fg_IsCaptureList(_Tokens, _Structure, umint(iName));
 
 		// A function's parameter list is the first parenthesis of its statement; the ones
@@ -1024,11 +1039,16 @@ namespace
 		}
 
 		if (_Tokens.f_IsText(Tokens[umint(iName)], "]"))
-			return fg_IsCaptureList(_Tokens, _Structure, umint(iName));
+		{
+			auto iOperator = fg_NameSubscriptOperator(_Tokens, umint(iName));
+			if (iOperator < 0)
+				return fg_IsCaptureList(_Tokens, _Structure, umint(iName));
 
+			iName = iOperator;
+		}
 		// An operator function is named by the keyword and its symbol, and the call
 		// operator by the keyword and its own parentheses: 'operator () ('.
-		if (Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
+		else if (Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
 		{
 			auto iOperator = fg_PreviousCode(_Tokens, umint(iName));
 			if (iOperator >= 0 && _Tokens.f_IsText(Tokens[umint(iName)], ")") && _Tokens.f_IsText(Tokens[umint(iOperator)], "("))

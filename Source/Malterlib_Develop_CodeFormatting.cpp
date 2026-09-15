@@ -2757,8 +2757,6 @@ namespace
 		// of it. Behind a capture list it opens a lambda, and the statement around it is an
 		// expression that has no declaration to protect or return type to move.
 		auto iBeforeParen = iFirstParenGroupStart ? fp_PreviousCode(iFirstParenGroupStart) : aint(-1);
-		// Without any parameter list the statement is a declaration too, such as a class
-		// head, unless its body is a lambda's: 'Dispatch = [&] { ... }'.
 		bool bDeclarator = iBeforeParen >= 0 && Tokens[umint(iBeforeParen)].m_Kind == ECodeTokenKind::mc_Identifier;
 		// An operator's name ends in the symbol it overloads rather than in an identifier,
 		// and a lambda's parameter list stands behind its capture list or its own template
@@ -2772,10 +2770,22 @@ namespace
 			if (!bIntroducer)
 				bDeclarator = fg_ClosesParameterList(m_Tokens, m_Structure, iFirstParenGroup);
 		}
-		if (!iFirstParenGroupStart && iBlock != TCLimitsInt<umint>::mc_Max)
+		// Whose body the statement's block is decides where it opens and what its terminator
+		// does. A lambda is introduced by a capture list standing in front of the brace; a
+		// declaration never has one there, whatever the first parenthesis of the statement
+		// belongs to: 'Promise.f_Future() > [Promise](CResult &&_Result) { ... }'.
+		bool bLambdaBody = false;
+		if (iBlock != TCLimitsInt<umint>::mc_Max)
 		{
-			auto iBeforeBrace = fp_PreviousCode(Nodes[iBlock].m_iFirstToken);
-			bDeclarator = iBeforeBrace < 0 || !fp_ClosesLambdaIntroducer(umint(iBeforeBrace));
+			auto iBrace = Nodes[iBlock].m_iFirstToken;
+			for (auto iChild : Node.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_Bracket != ECodeBracket::mc_Square || Child.m_iLastToken >= iBrace)
+					continue;
+
+				bLambdaBody |= fp_ClosesLambdaIntroducer(Child.m_iLastToken);
+			}
 		}
 		// A name can end in a template argument list, and nothing before it is ever broken.
 		// A lambda's own template parameter list ends the same way but names nothing.
@@ -2888,7 +2898,7 @@ namespace
 
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
 			{
-				fp_PlaceBody(_iNode, iBlock, _iIndent, bDeclarator);
+				fp_PlaceBody(_iNode, iBlock, _iIndent, !bLambdaBody);
 				fp_LayoutNode(iBlock, _iIndent);
 			}
 
@@ -2905,14 +2915,14 @@ namespace
 
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
 			{
-				fp_PlaceBody(_iNode, iBlock, _iIndent, bDeclarator);
+				fp_PlaceBody(_iNode, iBlock, _iIndent, !bLambdaBody);
 				fp_LayoutNode(iBlock, _iIndent);
 
 				// A lambda's terminator stands on a line of its own, at the statement's
 				// indentation, where a declaration's stays behind its closing brace: '};'.
 				// A body that could not be placed keeps its terminator as written too.
 				auto iLast = Node.m_iLastToken;
-				bool bLambdaTerminator = !bDeclarator
+				bool bLambdaTerminator = bLambdaBody
 					&& fp_IsFirstOnLine(Nodes[iBlock].m_iFirstToken)
 					&& m_Tokens.f_IsText(Tokens[iLast], ";")
 					&& fp_PreviousCode(iLast) == aint(Nodes[iBlock].m_iLastToken)
@@ -2982,7 +2992,7 @@ namespace
 			m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
 			// A split statement's terminator takes a line of its own, except behind a
 			// declaration's body, where it stays on the closing brace's line: '};'.
-			bool bBodyTerminator = iBlock != TCLimitsInt<umint>::mc_Max && bDeclarator;
+			bool bBodyTerminator = iBlock != TCLimitsInt<umint>::mc_Max && !bLambdaBody;
 			if (bSplit && bHasTerminator && !bBodyTerminator)
 				fp_BreakBefore(Node.m_iLastToken, _iIndent);
 		}
@@ -3007,9 +3017,9 @@ namespace
 			// After an operator split the brace is already on a continuation line.
 			auto iBrace = Nodes[iBlock].m_iFirstToken;
 			if (!fp_IsFirstOnLine(iBrace))
-				fp_PlaceBody(_iNode, iBlock, _iIndent, bDeclarator);
+				fp_PlaceBody(_iNode, iBlock, _iIndent, !bLambdaBody);
 			else if (bJoinable && !m_bOperatorSplit)
-				fp_BreakBefore(iBrace, bDeclarator ? _iIndent : _iIndent + nTab);
+				fp_BreakBefore(iBrace, bLambdaBody ? _iIndent + nTab : _iIndent);
 
 			fp_LayoutNode(iBlock, _iIndent);
 		}
@@ -3025,11 +3035,27 @@ namespace
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
 		auto iBrace = Nodes[_iBlock].m_iFirstToken;
-		if (m_bOperatorSplit || iBrace == Nodes[_iNode].m_iFirstToken || fp_IsFirstOnLine(iBrace))
+		if (m_bOperatorSplit || iBrace == Nodes[_iNode].m_iFirstToken)
 			return;
 
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
-		fp_PlaceBlock(_iBlock, _bDeclarator ? _iIndent : _iIndent + nTab, _iIndent);
+		auto nPlace = _bDeclarator ? _iIndent : _iIndent + nTab;
+		if (!fp_IsFirstOnLine(iBrace))
+		{
+			fp_PlaceBlock(_iBlock, nPlace, _iIndent);
+
+			return;
+		}
+
+		// A body that already has a line of its own still takes the depth its head gives
+		// it, and its lines move with it, so that a lambda written one level too far out
+		// is brought back under the expression it belongs to.
+		auto nReference = fp_GetStatementIndent(iBrace);
+		if (nReference == nPlace || !fp_CanPlaceBlock(_iBlock))
+			return;
+
+		fp_IndentBefore(iBrace, nPlace);
+		fp_ShiftBlock(_iBlock, aint(nPlace) - aint(nReference));
 	}
 
 	// Opens the block on a line of its own at the indentation, moving the lines inside it
@@ -4100,28 +4126,16 @@ namespace
 		if (!m_Tokens.f_IsText(Tokens[_iToken], "]"))
 			return false;
 
-		for (auto const &Node : m_Structure.f_GetNodes())
-		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Square || Node.m_iLastToken != _iToken)
-				continue;
+		// A subscript stands behind what it indexes; a capture list stands on its own, and
+		// behind a keyword it is one however that keyword reads: 'return [&] { ... }'.
+		if (!fg_IsCaptureList(m_Tokens, m_Structure, _iToken))
+			return false;
 
-			// A subscript stands behind what it indexes; a capture list stands on its own.
-			auto iBefore = fp_PreviousCode(Node.m_iFirstToken);
-			if (iBefore >= 0)
-			{
-				auto const &Before = Tokens[umint(iBefore)];
-				if (Before.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Before, ")") || m_Tokens.f_IsText(Before, "]"))
-					return false;
-			}
+		auto iAfter = fp_NextCode(_iToken);
 
-			auto iAfter = fp_NextCode(_iToken);
-
-			return iAfter >= 0
-				&& (m_Tokens.f_IsText(Tokens[umint(iAfter)], "(") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "{") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "<"))
-			;
-		}
-
-		return false;
+		return iAfter >= 0
+			&& (m_Tokens.f_IsText(Tokens[umint(iAfter)], "(") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "{") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "<"))
+		;
 	}
 
 	// The words that may stand between a parameter list and a trailing return type.
