@@ -702,6 +702,342 @@ namespace NMib::NDevelop
 	}
 }
 
+namespace
+{
+	using namespace NMib;
+	using namespace NMib::NDevelop;
+
+	template <umint t_nTexts>
+	bool fg_IsAnyText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token, ch8 const *const (&_pTexts)[t_nTexts])
+	{
+		for (auto pText : _pTexts)
+		{
+			if (_Tokens.f_IsText(_Token, pText))
+				return true;
+		}
+
+		return false;
+	}
+
+	aint fg_PreviousCode(CCodeTokenStream const &_Tokens, umint _iToken)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		for (auto i = _iToken; i; --i)
+		{
+			if (fg_IsSignificant(Tokens[i - 1].m_Kind))
+				return aint(i - 1);
+		}
+
+		return -1;
+	}
+
+	aint fg_NextCode(CCodeTokenStream const &_Tokens, umint _iToken)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		for (auto i = _iToken + 1; i < Tokens.f_GetLen(); ++i)
+		{
+			if (fg_IsSignificant(Tokens[i].m_Kind))
+				return aint(i);
+		}
+
+		return -1;
+	}
+
+	bool fg_IsDeclaratorText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
+	{
+		if (_Token.m_Kind != ECodeTokenKind::mc_Punctuator)
+			return false;
+
+		return _Tokens.f_IsText(_Token, "*") || _Tokens.f_IsText(_Token, "&") || _Tokens.f_IsText(_Token, "&&");
+	}
+
+	// Keywords that stand in front of a name or a parenthesis without declaring anything.
+	ch8 const *const gc_pExpressionKeywords[] =
+		{
+			"if", "for", "while", "switch", "return", "co_return", "co_await", "co_yield", "throw", "new", "delete", "sizeof"
+			, "alignof", "decltype", "typeid", "static_assert", "noexcept", "alignas", "case", "else", "do", "goto"
+		}
+	;
+
+	// The node that most closely encloses the token, or the node count when none does.
+	umint fg_FindEnclosingNode(CCodeStructure const &_Structure, umint _iToken)
+	{
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto iFound = Nodes.f_GetLen();
+		for (umint iNode = 0; iNode < Nodes.f_GetLen(); ++iNode)
+		{
+			auto const &Node = Nodes[iNode];
+			if (Node.m_iFirstToken >= _iToken || Node.m_iLastToken <= _iToken)
+				continue;
+
+			if (iFound == Nodes.f_GetLen() || Node.m_iFirstToken >= Nodes[iFound].m_iFirstToken)
+				iFound = iNode;
+		}
+
+		return iFound;
+	}
+
+	// A capture list stands where an operand cannot: a subscript follows a name, a call, a
+	// template argument list, another subscript, or a literal.
+	bool fg_IsCaptureList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		for (auto const &Node : _Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Square || Node.m_iLastToken != _iClose)
+				continue;
+
+			auto iBefore = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+			if (iBefore < 0)
+				return true;
+
+			auto const &Before = Tokens[umint(iBefore)];
+			if (Before.m_Kind == ECodeTokenKind::mc_Identifier)
+				return fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords);
+
+			if (Before.m_Kind != ECodeTokenKind::mc_Punctuator)
+				return false;
+
+			return !_Tokens.f_IsText(Before, ")") && !_Tokens.f_IsText(Before, "]") && !_Structure.f_IsAngleBracket(umint(iBefore));
+		}
+
+		return false;
+	}
+
+	// Whether the group is a parameter list: a template header's, a lambda's, a catch
+	// clause's, or a function's. A function's is one when something is declared in front
+	// of the name, since C++ then reads the parenthesis as a parameter list even where an
+	// initializer would also parse, and otherwise when what follows the list can only
+	// follow a function.
+	bool fg_IsParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup)
+	{
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto const &Group = Nodes[_iGroup];
+		if (Group.m_Kind != ECodeNodeKind::mc_Group)
+			return false;
+
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto iName = fg_PreviousCode(_Tokens, Group.m_iFirstToken);
+		if (iName < 0)
+			return false;
+
+		// A template header's list declares its parameters; an argument list does not.
+		if (Group.m_Bracket == ECodeBracket::mc_Angle)
+			return _Tokens.f_IsText(Tokens[umint(iName)], "template");
+
+		if (Group.m_Bracket != ECodeBracket::mc_Paren)
+			return false;
+
+		if (_Tokens.f_IsText(Tokens[umint(iName)], "catch"))
+			return true;
+
+		// A lambda stands anywhere an expression does.
+		if (_Tokens.f_IsText(Tokens[umint(iName)], "]"))
+			return fg_IsCaptureList(_Tokens, _Structure, umint(iName));
+
+		// A function's parameter list is the first parenthesis of its statement; the ones
+		// after it belong to a constructor's initializers or to expressions.
+		auto const &Parent = Nodes[Group.m_iParent];
+		if (Parent.m_Kind != ECodeNodeKind::mc_Statement)
+			return false;
+
+		for (auto iChild : Parent.m_Children)
+		{
+			auto const &Child = Nodes[iChild];
+			if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_Bracket != ECodeBracket::mc_Paren)
+				continue;
+
+			if (iChild != _iGroup)
+				return false;
+
+			break;
+		}
+
+		// A name that ends in a template argument list starts in front of that list.
+		if (_Structure.f_IsAngleBracket(umint(iName)) && _Tokens.f_IsText(Tokens[umint(iName)], ">"))
+		{
+			auto iClose = umint(iName);
+			iName = -1;
+			for (auto const &Node : Nodes)
+			{
+				if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != iClose)
+					continue;
+
+				iName = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+
+				break;
+			}
+
+			if (iName < 0)
+				return false;
+		}
+
+		// An operator function is named by the keyword and its symbol.
+		if (Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
+		{
+			auto iOperator = fg_PreviousCode(_Tokens, umint(iName));
+			if (iOperator < 0 || !_Tokens.f_IsText(Tokens[umint(iOperator)], "operator"))
+				return false;
+
+			iName = iOperator;
+		}
+		else if (fg_IsAnyText(_Tokens, Tokens[umint(iName)], gc_pExpressionKeywords))
+			return false;
+
+		// What the statement spells in front of the name is a type or a specifier when it
+		// is made of names, qualification, template argument lists, and declarators.
+		auto iBefore = fg_PreviousCode(_Tokens, umint(iName));
+		if (iBefore >= 0 && iBefore >= aint(Parent.m_iFirstToken))
+		{
+			bool bDeclaration = true;
+			for (auto i = Parent.m_iFirstToken; i <= umint(iBefore) && bDeclaration; ++i)
+			{
+				auto const &Token = Tokens[i];
+				if (!fg_IsSignificant(Token.m_Kind))
+					continue;
+
+				bool bNested = false;
+				for (auto iChild : Parent.m_Children)
+				{
+					auto const &Child = Nodes[iChild];
+					if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+					{
+						bNested = Child.m_Kind == ECodeNodeKind::mc_Group
+							&& (Child.m_Bracket == ECodeBracket::mc_Angle || Child.m_Bracket == ECodeBracket::mc_Square)
+						;
+						bDeclaration = bNested;
+						i = Child.m_iLastToken;
+
+						break;
+					}
+				}
+
+				if (bNested || !bDeclaration)
+					continue;
+
+				if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
+					bDeclaration = !fg_IsAnyText(_Tokens, Token, gc_pExpressionKeywords);
+				else
+					bDeclaration = fg_IsDeclaratorText(_Tokens, Token) || _Tokens.f_IsText(Token, "::") || _Tokens.f_IsText(Token, "~");
+			}
+
+			if (bDeclaration)
+				return true;
+		}
+
+		// Behind a bare name only what follows the list can tell a constructor from a
+		// call: a body, an initializer list, a qualifier, or a defaulted or deleted
+		// definition. A ternary's ':' follows a call, so the initializer list counts only
+		// when the name opens the statement or is qualified.
+		auto iAfter = fg_NextCode(_Tokens, Group.m_iLastToken);
+		if (iAfter < 0)
+			return false;
+
+		auto const &After = Tokens[umint(iAfter)];
+		static ch8 const *const gsc_pFunctionTails[] =
+			{
+				"{", "const", "volatile", "noexcept", "override", "final", "mutable", "requires"
+			}
+		;
+		if (fg_IsAnyText(_Tokens, After, gsc_pFunctionTails))
+			return true;
+
+		if (_Tokens.f_IsText(After, ":"))
+			return iBefore < 0 || _Tokens.f_IsText(Tokens[umint(iBefore)], "::");
+
+		if (_Tokens.f_IsText(After, "="))
+		{
+			auto iValue = fg_NextCode(_Tokens, umint(iAfter));
+			if (iValue < 0)
+				return false;
+
+			auto const &Value = Tokens[umint(iValue)];
+
+			return _Tokens.f_IsText(Value, "0") || _Tokens.f_IsText(Value, "default") || _Tokens.f_IsText(Value, "delete");
+		}
+
+		return false;
+	}
+}
+
+namespace NMib::NDevelop
+{
+	// A '*', '&' or '&&' declares a pointer or reference where only a type can stand in
+	// front of it: behind 'const', 'volatile', or another declarator; behind a name or a
+	// template argument list when nothing that could be an operand follows it, or when
+	// it stands in a parameter list, outside a default argument. Elsewhere the same
+	// token is an operator, or has no settled reading: 'TCFoo<T> &&_Other' and
+	// 'cFoo<T> && cBar<T>' spell the same tokens.
+	bool fg_IsDeclaratorToken(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		if (!fg_IsDeclaratorText(_Tokens, Tokens[_iToken]))
+			return false;
+
+		auto iPrevious = fg_PreviousCode(_Tokens, _iToken);
+		if (iPrevious < 0)
+			return false;
+
+		auto const &Previous = Tokens[umint(iPrevious)];
+		if (_Tokens.f_IsText(Previous, "const") || _Tokens.f_IsText(Previous, "volatile"))
+			return true;
+
+		if (fg_IsDeclaratorText(_Tokens, Previous))
+			return !_Tokens.f_IsText(Previous, "&&") && fg_IsDeclaratorToken(_Tokens, _Structure, umint(iPrevious));
+
+		bool bBehindTemplate = _Structure.f_IsAngleBracket(umint(iPrevious)) && _Tokens.f_IsText(Previous, ">");
+		if (!bBehindTemplate && Previous.m_Kind != ECodeTokenKind::mc_Identifier)
+			return false;
+
+		auto iNext = fg_NextCode(_Tokens, _iToken);
+		if (iNext >= 0)
+		{
+			auto const &Next = Tokens[umint(iNext)];
+			bool bUnnamed = _Tokens.f_IsText(Next, ",") || _Tokens.f_IsText(Next, ")") || _Tokens.f_IsText(Next, "...") || _Tokens.f_IsText(Next, "=")
+				|| (_Structure.f_IsAngleBracket(umint(iNext)) && _Tokens.f_IsText(Next, ">"))
+			;
+			if (bUnnamed)
+				return true;
+		}
+
+		auto iGroup = fg_FindEnclosingNode(_Structure, _iToken);
+		auto const &Nodes = _Structure.f_GetNodes();
+		if (iGroup == Nodes.f_GetLen() || !fg_IsParameterList(_Tokens, _Structure, iGroup))
+			return false;
+
+		// A default argument is an expression, so an '=' earlier in the same parameter
+		// makes the token an operator.
+		auto const &Group = Nodes[iGroup];
+		auto iStart = Group.m_iFirstToken;
+		for (auto iSplit : Group.m_SplitPoints)
+		{
+			if (iSplit < _iToken)
+				iStart = iSplit;
+		}
+
+		for (auto i = iStart + 1; i < _iToken; ++i)
+		{
+			bool bNested = false;
+			for (auto iChild : Group.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				{
+					i = Child.m_iLastToken;
+					bNested = true;
+
+					break;
+				}
+			}
+
+			if (!bNested && _Tokens.f_IsText(Tokens[i], "="))
+				return false;
+		}
+
+		return true;
+	}
+}
+
 namespace NMib::NDevelop
 {
 	// Decides the inline separator between two adjacent significant tokens. Only spellings
@@ -739,6 +1075,10 @@ namespace NMib::NDevelop
 				return ECodeSpacing::mc_None;
 
 			if (Right.m_Kind == ECodeTokenKind::mc_Identifier)
+				return ECodeSpacing::mc_Space;
+
+			// A declarator behind the list is separated from it: 'TCVector<int> &'.
+			if (fg_IsDeclaratorText(_Tokens, Right))
 				return ECodeSpacing::mc_Space;
 
 			// A parameter list after a template argument's type spells a function type,
@@ -827,7 +1167,7 @@ namespace NMib::NDevelop
 			static ch8 const *const gsc_pSpacedKeywords[] =
 				{
 					"if", "for", "while", "switch", "catch", "return", "co_return", "co_await", "co_yield"
-					, "throw", "new", "delete", "case"
+					, "throw", "new", "delete", "case", "requires"
 				}
 			;
 			for (auto pKeyword : gsc_pSpacedKeywords)
@@ -871,6 +1211,30 @@ namespace NMib::NDevelop
 				return ECodeSpacing::mc_Space;
 
 			return ECodeSpacing::mc_Preserve;
+		}
+
+		// A declarator is separated from the type it modifies and hugs what it declares:
+		// 'CStr const &_Name', 'TCVector<int> *&_pList', 'ch8 const *const'. Another
+		// declarator hugs it, and a pack expansion behind it has no settled spelling.
+		if (fg_IsDeclaratorText(_Tokens, Right) && fg_IsDeclaratorToken(_Tokens, _Structure, _iRight))
+			return fg_IsDeclaratorText(_Tokens, Left) ? ECodeSpacing::mc_None : ECodeSpacing::mc_Space;
+
+		if (fg_IsDeclaratorText(_Tokens, Left) && fg_IsDeclaratorToken(_Tokens, _Structure, _iLeft))
+		{
+			if (fRight("..."))
+				return ECodeSpacing::mc_Preserve;
+
+			if (Right.m_Kind == ECodeTokenKind::mc_Identifier)
+				return ECodeSpacing::mc_None;
+		}
+
+		// Behind a template argument list a '&&' in front of a name is a declarator as
+		// often as it is the operator between two concepts.
+		if (fg_IsDeclaratorText(_Tokens, Left) && Right.m_Kind == ECodeTokenKind::mc_Identifier)
+		{
+			auto iBefore = fg_PreviousCode(_Tokens, _iLeft);
+			if (iBefore >= 0 && _Structure.f_IsAngleBracket(umint(iBefore)))
+				return ECodeSpacing::mc_Preserve;
 		}
 
 		// What follows a parameter list is the function's qualifiers and specifiers, and

@@ -2874,10 +2874,9 @@ namespace
 				if (iName >= 0 && m_Tokens.f_IsText(Tokens[umint(iName)], "operator"))
 					continue;
 
-				// A '*', '&' or '&&' behind a template argument list is a declarator: what
-				// stands in front of it is a type, and 'TCFoo<int> *' cannot multiply.
-				bool bDeclarator = m_Tokens.f_IsText(Tokens[i], "*") || m_Tokens.f_IsText(Tokens[i], "&") || m_Tokens.f_IsText(Tokens[i], "&&");
-				if (bDeclarator && iName >= 0 && m_Structure.f_IsAngleBracket(umint(iName)) && m_Tokens.f_IsText(Tokens[umint(iName)], ">"))
+				// A '*', '&' or '&&' that declares a pointer or reference is not an operation:
+				// what stands in front of it is a type, and 'TCFoo<int> *' cannot multiply.
+				if (fg_IsDeclaratorToken(m_Tokens, m_Structure, i))
 					continue;
 
 				// A '&' or '&&' is the function's ref-qualifier when nothing that could be an

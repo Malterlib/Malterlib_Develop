@@ -102,4 +102,7 @@ namespace NMib::NDevelop
 	};
 
 	ECodeSpacing fg_GetCanonicalSpacing(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iLeft, umint _iRight);
+
+	// True for a '*', '&' or '&&' that declares a pointer or reference rather than operating on two values.
+	bool fg_IsDeclaratorToken(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken);
 }

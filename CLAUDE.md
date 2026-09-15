@@ -66,10 +66,12 @@ depend on an edit already made or on where the source broke its lines.
 
 Prefer an explicit unsupported result over a guessed edit. Ambiguous spellings
 stay out of the matrix: plain `=` is also a lambda capture default and the tail
-of the `_o=` DSL, and `&`, `&&`, and `*` are also declarators. The structure
-builder answers the same way: an unclassified construct keeps its layout, and
-`fg_GetCanonicalSpacing` returns `mc_Preserve` for a pair the standard does not
-settle, which is what makes a relayout refuse rather than guess.
+of the `_o=` DSL, and `&`, `&&`, and `*` are declarators as well as operators,
+read as declarators only where `fg_IsDeclaratorToken` can prove it. The
+structure builder answers the same way: an unclassified construct keeps its
+layout, and `fg_GetCanonicalSpacing` returns `mc_Preserve` for a pair the
+standard does not settle, which is what makes a relayout refuse rather than
+guess.
 
 Corpus trials are part of the work, not a final check. Every structural bug in
 the line-break rule so far was found by reading a diff of already-correct

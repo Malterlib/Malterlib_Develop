@@ -130,6 +130,19 @@ It decides only the spellings the standard settles, and answers `mc_Preserve`
 elsewhere, which is what keeps a rewrite from guessing at an ambiguous
 construct such as `->`, which is both member access and a trailing return type.
 
+A `*`, `&`, or `&&` is a declarator, separated from its type and hugging the
+name it declares, where only a type can stand in front of it: behind `const`,
+`volatile`, or another declarator; behind a name or a template argument list
+when a separator, a closing marker, an ellipsis, or `=` follows it; and inside
+a parameter list, outside a default argument. A parameter list is a template
+header's, a lambda's, a catch clause's, or a function's. A function's
+parenthesis is its parameter list when a specifier or a type stands in front of
+the name, as C++ reads it, and behind a bare name only when a body, an
+initializer list, a qualifier, or a defaulted or deleted definition follows.
+`cFoo<T> && cBar<T>` and `TCFoo<T> &&_Other` spell the same tokens, so a `&&`
+behind a template argument list in front of a name keeps its spelling. The
+line-break rule never splits at a declarator.
+
 `line-break` lays every statement out in two phases. The statement is first
 taken as if it were written on one line, with every gap at its inline spelling:
 a gap the source already writes on one line keeps its width, and one holding a

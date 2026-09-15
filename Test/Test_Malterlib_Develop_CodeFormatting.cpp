@@ -322,6 +322,67 @@ namespace
 							, "void f()\n{\n\tif (!(a) || !!(b))\n\t\tg();\n}\n"
 						)
 					;
+					// A declarator is not a binary operator: it rejoins the name it declares
+					// where only a type can stand in front of it.
+					fg_ExpectFormat("ConstDeclarator", "void fg_F(CStr const &\n\t_A, ch8 const **\n\t_ppB);\n", "void fg_F(CStr const &_A, ch8 const **_ppB);\n");
+					fg_ExpectFormat("TemplateDeclarator", "void fg_F(TCVector<int>\n\t*&_pA);\n", "void fg_F(TCVector<int> *&_pA);\n");
+					// In a parameter list a declarator stands behind a plain name too.
+					fg_ExpectFormat("ParameterDeclarator", "void fg_F(CStr\n\t&_A, CFoo *\n\t_pB);\n", "void fg_F(CStr &_A, CFoo *_pB);\n");
+					fg_ExpectFormat
+						(
+							"TemplateMember"
+							, "template <typename t_C>\nTCFoo<t_C>::TCFoo(CStr const &\n\t_A)\n\t: m_A(_A)\n{\n}\n"
+							, "template <typename t_C>\nTCFoo<t_C>::TCFoo(CStr const &_A)\n\t: m_A(_A)\n{\n}\n"
+						)
+					;
+					fg_ExpectFormat("QualifiedConstructor", "C::C(CStr &\n\t_A)\n\t: m_A(_A)\n{\n}\n", "C::C(CStr &_A)\n\t: m_A(_A)\n{\n}\n");
+					fg_ExpectFormat("DeletedConstructor", "struct C\n{\n\tC(C &\n\t\t_A) = delete;\n};\n", "struct C\n{\n\tC(C &_A) = delete;\n};\n");
+					fg_ExpectFormat
+						(
+							"Catch"
+							, "void f()\n{\n\ttry\n\t{\n\t}\n\tcatch (CException &\n\t\t_E)\n\t{\n\t}\n}\n"
+							, "void f()\n{\n\ttry\n\t{\n\t}\n\tcatch (CException &_E)\n\t{\n\t}\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"Lambda"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[&](CStr &\n\t\t\t_A)\n\t\t\t{\n\t\t\t\th(_A);\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[&](CStr &_A)\n\t\t\t{\n\t\t\t\th(_A);\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// A template header declares its parameters; an unnamed one ends in its
+					// declarator.
+					fg_ExpectFormat
+						(
+							"TemplateParameter"
+							, "template\n<\n\ttypename t_C\n\t, TCEnableIf<cFoo<t_C>>\n\t*\n>\nvoid fg_F();\n"
+							, "template <typename t_C, TCEnableIf<cFoo<t_C>> *>\nvoid fg_F();\n"
+						)
+					;
+					// A concept behind a template argument list is an operand of '&&', which
+					// is written apart from it, and 'requires' from its parenthesis.
+					fg_ExpectFormat
+						(
+							"RequiresClause"
+							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires\n\t(\n\t\tcFoo<t_C>\n\t\t&& cBar<t_C>\n\t)\n;\n"
+							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires (cFoo<t_C> && cBar<t_C>)\n;\n"
+						)
+					;
+					// A bare name in front of the list is a call as well as a constructor, a
+					// default argument is an expression, a call's argument is not settled, and
+					// neither is a '&&' behind a template argument list in front of a name.
+					fg_ExpectFormat("BareName", "struct C\n{\n\tC(CStr &\n\t\t_A);\n};\n", "struct C\n{\n\tC(CStr &\n\t\t_A);\n};\n");
+					fg_ExpectFormat("DefaultArgument", "void fg_F(int _A = a &\n\tb);\n", "void fg_F(int _A = a &\n\tb);\n");
+					fg_ExpectFormat("CallArgument", "void f()\n{\n\tg(a &\n\t\tb);\n}\n", "void f()\n{\n\tg(a &\n\t\tb);\n}\n");
+					fg_ExpectFormat("Ternary", "void f()\n{\n\tx = y ? g(a &\n\t\tb) : c;\n}\n", "void f()\n{\n\tx = y ? g(a &\n\t\tb) : c;\n}\n");
+					fg_ExpectFormat
+						(
+							"ConceptOrDeclarator"
+							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires (cFoo<t_C> &&\n\t\tcBar<t_C>)\n;\n"
+							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires (cFoo<t_C> &&\n\t\tcBar<t_C>)\n;\n"
+						)
+					;
 				};
 
 				DMibTestCategory("Bodies")
@@ -454,6 +515,9 @@ namespace
 					fSplit("For", "void f()\n{\n\tfor (umint @ = 0; @ < 5; ++@)\n\t\th();\n}\n", "void f()\n{\n\tfor\n\t(\n\t\tumint @ = 0\n\t\t; @ < 5\n\t\t; ++@\n\t)\n\t\th();\n}\n");
 					// A definition splits its parameter list and keeps its body at statement level.
 					fSplit("Definition", "void fg_F(int @, int @)\n{\n}\n", "void fg_F\n\t(\n\t\tint @\n\t\t, int @\n\t)\n{\n}\n");
+					// A parameter that still does not fit is not split at its declarator, which
+					// is not an operator; it is reported instead.
+					fSplit("DeclaratorNotSplit", "void fg_F(C@@ &_A, int _B)\n{\n}\n", "void fg_F\n\t(\n\t\tC@@ &_A\n\t\t, int _B\n\t)\n{\n}\n");
 					// A trailing qualifier run is a logical unit of its own.
 					fSplit
 						(
