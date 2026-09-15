@@ -105,9 +105,9 @@ failure, not an edit.
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
 assignments. Plain `=` is excluded here; `token-space` spells it, below. `&`,
 `&&`, `*`, `.`, and `->` are excluded because they are also declarators or
-member access; `token-space` spells those of them that are operators, below. An
-operator immediately following the `operator` keyword is a declarator name and
-is left alone.
+member access; `token-space` spells those of them that are operators, below. A
+symbol immediately following the `operator` keyword is part of a name rather
+than an operation, and is spelled by `token-space` as well.
 
 `braces` is decided on the original source, like the trailing return type
 conversion, and the layout is then made on the converted source. A statement
@@ -129,9 +129,16 @@ the lambda is written in rather than to the statement around it.
 
 `token-space` applies `fg_GetCanonicalSpacing`, the same answers the line-break
 rule joins with, to every pair of adjacent tokens on one line, and leaves a pair
-alone where that function does not settle the spelling. An operator function's
-name is left alone too, since the sources spell it both ways, and so is a `/`
-written tight between two names, which is a path in a macro argument.
+alone where that function does not settle the spelling, such as a `/` written
+tight between two names, which is a path in a macro argument.
+
+An operator function is named by the `operator` keyword and what follows it: a
+symbol, the call operator's own parentheses, the subscript operator's brackets,
+a literal's suffix, or the type a conversion yields, qualified and with template
+arguments where it has them. That name stands apart from the keyword and from
+the parameter list behind it, so the forms are `operator = (`, `operator () (`,
+`operator [] (`, `operator ""_f (`, and `operator NStr::CStr ()`. A name is not
+a call, so the parenthesis of an ordinary one stays where it is.
 
 An operator with an operand on both sides of it is written apart from both,
 whatever they are spelled with: `5 * 5`, `nFlags & mc_Mask`, `a + (b | c)`.

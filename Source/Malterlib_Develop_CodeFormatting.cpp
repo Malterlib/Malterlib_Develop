@@ -1227,15 +1227,6 @@ namespace
 			if (!bOneLine)
 				continue;
 
-			// An operator function's name is spelled both ways in the sources, 'operator =('
-			// as well as 'operator () (', so the gaps in it keep what they have.
-			bool bOperatorName = false;
-			for (auto iBack = iPrevious; iBack >= 0 && !bOperatorName && umint(iPrevious) - umint(iBack) < 5; iBack = fp_PreviousCode(umint(iBack)))
-				bOperatorName = m_Tokens.f_IsText(Tokens[umint(iBack)], "operator");
-
-			if (bOperatorName)
-				continue;
-
 			auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iPrevious), i);
 			if (Spacing == ECodeSpacing::mc_Space)
 				fp_EnsureSingleSpace(i, true, "token-space", "these tokens are written with one space between them");

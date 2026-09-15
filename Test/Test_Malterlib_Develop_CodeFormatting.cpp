@@ -266,7 +266,20 @@ namespace
 							, "void f()\n{\n\tauto Value = fg_G(5);\n}\n"
 						)
 					;
-					fg_ExpectFormat("OperatorName", "struct C\n{\n\tbool operator==(C const &_Other) const;\n};\n", "struct C\n{\n\tbool operator==(C const &_Other) const;\n};\n");
+					// An operator function is named by the keyword and what follows it, and that
+					// name stands apart from both: from the keyword, and from the parameter
+					// list, whose own parentheses the call operator's name is spelled with.
+					fg_ExpectFormat
+						(
+							"OperatorName"
+							, "struct C\n{\n\tbool operator==(C const &_Other) const;\n\tint operator() (int _A);\n\tint operator [](umint _i);\n"
+								"\toperator NStr::CStr() const;\n\tusing CBase::operator=;\n};\n"
+							, "struct C\n{\n\tbool operator == (C const &_Other) const;\n\tint operator () (int _A);\n\tint operator [] (umint _i);\n"
+								"\toperator NStr::CStr () const;\n\tusing CBase::operator =;\n};\n"
+						)
+					;
+					// A call is not a name, whatever stands in front of it.
+					fg_ExpectFormat("CallKept", "void f()\n{\n\tauto A = g(1);\n\tauto B = h(a, i(b));\n}\n", "void f()\n{\n\tauto A = g(1);\n\tauto B = h(a, i(b));\n}\n");
 					// Declarators keep their Malterlib spelling; they are not expression operators.
 					fg_ExpectFormat("Declarator", "void f(CStr const &_A, CStr &&_B);\n", "void f(CStr const &_A, CStr &&_B);\n");
 					// A ref-qualifier declares nothing, so what follows it is the rest of the
@@ -398,9 +411,9 @@ namespace
 					fg_ExpectFormat("Header", "template < typename t_C >\nvoid fg_F();\n", "template <typename t_C>\nvoid fg_F();\n");
 					fg_ExpectFormat("TrailingArrow", "auto fg_F(int _A)->int\n{\n}\n", "auto fg_F(int _A) -> int\n{\n}\n");
 					fg_ExpectFormat("MacroOperator", "void f()\n{\n\tDMibExpect(a, < , b);\n}\n", "void f()\n{\n\tDMibExpect(a, <, b);\n}\n");
-					// A path in a macro argument, a function type in an alias, and an operator
-					// function's name all keep their spelling.
-					CStr Spelled = "using FCall = void (int);\nbool operator ==(C const &) const;\nvoid f()\n{\n\tDMibLog(Mib/Core/Log, \"x\");\n}\n";
+					// A path in a macro argument and a function type in an alias keep their
+					// spelling.
+					CStr Spelled = "using FCall = void (int);\nvoid f()\n{\n\tDMibLog(Mib/Core/Log, \"x\");\n}\n";
 					fg_ExpectFormat("Spelled", Spelled, Spelled);
 				};
 
@@ -666,7 +679,7 @@ namespace
 					;
 					// A subscript operator's name ends in brackets of its own, which name a
 					// declaration and no lambda: its body opens at the statement's level.
-					CStr Subscript = "auto C::operator [](int &&_Key) -> int\n{\n\treturn 0;\n}\n";
+					CStr Subscript = "auto C::operator [] (int &&_Key) -> int\n{\n\treturn 0;\n}\n";
 					fg_ExpectFormat("SubscriptOperator", Subscript, Subscript);
 				};
 

@@ -825,6 +825,53 @@ namespace
 		return _Tokens.f_IsText(_Token, "*") || _Tokens.f_IsText(_Token, "&") || _Tokens.f_IsText(_Token, "&&");
 	}
 
+	// Whether the token ends the name of an operator function. The name is the 'operator'
+	// keyword and what follows it: a symbol, the call operator's own parentheses, the
+	// subscript operator's brackets, a literal's suffix, or the type a conversion yields,
+	// which can be qualified and carry template arguments.
+	bool fg_NamesOperator(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto i = aint(_iToken);
+		bool bParen = _Tokens.f_IsText(Tokens[umint(i)], ")");
+		if (bParen || _Tokens.f_IsText(Tokens[umint(i)], "]"))
+		{
+			// The name's own brackets hold nothing; any other pair closes something else.
+			auto iOpen = fg_PreviousCode(_Tokens, umint(i));
+			if (iOpen < 0 || !_Tokens.f_IsText(Tokens[umint(iOpen)], bParen ? "(" : "["))
+				return false;
+
+			i = iOpen;
+		}
+
+		for (umint nSteps = 0; nSteps < 16; ++nSteps)
+		{
+			auto iPrevious = fg_PreviousCode(_Tokens, umint(i));
+			if (iPrevious < 0)
+				return false;
+
+			auto const &Previous = Tokens[umint(iPrevious)];
+			if (_Tokens.f_IsText(Previous, "operator"))
+				return true;
+
+			// Only what a name is made of stands between the keyword and the list.
+			bool bName = Previous.m_Kind == ECodeTokenKind::mc_Identifier
+				|| Previous.m_Kind == ECodeTokenKind::mc_StringLiteral
+				|| Previous.m_Kind == ECodeTokenKind::mc_Number
+				|| _Tokens.f_IsText(Previous, "::")
+				|| _Tokens.f_IsText(Previous, ",")
+				|| fg_IsDeclaratorText(_Tokens, Previous)
+				|| _Structure.f_IsAngleBracket(umint(iPrevious))
+			;
+			if (!bName)
+				return false;
+
+			i = iPrevious;
+		}
+
+		return false;
+	}
+
 	// A '&' or '&&' behind a parameter list, with only the cv-qualifiers of the function
 	// between, is its ref-qualifier: 'f_Get() const &noexcept'. It declares nothing, and
 	// what follows it is the rest of the declaration rather than a name.
@@ -1576,6 +1623,15 @@ namespace NMib::NDevelop
 			}
 		;
 
+		// An operator function is named by the keyword and what follows it, and that name
+		// stands apart from both: 'operator + (', 'operator () ('. The rules below read the
+		// name's own tokens as the operators and scopes they are spelled with.
+		if (fLeft("operator"))
+			return ECodeSpacing::mc_Space;
+
+		if (fRight("(") && fg_NamesOperator(_Tokens, _Structure, _iLeft))
+			return ECodeSpacing::mc_Space;
+
 		// A resolved template bracket hugs its arguments and separates the list from the
 		// declarator after it. An unresolved '<' or '>' is an ordinary binary operator.
 		if (_Structure.f_IsAngleBracket(_iRight))
@@ -1691,7 +1747,7 @@ namespace NMib::NDevelop
 		// by its shape: an underscore with nothing but lower case behind it, which no
 		// declared name has. A capture default is settled by the markers around it, and an
 		// operator function's name keeps whatever spelling it has.
-		if ((fLeft("=") || fRight("=")) && !fLeft("operator"))
+		if (fLeft("=") || fRight("="))
 		{
 			if (fRight("=") && Left.m_Kind == ECodeTokenKind::mc_Identifier && fg_IsDSLMarker(_Tokens, Left))
 				return ECodeSpacing::mc_Preserve;
@@ -1710,23 +1766,6 @@ namespace NMib::NDevelop
 		// Operators spelled like a call, such as sizeof and decltype, stay tight.
 		if (fRight("("))
 		{
-			// An operator function's name is written apart from its parameter list, and the
-			// call operator's own parentheses are part of that name: 'operator + (', 'operator ()'.
-			if (fLeft("operator"))
-				return ECodeSpacing::mc_Space;
-
-			for (auto i = _iLeft; i; --i)
-			{
-				auto const &Token = _Tokens.f_GetTokens()[i - 1];
-				if (Token.m_Kind == ECodeTokenKind::mc_Whitespace || Token.m_Kind == ECodeTokenKind::mc_Newline || Token.m_Kind == ECodeTokenKind::mc_LineSplice)
-					continue;
-
-				if (_Tokens.f_IsText(Token, "operator"))
-					return ECodeSpacing::mc_Space;
-
-				break;
-			}
-
 			static ch8 const *const gsc_pSpacedKeywords[] =
 				{
 					"if", "for", "while", "switch", "catch", "return", "co_return", "co_await", "co_yield"
