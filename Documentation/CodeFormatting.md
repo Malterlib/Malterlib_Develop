@@ -98,6 +98,7 @@ failure, not an edit.
 | `block-blank-line` | Removes blank lines directly after an opening brace. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
+| `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |
 | `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
@@ -181,6 +182,16 @@ ones it does the same way, so the two never disagree about a line.
 stream: statements, blocks, and bracketed groups, with the split points where a
 canonical split form starts a new line. Anything it cannot classify becomes an
 unsupported node whose layout is preserved.
+
+Brackets that do not nest as written make every line position a guess, so the
+file keeps all of its lines and `structure` says why, naming the opener left
+without its closer. A scope ends at a closer of its own kind; another kind's
+standing there is what says the two do not nest, whether the file runs out of
+tokens first, as an unclosed `{` does, or a closer further down balances the
+opener in the place of the one it is missing, which is what an unclosed `(` in
+the middle of a file does. The brace of the block a statement stands in is the
+exception: it ends that statement, which is how a list written without
+terminators is spelled, such as the enumerators of an `enum` body.
 
 A `<` opens a template argument list only when it is written tight against the
 name before it, or across a line break; Malterlib spells a comparison with

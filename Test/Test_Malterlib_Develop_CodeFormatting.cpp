@@ -1470,6 +1470,36 @@ namespace
 					DMibExpectFalse(Result.f_HasUnfixableDiagnostics());
 				};
 
+				DMibTestCategory("Brackets")
+				{
+					auto fStructureLine = [&](CStr const &_Case, CStr const &_Source)
+						{
+							DMibTestPath(_Case);
+							auto Result = fg_Analyze(_Source);
+							DMibExpectTrue(Result.m_Status == ECodeFormattingStatus::mc_Complete);
+							umint iLine = 0;
+							for (auto const &Diagnostic : Result.m_Diagnostics)
+							{
+								if (Diagnostic.m_Rule == "structure")
+									iLine = Diagnostic.m_iLine;
+							}
+
+							return iLine;
+						}
+					;
+					// No line can be placed while the brackets do not nest, whichever kind is
+					// left open, so the file keeps its lines and is told why.
+					DMibExpect(fStructureLine("OpenBrace", "void f()\n{{\n\tg(1);\n}\n"), ==, 2u);
+					DMibExpect(fStructureLine("OpenParen", "void f(()\n{\n\tg(1);\n}\n"), ==, 1u);
+					// A closer further down the file would otherwise balance the opener in the
+					// place of the one it is missing, which is what left this silent.
+					DMibExpect(fStructureLine("Later", "namespace N\n{\n\tvoid f(()\n\t{\n\t\tg(1);\n\t}\n\n\tvoid h()\n\t{\n\t\tg(2);\n\t}\n}\n"), ==, 3u);
+					DMibExpect(fStructureLine("StrayCloser", "void f()\n{\n\tg(1));\n}\n"), ==, 3u);
+					// A statement that ends at the brace of the block it stands in is how a
+					// list without terminators is written, and no violation of anything.
+					DMibExpect(fStructureLine("EnumBody", "enum E\n{\n\tmc_A = 0\n\t, mc_B = 1\n};\n"), ==, 0u);
+				};
+
 				DMibTestCategory("LineLength")
 				{
 					CStr Long = "int a";

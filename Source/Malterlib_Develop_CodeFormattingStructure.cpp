@@ -507,9 +507,14 @@ namespace NMib::NDevelop
 
 			if (fg_IsClosingBracket(*mp_pTokens, Token))
 			{
-				// The brackets do not nest as written, so this construct keeps its layout.
+				// Another scope's closer stands where this one's belongs, so the brackets do
+				// not nest as written and the opener is the one left unclosed.
 				mp_Nodes[iNode].m_Kind = ECodeNodeKind::mc_Unsupported;
 				fp_Finish(iNode, mp_Significant[i]);
+				if (mp_bComplete)
+					mp_iIncompleteOffset = Tokens[mp_Nodes[iNode].m_iFirstToken].m_iOffset;
+
+				mp_bComplete = false;
 
 				return i;
 			}
@@ -735,8 +740,24 @@ namespace NMib::NDevelop
 
 			if (fg_IsClosingBracket(*mp_pTokens, Token))
 			{
+				// The brace of the block the statement stands in ends it, which is how a list
+				// written without a terminator ends: the enumerators of an 'enum' body, or a
+				// member the source left without its ';'. Any other closer has no opener of
+				// its own, and the brackets do not nest as written.
+				auto const &Parent = mp_Nodes[_iParent];
+				bool bBlockEnd = mp_pTokens->f_IsText(Token, "}")
+					&& Parent.m_Kind == ECodeNodeKind::mc_Block
+					&& Parent.m_Bracket == ECodeBracket::mc_Brace
+				;
 				mp_Nodes[iNode].m_Kind = ECodeNodeKind::mc_Unsupported;
 				fp_Finish(iNode, mp_Significant[i]);
+				if (!bBlockEnd)
+				{
+					if (mp_bComplete)
+						mp_iIncompleteOffset = Token.m_iOffset;
+
+					mp_bComplete = false;
+				}
 
 				return i;
 			}
