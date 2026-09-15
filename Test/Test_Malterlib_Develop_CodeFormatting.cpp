@@ -400,8 +400,8 @@ namespace
 					fg_ExpectFormat
 						(
 							"ClauseBlocks"
-							, "void f()\n{\n\tif (a) {\n\t\tg();\n\t} else {\n\t\th();\n\t}\n}\n"
-							, "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t}\n\telse\n\t{\n\t\th();\n\t}\n}\n"
+							, "void f()\n{\n\tif (a) {\n\t\tg();\n\t\tk();\n\t} else {\n\t\th();\n\t\tk();\n\t}\n}\n"
+							, "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t\tk();\n\t}\n\telse\n\t{\n\t\th();\n\t\tk();\n\t}\n}\n"
 						)
 					;
 					fg_ExpectFormat("DoWhile", "void f()\n{\n\tdo {\n\t\tg();\n\t} while (a);\n}\n", "void f()\n{\n\tdo\n\t{\n\t\tg();\n\t}\n\twhile (a);\n}\n");
@@ -481,6 +481,45 @@ namespace
 							, "void f()\n{\n\tco_await g\n\t\t(\n\t\t\th\n\t\t\t(\n\t\t\t\t[&]() -> TCFuture<void>\n\t\t\t\t{\n\t\t\t\t\tco_return {};\n\t\t\t\t}\n\t\t\t)\n\t\t)\n\t;\n}\n"
 						)
 					;
+				};
+
+				DMibTestCategory("Braces")
+				{
+					// A single guarded statement stands without braces, whatever lines the
+					// source wrote them on.
+					fg_ExpectFormat("Dropped", "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t}\n\telse\n\t{\n\t\th();\n\t}\n}\n", "void f()\n{\n\tif (a)\n\t\tg();\n\telse\n\t\th();\n}\n", false);
+					fg_ExpectFormat("OneLine", "void f()\n{\n\tif (a) { g(); } else { h(); }\n}\n", "void f()\n{\n\tif (a)\n\t\tg();\n\telse\n\t\th();\n}\n", false);
+					fg_ExpectFormat
+						(
+							"Loop"
+							, "void f()\n{\n\twhile (a)\n\t{\n\t\tg();\n\t}\n\tfor (;;)\n\t{\n\t\th();\n\t}\n}\n"
+							, "void f()\n{\n\twhile (a)\n\t\tg();\n\tfor (;;)\n\t\th();\n}\n"
+							, false
+						)
+					;
+					// Two statements, a comment, a nested 'if' in front of an 'else', an empty
+					// block, a macro without a terminator, a 'do' body, and a 'switch' body
+					// all keep their braces.
+					auto fKept = [&](CStr const &_Case, CStr const &_Body)
+						{
+							CStr Source = "void f()\n{\n" + _Body + "}\n";
+							fg_ExpectFormat(_Case, Source, Source);
+						}
+					;
+					fKept("Two", "\tif (a)\n\t{\n\t\tg();\n\t\th();\n\t}\n");
+					fKept("Comment", "\tif (a)\n\t{\n\t\t// why\n\t\tg();\n\t}\n");
+					fKept("Dangling", "\tif (a)\n\t{\n\t\tif (b)\n\t\t\tg();\n\t}\n\telse\n\t\th();\n");
+					fKept("Empty", "\tif (a)\n\t{\n\t}\n");
+					fKept("Macro", "\tif (a)\n\t{\n\t\tDMibFoo(b)\n\t}\n");
+					fKept("Do", "\tdo\n\t{\n\t\tg();\n\t}\n\twhile (a);\n");
+					fKept("Switch", "\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t}\n");
+					fKept("TrailingComment", "\tif (a)\n\t{\n\t\tg();\n\t} // why\n");
+					// A clause split across lines keeps its braces, as the standard requires.
+					CStr Wide;
+					for (umint i = 0; i < 90; ++i)
+						Wide += "W";
+
+					fKept("SplitClause", "\tif\n\t(\n\t\t" + Wide + "\n\t\t&& " + Wide + "\n\t)\n\t{\n\t\tg();\n\t}\n");
 				};
 
 				DMibTestCategory("Bodies")
@@ -798,8 +837,8 @@ namespace
 					fg_ExpectFormat
 						(
 							"ElseBody"
-							, "void f()\n{\n\tif (X)\n\t{\n\t}\n\telse\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t5\n\t\t\t)\n\t\t;\n\t}\n}\n"
-							, "void f()\n{\n\tif (X)\n\t{\n\t}\n\telse\n\t{\n\t\tg(5);\n\t}\n}\n"
+							, "void f()\n{\n\tif (X)\n\t{\n\t}\n\telse\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t5\n\t\t\t)\n\t\t;\n\t\th();\n\t}\n}\n"
+							, "void f()\n{\n\tif (X)\n\t{\n\t}\n\telse\n\t{\n\t\tg(5);\n\t\th();\n\t}\n}\n"
 						)
 					;
 					// A do-while keeps its own shape across the same boundary.

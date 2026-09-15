@@ -488,6 +488,7 @@ namespace
 		void fp_FindLooseOperators(umint _iFirst, umint _iLast, NContainer::TCVector<umint> &o_Operators) const;
 		void fp_PrepareTokenDepth();
 		bool fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent);
+		bool fp_DropBraces(umint _iStatement, umint _iGuard);
 		void fp_BreakBefore(umint _iToken, umint _iIndent);
 		void fp_BreakAfter(umint _iToken, umint _iIndent);
 		void fp_OwnLineBefore(umint _iToken, umint _iIndent);
@@ -530,7 +531,7 @@ namespace
 		NContainer::TCVector<umint> m_iBlockEnd;				// Indexed by token: the closing brace of the block the token opens, or the token count.
 		NContainer::TCVector<uint8> m_GapState;					// Indexed by token: what the gap in front of it becomes.
 		NContainer::TCVector<umint> m_GapIndent;				// The indentation a break in front of the token takes.
-		NContainer::TCVector<CCodeFormattingEdit> m_Structural;	// Return types moved behind their parameter lists.
+		NContainer::TCVector<CCodeFormattingEdit> m_Structural;	// Token changes: return types moved behind their parameter lists, braces dropped.
 		NContainer::TCVector<uint8> m_bProtectedStart;
 		NContainer::TCVector<uint8> m_bProtectedEnd;
 		NContainer::TCVector<CCodeFormattingRange> m_Disabled;
@@ -1379,9 +1380,10 @@ namespace
 		if (!fp_ResolveRanges(Explanation))
 			return fFailed(Explanation);
 
-		// Moving a return type behind its parameter list changes tokens, which no other rule
-		// does. Those conversions are decided first, and the layout is then made on the
-		// converted source, so the lines it settles on are the lines a later pass sees.
+		// Moving a return type behind its parameter list, and dropping the braces around a
+		// single guarded statement, change tokens, which no other rule does. Those
+		// conversions are decided first, and the layout is then made on the converted
+		// source, so the lines it settles on are the lines a later pass sees.
 		CStr Baseline = m_Request.m_Source;
 		if (m_bAllowConversions)
 		{
@@ -1420,7 +1422,10 @@ namespace
 				return fFailed(Explanation);
 
 			for (auto const &Edit : m_Structural)
-				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, "the return type moves behind the parameter list", true);
+			{
+				CStr Explanation = Edit.m_Rule == "braces" ? "a single guarded statement stands without braces" : "the return type moves behind the parameter list";
+				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
+			}
 
 			for (auto Diagnostic : Converted.m_Diagnostics)
 			{
@@ -2895,6 +2900,91 @@ namespace
 		}
 	}
 
+	// The braces around a single statement guarded by 'if', 'else', 'for' or 'while' are
+	// dropped, since the standard writes such a statement without them. Only a block that
+	// holds exactly one statement ending in ';' qualifies, and nothing but whitespace may
+	// stand between the braces and it: a comment, a directive, a macro without a
+	// terminator, an empty statement, or a block inside would each change what the source
+	// says or where it says it. A nested 'if' is never one statement to the builder, which
+	// keeps a dangling 'else' where it is. A clause split across lines keeps its braces,
+	// as the standard requires, so the clause must fit on one line.
+	bool CFormattingAnalyzer::fp_DropBraces(umint _iStatement, umint _iGuard)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Guard = Nodes[_iGuard];
+		auto const &GuardFirst = Tokens[Guard.m_iFirstToken];
+		bool bClause = m_Tokens.f_IsText(GuardFirst, "if") || m_Tokens.f_IsText(GuardFirst, "for") || m_Tokens.f_IsText(GuardFirst, "while");
+		if (!bClause && !m_Tokens.f_IsText(GuardFirst, "else"))
+			return false;
+
+		if (bClause && !fp_FitsInline(Guard.m_iFirstToken, Guard.m_iLastToken, fp_GetStatementIndent(Guard.m_iFirstToken)))
+			return false;
+
+		auto const &Statement = Nodes[_iStatement];
+		if (Statement.m_Kind != ECodeNodeKind::mc_Statement || Statement.m_Children.f_GetLen() != 1)
+			return false;
+
+		auto const &Block = Nodes[Statement.m_Children[0]];
+		if (Block.m_Kind != ECodeNodeKind::mc_Block || Block.m_iFirstToken != Statement.m_iFirstToken || Block.m_iLastToken != Statement.m_iLastToken)
+			return false;
+
+		if (Block.m_bHasComment || Block.m_bHasDirective || Block.m_bHasMultiLineToken || Block.m_Children.f_GetLen() != 1)
+			return false;
+
+		auto const &Inner = Nodes[Block.m_Children[0]];
+		if (Inner.m_Kind != ECodeNodeKind::mc_Statement || Inner.m_iFirstToken == Inner.m_iLastToken)
+			return false;
+
+		if (m_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], "{") || !m_Tokens.f_IsText(Tokens[Inner.m_iLastToken], ";"))
+			return false;
+
+		auto fOnlyWhitespace = [&](umint _iFrom, umint _iTo)
+			{
+				for (auto i = _iFrom; i < _iTo; ++i)
+				{
+					auto Kind = Tokens[i].m_Kind;
+					if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline)
+						return false;
+				}
+
+				return true;
+			}
+		;
+		if (!fOnlyWhitespace(Guard.m_iLastToken + 1, Block.m_iFirstToken) || !fOnlyWhitespace(Block.m_iFirstToken + 1, Inner.m_iFirstToken))
+			return false;
+
+		if (!fOnlyWhitespace(Inner.m_iLastToken + 1, Block.m_iLastToken))
+			return false;
+
+		// A comment behind the closing brace would land on the statement's line, so the
+		// brace must end its line, or be followed by the 'else' the layout moves down.
+		auto iAfter = fp_NextCode(Block.m_iLastToken);
+		bool bEndsLine = fp_IsLastOnLine(Block.m_iLastToken) || (iAfter >= 0 && m_Tokens.f_IsText(Tokens[umint(iAfter)], "else"));
+		if (!bEndsLine)
+			return false;
+
+		auto iOpenStart = Tokens[Guard.m_iLastToken].f_GetEnd();
+		auto nOpen = Tokens[Inner.m_iFirstToken].m_iOffset - iOpenStart;
+		auto iCloseStart = Tokens[Inner.m_iLastToken].f_GetEnd();
+		auto nClose = Tokens[Block.m_iLastToken].f_GetEnd() - iCloseStart;
+		if (fp_IsDisabled(iOpenStart, nOpen) || !fp_IsSelected(iOpenStart, nOpen) || fp_IsDisabled(iCloseStart, nClose) || !fp_IsSelected(iCloseStart, nClose))
+			return false;
+
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto &Open = m_Structural.f_Insert();
+		Open.m_iOffset = iOpenStart;
+		Open.m_nLength = nOpen;
+		Open.m_Replacement = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding()) + fp_MakeIndent(fp_GetStatementIndent(Guard.m_iFirstToken) + nTab);
+		Open.m_Rule = "braces";
+		auto &Close = m_Structural.f_Insert();
+		Close.m_iOffset = iCloseStart;
+		Close.m_nLength = nClose;
+		Close.m_Rule = "braces";
+
+		return true;
+	}
+
 	// A clause that ends at its condition, and a keyword that only introduces the
 	// statement after it, guard that statement.
 	bool CFormattingAnalyzer::fp_IsGuard(umint _iNode) const
@@ -2965,6 +3055,9 @@ namespace
 			// A case written on its label's line stays there whole: 'case 1: a = 1; break;'.
 			bOnLabelLine = !bFirstOnLine && (bLabelled || bOnLabelLine);
 			bool bElseIf = bGuarded && m_Tokens.f_IsText(Tokens[Nodes[iPrevious].m_iFirstToken], "else") && m_Tokens.f_IsText(First, "if");
+			if (m_bProbing && m_bAllowConversions && bGuarded && m_Tokens.f_IsText(First, "{"))
+				fp_DropBraces(iChild, iPrevious);
+
 			// An attribute is written on the clause's line: 'if (x) [[unlikely]]'.
 			auto iSecond = fp_NextCode(iFirst);
 			bool bAttribute = m_Tokens.f_IsText(First, "[") && iSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSecond)], "[");

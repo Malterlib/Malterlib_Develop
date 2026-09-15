@@ -78,9 +78,11 @@ is not handled, and `mc_Failed` when analysis could not produce a usable plan.
 
 ## Rules
 
-The implemented rule matrix is whitespace-only. Every plan is verified against
-`fg_HasEquivalentCodeTokens`, and whole-file plans are re-analyzed to prove the
-result is stable; either check failing is a formatter failure, not an edit.
+The implemented rule matrix is whitespace-only but for two conversions, the
+trailing return type and `braces`. Every plan is verified against
+`fg_HasEquivalentCodeTokens` on the converted source, and whole-file plans are
+re-analyzed to prove the result is stable; either check failing is a formatter
+failure, not an edit.
 
 | Rule | Behavior |
 | --- | --- |
@@ -96,6 +98,7 @@ result is stable; either check failing is a formatter failure, not an edit.
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
 | `line-length` | Diagnostic only; the engine does not yet split an overlong line. |
+| `braces` | Drops the braces around a single statement guarded by `if`, `else`, `for`, or `while`. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
 assignments. Plain `=` is deliberately excluded: the same token spells a lambda
@@ -103,6 +106,16 @@ capture default and the trailing token of Malterlib's `_o=` and `_j=` DSL. `&`,
 `&&`, `*`, `.`, and `->` are excluded because they are also declarators or
 member access. An operator immediately following the `operator` keyword is a
 declarator name and is left alone.
+
+`braces` is decided on the original source, like the trailing return type
+conversion, and the layout is then made on the converted source. It applies
+only where the change cannot alter what the source says: the block holds
+exactly one statement, which ends in `;` and is not itself a block, nothing
+but whitespace stands between the braces and that statement, no comment or
+directive is inside, and the clause fits on one line, since a clause split
+across lines keeps its braces. A nested `if` is two statements to the
+structure builder, so a block that shields a dangling `else` keeps its braces,
+and so do the bodies of `do`, `switch`, `try`, and `catch`.
 
 `indentation` normalizes indentation characters, not indentation depth. The
 depth of a split statement's continuations and clause parentheses is decided by
