@@ -2903,11 +2903,14 @@ namespace
 	// The braces around a single statement guarded by 'if', 'else', 'for' or 'while' are
 	// dropped, since the standard writes such a statement without them. Only a block that
 	// holds exactly one statement ending in ';' qualifies, and nothing but whitespace may
-	// stand between the braces and it: a comment, a directive, a macro without a
-	// terminator, an empty statement, or a block inside would each change what the source
-	// says or where it says it. A nested 'if' is never one statement to the builder, which
-	// keeps a dangling 'else' where it is. A clause split across lines keeps its braces,
-	// as the standard requires, so the clause must fit on one line.
+	// stand between the braces and it: a directive, a macro without a terminator, an empty
+	// statement, or a block inside would each change what the source says or where it
+	// says it. A comment trailing the statement on its line follows it out of the block,
+	// but only when the statement is laid out as one line, since on a split statement the
+	// comment would stand behind the terminator on a line of its own. A nested 'if' is
+	// never one statement to the builder, which keeps a dangling 'else' where it is. A
+	// clause split across lines keeps its braces, as the standard requires, so the clause
+	// must fit on one line.
 	bool CFormattingAnalyzer::fp_DropBraces(umint _iStatement, umint _iGuard)
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
@@ -2929,7 +2932,7 @@ namespace
 		if (Block.m_Kind != ECodeNodeKind::mc_Block || Block.m_iFirstToken != Statement.m_iFirstToken || Block.m_iLastToken != Statement.m_iLastToken)
 			return false;
 
-		if (Block.m_bHasComment || Block.m_bHasDirective || Block.m_bHasMultiLineToken || Block.m_Children.f_GetLen() != 1)
+		if (Block.m_bHasDirective || Block.m_bHasMultiLineToken || Block.m_Children.f_GetLen() != 1)
 			return false;
 
 		auto const &Inner = Nodes[Block.m_Children[0]];
@@ -2954,32 +2957,65 @@ namespace
 		if (!fOnlyWhitespace(Guard.m_iLastToken + 1, Block.m_iFirstToken) || !fOnlyWhitespace(Block.m_iFirstToken + 1, Inner.m_iFirstToken))
 			return false;
 
-		if (!fOnlyWhitespace(Inner.m_iLastToken + 1, Block.m_iLastToken))
-			return false;
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto nGuardIndent = fp_GetStatementIndent(Guard.m_iFirstToken);
+		bool bWrittenOnOneLine = true;
+		for (auto i = Inner.m_iFirstToken; i <= Inner.m_iLastToken; ++i)
+			bWrittenOnOneLine &= Tokens[i].m_Kind != ECodeTokenKind::mc_Newline;
+
+		bool bJoinable = fp_IsRangeJoinable(Block.m_Children[0], Inner.m_iFirstToken, Inner.m_iLastToken);
+		bool bOneLine = bJoinable ? fp_FitsInline(Inner.m_iFirstToken, Inner.m_iLastToken, nGuardIndent + nTab) : bWrittenOnOneLine;
+		auto iCloseStart = Tokens[Inner.m_iLastToken].f_GetEnd();
+		bool bTrailingComment = false;
+		for (auto i = Inner.m_iLastToken + 1; i < Block.m_iLastToken; ++i)
+		{
+			auto Kind = Tokens[i].m_Kind;
+			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline)
+				continue;
+
+			bool bComment = Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment;
+			if (!bComment || bTrailingComment || !bOneLine || Tokens[i].m_bMultiLine)
+				return false;
+
+			bool bOnStatementLine = true;
+			for (auto iGap = Inner.m_iLastToken + 1; iGap < i; ++iGap)
+				bOnStatementLine &= Tokens[iGap].m_Kind != ECodeTokenKind::mc_Newline;
+
+			if (!bOnStatementLine)
+				return false;
+
+			bTrailingComment = true;
+			iCloseStart = Tokens[i].f_GetEnd();
+		}
 
 		// A comment behind the closing brace would land on the statement's line, so the
-		// brace must end its line, or be followed by the 'else' the layout moves down.
+		// brace must end its line, or be followed by the 'else' the layout moves down; that
+		// 'else' then starts a line of its own here, so a trailing comment never swallows it.
 		auto iAfter = fp_NextCode(Block.m_iLastToken);
-		bool bEndsLine = fp_IsLastOnLine(Block.m_iLastToken) || (iAfter >= 0 && m_Tokens.f_IsText(Tokens[umint(iAfter)], "else"));
-		if (!bEndsLine)
+		bool bLastOnLine = fp_IsLastOnLine(Block.m_iLastToken);
+		bool bElseFollows = iAfter >= 0 && m_Tokens.f_IsText(Tokens[umint(iAfter)], "else");
+		if (!bLastOnLine && !bElseFollows)
 			return false;
 
 		auto iOpenStart = Tokens[Guard.m_iLastToken].f_GetEnd();
 		auto nOpen = Tokens[Inner.m_iFirstToken].m_iOffset - iOpenStart;
-		auto iCloseStart = Tokens[Inner.m_iLastToken].f_GetEnd();
-		auto nClose = Tokens[Block.m_iLastToken].f_GetEnd() - iCloseStart;
+		auto iCloseEnd = bLastOnLine ? Tokens[Block.m_iLastToken].f_GetEnd() : Tokens[umint(iAfter)].m_iOffset;
+		auto nClose = iCloseEnd - iCloseStart;
 		if (fp_IsDisabled(iOpenStart, nOpen) || !fp_IsSelected(iOpenStart, nOpen) || fp_IsDisabled(iCloseStart, nClose) || !fp_IsSelected(iCloseStart, nClose))
 			return false;
 
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
 		auto &Open = m_Structural.f_Insert();
 		Open.m_iOffset = iOpenStart;
 		Open.m_nLength = nOpen;
-		Open.m_Replacement = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding()) + fp_MakeIndent(fp_GetStatementIndent(Guard.m_iFirstToken) + nTab);
+		Open.m_Replacement = Ending + fp_MakeIndent(nGuardIndent + nTab);
 		Open.m_Rule = "braces";
 		auto &Close = m_Structural.f_Insert();
 		Close.m_iOffset = iCloseStart;
 		Close.m_nLength = nClose;
+		if (!bLastOnLine)
+			Close.m_Replacement = Ending + fp_MakeIndent(nGuardIndent);
+
 		Close.m_Rule = "braces";
 
 		return true;

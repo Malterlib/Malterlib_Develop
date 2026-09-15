@@ -506,6 +506,10 @@ namespace
 							fg_ExpectFormat(_Case, Source, Source);
 						}
 					;
+					CStr Wide;
+					for (umint i = 0; i < 90; ++i)
+						Wide += "W";
+
 					fKept("Two", "\tif (a)\n\t{\n\t\tg();\n\t\th();\n\t}\n");
 					fKept("Comment", "\tif (a)\n\t{\n\t\t// why\n\t\tg();\n\t}\n");
 					fKept("Dangling", "\tif (a)\n\t{\n\t\tif (b)\n\t\t\tg();\n\t}\n\telse\n\t\th();\n");
@@ -514,11 +518,20 @@ namespace
 					fKept("Do", "\tdo\n\t{\n\t\tg();\n\t}\n\twhile (a);\n");
 					fKept("Switch", "\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t}\n");
 					fKept("TrailingComment", "\tif (a)\n\t{\n\t\tg();\n\t} // why\n");
+					// A comment on the statement's own line follows it out of the block, also in
+					// front of an 'else' on the brace's line; one behind the terminator of a
+					// statement that stays split keeps the braces.
+					fg_ExpectFormat("StatementComment", "void f()\n{\n\tif (a)\n\t{\n\t\tg(); // why\n\t}\n}\n", "void f()\n{\n\tif (a)\n\t\tg(); // why\n}\n", false);
+					fg_ExpectFormat
+						(
+							"StatementCommentElse"
+							, "void f()\n{\n\tif (a)\n\t{\n\t\tg(); // why\n\t} else\n\t\th();\n}\n"
+							, "void f()\n{\n\tif (a)\n\t\tg(); // why\n\telse\n\t\th();\n}\n"
+							, false
+						)
+					;
+					fKept("SplitStatementComment", "\tif (a)\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t" + Wide + Wide + "\n\t\t\t)\n\t\t; // why\n\t}\n");
 					// A clause split across lines keeps its braces, as the standard requires.
-					CStr Wide;
-					for (umint i = 0; i < 90; ++i)
-						Wide += "W";
-
 					fKept("SplitClause", "\tif\n\t(\n\t\t" + Wide + "\n\t\t&& " + Wide + "\n\t)\n\t{\n\t\tg();\n\t}\n");
 				};
 

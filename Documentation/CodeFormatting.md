@@ -111,9 +111,12 @@ declarator name and is left alone.
 conversion, and the layout is then made on the converted source. It applies
 only where the change cannot alter what the source says: the block holds
 exactly one statement, which ends in `;` and is not itself a block, nothing
-but whitespace stands between the braces and that statement, no comment or
-directive is inside, and the clause fits on one line, since a clause split
-across lines keeps its braces. A nested `if` is two statements to the
+but whitespace stands between the braces and that statement, no directive is
+inside, and the clause fits on one line, since a clause split across lines
+keeps its braces. A comment trailing the statement on its line follows it out
+of the block, but only when the statement is laid out as one line; behind the
+terminator of a split statement it would stand on a line of its own, and the
+braces stay. Any other comment inside keeps them too. A nested `if` is two statements to the
 structure builder, so a block that shields a dangling `else` keeps its braces,
 and so do the bodies of `do`, `switch`, `try`, and `catch`.
 
