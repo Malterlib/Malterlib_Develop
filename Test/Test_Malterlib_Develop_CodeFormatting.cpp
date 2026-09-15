@@ -531,6 +531,25 @@ namespace
 						)
 					;
 					fKept("SplitStatementComment", "\tif (a)\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t" + Wide + Wide + "\n\t\t\t)\n\t\t; // why\n\t}\n");
+					// A statement laid out across lines takes braces, and so does one behind a
+					// split clause; an attribute stays on the clause's line in front of them, and
+					// a trailing comment stays on the statement's last line.
+					fg_ExpectFormat
+						(
+							"Added"
+							, "void f()\n{\n\tif (a)\n\t\tg(" + Wide + Wide + ");\n}\n"
+							, "void f()\n{\n\tif (a)\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t" + Wide + Wide + "\n\t\t\t)\n\t\t;\n\t}\n}\n"
+							, false
+						)
+					;
+					fg_ExpectFormat
+						(
+							"AddedAttribute"
+							, "void f()\n{\n\tif (a) [[unlikely]]\n\t\tg(" + Wide + Wide + "); // why\n}\n"
+							, "void f()\n{\n\tif (a) [[unlikely]]\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t" + Wide + Wide + "\n\t\t\t)\n\t\t; // why\n\t}\n}\n"
+							, false
+						)
+					;
 					// A clause split across lines keeps its braces, as the standard requires.
 					fKept("SplitClause", "\tif\n\t(\n\t\t" + Wide + "\n\t\t&& " + Wide + "\n\t)\n\t{\n\t\tg();\n\t}\n");
 				};
@@ -588,6 +607,23 @@ namespace
 				{
 					// A comment or a directive inside fixes the construct's line structure.
 					fg_ExpectFormat("Comment", "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n", "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n");
+					// A line comment ends its line, and the lines around it are laid out as
+					// usual: the construct is split, and each line takes its indentation.
+					fg_ExpectFormat
+						(
+							"CommentIndent"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t\t5 // why\n\t\t, 6\n\t\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"CommentMembers"
+							, "void f()\n{\n\tco_return co_await m_Promises\n.f_Insert()  // why\n\t\t\t\t\t\t.f_Future()\n\t\t;\n}\n"
+							, "void f()\n{\n\tco_return co_await m_Promises\n\t\t.f_Insert()  // why\n\t\t.f_Future()\n\t;\n}\n"
+						)
+					;
+					fg_ExpectFormat("CommentParameter", "void fg_F\n\t(\n\t\t\tint _A // why\n\t\t, int _B\n\t)\n;\n", "void fg_F\n\t(\n\t\tint _A // why\n\t\t, int _B\n\t)\n;\n");
 					fg_ExpectFormat
 						(
 							"Directive"
@@ -660,9 +696,24 @@ namespace
 						}
 					;
 					fSplit("Call", "void f()\n{\n\tg(@, @, @);\n}\n", "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t\t, @\n\t\t)\n\t;\n}\n");
-					// A clause's parenthesis sits at the statement's own indentation.
-					fSplit("Clause", "void f()\n{\n\tif (@ && @ && @)\n\t\th();\n}\n", "void f()\n{\n\tif\n\t(\n\t\t@\n\t\t&& @\n\t\t&& @\n\t)\n\t\th();\n}\n");
-					fSplit("For", "void f()\n{\n\tfor (umint @ = 0; @ < 5; ++@)\n\t\th();\n}\n", "void f()\n{\n\tfor\n\t(\n\t\tumint @ = 0\n\t\t; @ < 5\n\t\t; ++@\n\t)\n\t\th();\n}\n");
+					// A clause's parenthesis sits at the statement's own indentation, and a
+					// split clause puts braces around the statement it guards.
+					fg_ExpectFormat
+						(
+							"Clause"
+							, CStr("void f()\n{\n\tif (@ && @ && @)\n\t\th();\n}\n").f_Replace("@", Wide)
+							, CStr("void f()\n{\n\tif\n\t(\n\t\t@\n\t\t&& @\n\t\t&& @\n\t)\n\t{\n\t\th();\n\t}\n}\n").f_Replace("@", Wide)
+							, false
+						)
+					;
+					fg_ExpectFormat
+						(
+							"For"
+							, CStr("void f()\n{\n\tfor (umint @ = 0; @ < 5; ++@)\n\t\th();\n}\n").f_Replace("@", Wide)
+							, CStr("void f()\n{\n\tfor\n\t(\n\t\tumint @ = 0\n\t\t; @ < 5\n\t\t; ++@\n\t)\n\t{\n\t\th();\n\t}\n}\n").f_Replace("@", Wide)
+							, false
+						)
+					;
 					// A definition splits its parameter list and keeps its body at statement level.
 					fSplit("Definition", "void fg_F(int @, int @)\n{\n}\n", "void fg_F\n\t(\n\t\tint @\n\t\t, int @\n\t)\n{\n}\n");
 					// A parameter that still does not fit is not split at its declarator, which

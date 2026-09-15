@@ -489,6 +489,9 @@ namespace
 		void fp_PrepareTokenDepth();
 		bool fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent);
 		bool fp_DropBraces(umint _iStatement, umint _iGuard);
+		bool fp_AddBraces(umint _iStatement, umint _iGuard);
+		bool fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const;
+		bool fp_IsRangeOneLine(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent) const;
 		void fp_BreakBefore(umint _iToken, umint _iIndent);
 		void fp_BreakAfter(umint _iToken, umint _iIndent);
 		void fp_OwnLineBefore(umint _iToken, umint _iIndent);
@@ -1423,7 +1426,10 @@ namespace
 
 			for (auto const &Edit : m_Structural)
 			{
-				CStr Explanation = Edit.m_Rule == "braces" ? "a single guarded statement stands without braces" : "the return type moves behind the parameter list";
+				CStr Explanation = Edit.m_Rule == "braces"
+					? "a guarded statement on one line stands without braces, one across lines within them"
+					: "the return type moves behind the parameter list"
+				;
 				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
 			}
 
@@ -1575,7 +1581,14 @@ namespace
 			if (Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice || Kind == ECodeTokenKind::mc_Whitespace)
 				continue;
 
-			if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor)
+			if (Kind == ECodeTokenKind::mc_LineComment)
+			{
+				nColumns += gc_nBlockWidth;
+
+				continue;
+			}
+
+			if (Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor)
 				return false;
 
 			if (Token.m_bMultiLine)
@@ -1584,6 +1597,7 @@ namespace
 			if (i != _iFirstToken)
 			{
 				bool bNewline = false;
+				bool bComment = false;
 				umint nGap = 0;
 				for (umint iGap = iPrevious + 1; iGap < i; ++iGap)
 				{
@@ -1592,6 +1606,8 @@ namespace
 						bNewline = true;
 					else if (GapKind == ECodeTokenKind::mc_Whitespace)
 						nGap += fp_GetTokenColumns(Tokens[iGap]);
+					else if (GapKind == ECodeTokenKind::mc_LineComment)
+						bComment = true;
 					else
 						return false;
 				}
@@ -1601,7 +1617,7 @@ namespace
 				bool bClosers = m_Structure.f_IsAngleBracket(iPrevious) && m_Structure.f_IsAngleBracket(i)
 					&& m_Tokens.f_IsText(Tokens[iPrevious], ">") && m_Tokens.f_IsText(Token, ">")
 				;
-				if (bClosers)
+				if (bClosers || bComment)
 					nColumns += 0;
 				else if (!bNewline)
 					nColumns += nGap;
@@ -1827,11 +1843,14 @@ namespace
 		for (umint i = _iFirst; i <= _iLast; ++i)
 		{
 			auto Kind = Tokens[i].m_Kind;
-			if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor)
+			if (Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor)
 				return false;
 
-			// A line break is layout; only a token whose own text spans lines is fixed.
-			if (Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice || Kind == ECodeTokenKind::mc_Whitespace)
+			// A line break is layout; only a token whose own text spans lines is fixed. A
+			// line comment ends its line and so forbids joining across it, which measuring
+			// it as wider than any line takes care of, while the lines around it are laid
+			// out as usual.
+			if (Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice || Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_LineComment)
 				continue;
 
 			if (Tokens[i].m_bMultiLine)
@@ -1851,7 +1870,6 @@ namespace
 
 			bool bFixed = Child.m_Kind == ECodeNodeKind::mc_Block
 				|| Child.m_Kind == ECodeNodeKind::mc_Unsupported
-				|| Child.m_bHasComment
 				|| Child.m_bHasDirective
 				|| Child.m_bHasMultiLineToken
 				|| Child.m_bHasMultiLineBrace
@@ -1951,12 +1969,15 @@ namespace
 				continue;
 
 			bool bNewline = false;
+			bool bComment = false;
 			bool bOwned = false;
 			for (umint iGap = umint(iPrevious) + 1; iGap < i; ++iGap)
 			{
 				auto Kind = Tokens[iGap].m_Kind;
-				if (Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice)
+				if (Kind == ECodeTokenKind::mc_Newline)
 					bNewline = true;
+				else if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment)
+					bComment = true;
 				else if (Kind != ECodeTokenKind::mc_Whitespace)
 					bOwned = true;
 			}
@@ -1966,30 +1987,39 @@ namespace
 
 			auto iStart = Tokens[umint(iPrevious)].f_GetEnd();
 			auto nLength = Tokens[i].m_iOffset - iStart;
+			// A gap holding a comment keeps its lines, and one keeping its lines keeps any
+			// blank lines too; only the indentation of the line the token starts moves.
+			auto fKeepLines = [&]
+				{
+					auto pGap = m_Request.m_Source.f_GetStr() + iStart;
+					umint nKeep = nLength;
+					while (nKeep && pGap[nKeep - 1] != '\n' && pGap[nKeep - 1] != '\r')
+						--nKeep;
+
+					return CStr(pGap, nKeep) + fp_MakeIndent(m_GapIndent[i]);
+				}
+			;
 			CStr Replacement;
 			CStr Explanation;
 			if (State == EGap::mc_Break || State == EGap::mc_OwnLine)
 			{
-				Replacement = Ending + fp_MakeIndent(m_GapIndent[i]);
+				if (bComment && !bNewline)
+					continue;
+
+				Replacement = bComment ? fKeepLines() : Ending + fp_MakeIndent(m_GapIndent[i]);
 				Explanation = State == EGap::mc_Break ? "a split construct puts this on its own line" : "a block's braces and each of its statements take a line of their own";
 			}
 			else if (State == EGap::mc_Indent)
 			{
-				// The line keeps its breaks, blank lines included; only its indentation moves.
 				if (!bNewline)
 					continue;
 
-				auto pGap = m_Request.m_Source.f_GetStr() + iStart;
-				umint nKeep = nLength;
-				while (nKeep && pGap[nKeep - 1] != '\n' && pGap[nKeep - 1] != '\r')
-					--nKeep;
-
-				Replacement = CStr(pGap, nKeep) + fp_MakeIndent(m_GapIndent[i]);
+				Replacement = fKeepLines();
 				Explanation = "the body's lines move with its brace";
 			}
 			else
 			{
-				if (!bNewline)
+				if (!bNewline || bComment)
 					continue;
 
 				auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iPrevious), i);
@@ -2045,10 +2075,12 @@ namespace
 			auto iEnd = iSplit < Node.m_SplitPoints.f_GetLen() ? Node.m_SplitPoints[iSplit] : Node.m_iLastToken;
 			if (iEnd > iElement)
 			{
-				umint iLast = iEnd - 1;
+				// A range ends on a code token: a comment trailing the element belongs to
+				// the gap in front of the separator, and is no part of the element's width.
+				auto iLast = fp_PreviousCode(iEnd);
 				auto iStart = fp_NextCode(iElement - 1);
-				if (iStart >= 0 && umint(iStart) <= iLast)
-					fp_LayoutRange(_iNode, umint(iStart), iLast, _iIndent, false, false);
+				if (iStart >= 0 && iLast >= 0 && umint(iStart) <= umint(iLast))
+					fp_LayoutRange(_iNode, umint(iStart), umint(iLast), _iIndent, false, false);
 			}
 
 			if (iSplit >= Node.m_SplitPoints.f_GetLen())
@@ -2532,7 +2564,7 @@ namespace
 
 		for (umint iEntry = 0; iEntry < Entries.f_GetLen(); ++iEntry)
 		{
-			auto iEnd = iEntry + 1 < Entries.f_GetLen() ? Entries[iEntry + 1] - 1 : _iLast;
+			auto iEnd = iEntry + 1 < Entries.f_GetLen() ? umint(fp_PreviousCode(Entries[iEntry + 1])) : _iLast;
 			// A directive or a comment inside an entry fixes its lines. Measuring such an
 			// entry as one line makes it look far too wide and splits what already fits.
 			if (!fp_IsRangeJoinable(_iNode, Entries[iEntry], iEnd))
@@ -2900,28 +2932,54 @@ namespace
 		}
 	}
 
+	// 'if', 'else', 'for' and 'while' guard a statement whose braces the standard decides:
+	// none around a statement on one line, braces around one written across lines or
+	// behind a clause split across lines.
+	bool CFormattingAnalyzer::fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const
+	{
+		auto const &Guard = m_Structure.f_GetNodes()[_iGuard];
+		auto const &GuardFirst = m_Tokens.f_GetTokens()[Guard.m_iFirstToken];
+		bool bClause = m_Tokens.f_IsText(GuardFirst, "if") || m_Tokens.f_IsText(GuardFirst, "for") || m_Tokens.f_IsText(GuardFirst, "while");
+		if (!bClause && !m_Tokens.f_IsText(GuardFirst, "else"))
+			return false;
+
+		o_bClauseFits = !bClause || fp_FitsInline(Guard.m_iFirstToken, Guard.m_iLastToken, fp_GetStatementIndent(Guard.m_iFirstToken));
+
+		return true;
+	}
+
+	// Whether the range is laid out as one line: brought onto one where it can be, and
+	// otherwise written on one, since lines it fixes itself stay as they are.
+	bool CFormattingAnalyzer::fp_IsRangeOneLine(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		if (fp_IsRangeJoinable(_iNode, _iFirst, _iLast))
+			return fp_FitsInline(_iFirst, _iLast, _iIndent);
+
+		for (auto i = _iFirst; i <= _iLast; ++i)
+		{
+			if (Tokens[i].m_Kind == ECodeTokenKind::mc_Newline)
+				return false;
+		}
+
+		return true;
+	}
+
 	// The braces around a single statement guarded by 'if', 'else', 'for' or 'while' are
-	// dropped, since the standard writes such a statement without them. Only a block that
-	// holds exactly one statement ending in ';' qualifies, and nothing but whitespace may
-	// stand between the braces and it: a directive, a macro without a terminator, an empty
-	// statement, or a block inside would each change what the source says or where it
-	// says it. A comment trailing the statement on its line follows it out of the block,
-	// but only when the statement is laid out as one line, since on a split statement the
-	// comment would stand behind the terminator on a line of its own. A nested 'if' is
-	// never one statement to the builder, which keeps a dangling 'else' where it is. A
-	// clause split across lines keeps its braces, as the standard requires, so the clause
-	// must fit on one line.
+	// dropped when the statement is laid out as one line, since the standard writes such
+	// a statement without them. Only a block that holds exactly one statement ending in
+	// ';' qualifies, and nothing but whitespace may stand between the braces and it: a
+	// directive, a macro without a terminator, an empty statement, or a block inside
+	// would each change what the source says or where it says it. A comment trailing the
+	// statement on its line follows it out of the block. A nested 'if' is never one
+	// statement to the builder, which keeps a dangling 'else' where it is.
 	bool CFormattingAnalyzer::fp_DropBraces(umint _iStatement, umint _iGuard)
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto const &Guard = Nodes[_iGuard];
-		auto const &GuardFirst = Tokens[Guard.m_iFirstToken];
-		bool bClause = m_Tokens.f_IsText(GuardFirst, "if") || m_Tokens.f_IsText(GuardFirst, "for") || m_Tokens.f_IsText(GuardFirst, "while");
-		if (!bClause && !m_Tokens.f_IsText(GuardFirst, "else"))
-			return false;
-
-		if (bClause && !fp_FitsInline(Guard.m_iFirstToken, Guard.m_iLastToken, fp_GetStatementIndent(Guard.m_iFirstToken)))
+		bool bClauseFits = false;
+		if (!fp_IsBraceGuard(_iGuard, bClauseFits) || !bClauseFits)
 			return false;
 
 		auto const &Statement = Nodes[_iStatement];
@@ -2959,12 +3017,9 @@ namespace
 
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
 		auto nGuardIndent = fp_GetStatementIndent(Guard.m_iFirstToken);
-		bool bWrittenOnOneLine = true;
-		for (auto i = Inner.m_iFirstToken; i <= Inner.m_iLastToken; ++i)
-			bWrittenOnOneLine &= Tokens[i].m_Kind != ECodeTokenKind::mc_Newline;
+		if (!fp_IsRangeOneLine(Block.m_Children[0], Inner.m_iFirstToken, Inner.m_iLastToken, nGuardIndent + nTab))
+			return false;
 
-		bool bJoinable = fp_IsRangeJoinable(Block.m_Children[0], Inner.m_iFirstToken, Inner.m_iLastToken);
-		bool bOneLine = bJoinable ? fp_FitsInline(Inner.m_iFirstToken, Inner.m_iLastToken, nGuardIndent + nTab) : bWrittenOnOneLine;
 		auto iCloseStart = Tokens[Inner.m_iLastToken].f_GetEnd();
 		bool bTrailingComment = false;
 		for (auto i = Inner.m_iLastToken + 1; i < Block.m_iLastToken; ++i)
@@ -2974,7 +3029,7 @@ namespace
 				continue;
 
 			bool bComment = Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment;
-			if (!bComment || bTrailingComment || !bOneLine || Tokens[i].m_bMultiLine)
+			if (!bComment || bTrailingComment || Tokens[i].m_bMultiLine)
 				return false;
 
 			bool bOnStatementLine = true;
@@ -3016,6 +3071,103 @@ namespace
 		if (!bLastOnLine)
 			Close.m_Replacement = Ending + fp_MakeIndent(nGuardIndent);
 
+		Close.m_Rule = "braces";
+
+		return true;
+	}
+
+	// Braces are put around a single guarded statement that is laid out across lines, or
+	// that a clause split across lines guards, as the standard requires. The statement
+	// must end in ';', so a macro without a terminator is left alone, and only whitespace
+	// may stand between the guard and it. An attribute in front of the statement stays
+	// on the clause's line, and the brace opens behind it. A comment trailing the
+	// statement's last line stays there, in front of the closing brace.
+	bool CFormattingAnalyzer::fp_AddBraces(umint _iStatement, umint _iGuard)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Guard = Nodes[_iGuard];
+		bool bClauseFits = false;
+		if (!fp_IsBraceGuard(_iGuard, bClauseFits))
+			return false;
+
+		auto const &Statement = Nodes[_iStatement];
+		if (Statement.m_Kind != ECodeNodeKind::mc_Statement || Statement.m_iFirstToken == Statement.m_iLastToken)
+			return false;
+
+		if (!m_Tokens.f_IsText(Tokens[Statement.m_iLastToken], ";") || m_Tokens.f_IsText(Tokens[Statement.m_iFirstToken], "{"))
+			return false;
+
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto nGuardIndent = fp_GetStatementIndent(Guard.m_iFirstToken);
+
+		// The brace opens behind an attribute on the clause's line.
+		auto iOpenAfter = Guard.m_iLastToken;
+		auto iFirst = Statement.m_iFirstToken;
+		auto iSecond = fp_NextCode(iFirst);
+		if (m_Tokens.f_IsText(Tokens[iFirst], "[") && iSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSecond)], "["))
+		{
+			for (auto iChild : Statement.m_Children)
+			{
+				if (Nodes[iChild].m_iFirstToken != iFirst)
+					continue;
+
+				iOpenAfter = Nodes[iChild].m_iLastToken;
+				auto iNext = fp_NextCode(iOpenAfter);
+				if (iNext < 0 || umint(iNext) > Statement.m_iLastToken)
+					return false;
+
+				iFirst = umint(iNext);
+
+				break;
+			}
+
+			if (iOpenAfter == Guard.m_iLastToken)
+				return false;
+		}
+
+		if (bClauseFits && fp_IsRangeOneLine(_iStatement, iFirst, Statement.m_iLastToken, nGuardIndent + nTab))
+			return false;
+
+		for (auto i = iOpenAfter + 1; i < iFirst; ++i)
+		{
+			auto Kind = Tokens[i].m_Kind;
+			if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline)
+				return false;
+		}
+
+		auto iCloseAt = Tokens[Statement.m_iLastToken].f_GetEnd();
+		for (auto i = Statement.m_iLastToken + 1; i < Tokens.f_GetLen(); ++i)
+		{
+			auto Kind = Tokens[i].m_Kind;
+			if (Kind == ECodeTokenKind::mc_Whitespace)
+				continue;
+
+			if ((Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment) && !Tokens[i].m_bMultiLine)
+			{
+				iCloseAt = Tokens[i].f_GetEnd();
+
+				continue;
+			}
+
+			break;
+		}
+
+		auto iOpenStart = Tokens[iOpenAfter].f_GetEnd();
+		auto nOpen = Tokens[iFirst].m_iOffset - iOpenStart;
+		if (fp_IsDisabled(iOpenStart, nOpen) || !fp_IsSelected(iOpenStart, nOpen) || fp_IsDisabled(iCloseAt, 0) || !fp_IsSelected(iCloseAt, 0))
+			return false;
+
+		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
+		auto &Open = m_Structural.f_Insert();
+		Open.m_iOffset = iOpenStart;
+		Open.m_nLength = nOpen;
+		Open.m_Replacement = Ending + fp_MakeIndent(nGuardIndent) + "{" + Ending + fp_MakeIndent(nGuardIndent + nTab);
+		Open.m_Rule = "braces";
+		auto &Close = m_Structural.f_Insert();
+		Close.m_iOffset = iCloseAt;
+		Close.m_nLength = 0;
+		Close.m_Replacement = Ending + fp_MakeIndent(nGuardIndent) + "}";
 		Close.m_Rule = "braces";
 
 		return true;
@@ -3091,8 +3243,13 @@ namespace
 			// A case written on its label's line stays there whole: 'case 1: a = 1; break;'.
 			bOnLabelLine = !bFirstOnLine && (bLabelled || bOnLabelLine);
 			bool bElseIf = bGuarded && m_Tokens.f_IsText(Tokens[Nodes[iPrevious].m_iFirstToken], "else") && m_Tokens.f_IsText(First, "if");
-			if (m_bProbing && m_bAllowConversions && bGuarded && m_Tokens.f_IsText(First, "{"))
-				fp_DropBraces(iChild, iPrevious);
+			if (m_bProbing && m_bAllowConversions && bGuarded && !bElseIf)
+			{
+				if (m_Tokens.f_IsText(First, "{"))
+					fp_DropBraces(iChild, iPrevious);
+				else
+					fp_AddBraces(iChild, iPrevious);
+			}
 
 			// An attribute is written on the clause's line: 'if (x) [[unlikely]]'.
 			auto iSecond = fp_NextCode(iFirst);
@@ -4038,7 +4195,7 @@ namespace
 		for (umint iSegment = 0; iSegment <= Operators.f_GetLen(); ++iSegment)
 		{
 			auto iStart = iSegment ? Operators[iSegment - 1] : _iFirst;
-			auto iEnd = iSegment < Operators.f_GetLen() ? Operators[iSegment] - 1 : _iLast;
+			auto iEnd = iSegment < Operators.f_GetLen() ? umint(fp_PreviousCode(Operators[iSegment])) : _iLast;
 			// An operator left on the previous line belongs to neither segment's own line.
 			if (iSegment == 1 && bOperatorTrails)
 			{
