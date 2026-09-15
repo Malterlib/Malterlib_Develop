@@ -122,8 +122,9 @@ namespace
 					auto Capture = co_await (g_CaptureExceptions % "Below");
 
 					TCMap<CStr, CStr> Files;
-					Files["/repo/.editorconfig"] = "root = true\n[*.cpp]\nmalterlib_format = malterlib\n[**/Cache/**]\nmalterlib_format = unset\n"
+					Files["/repo/.editorconfig"] = "root = true\n[*]\nindent_style = tab\n[*.cpp]\nmalterlib_format = malterlib\n[**/Cache/**]\nmalterlib_format = unset\n"
 						"[**/Cache/**.keep]\nmalterlib_format = malterlib\n[**/Build/**]\nmalterlib_format = unset\n"
+						"[**/{ImportCache,IC}/**]\nmalterlib_format = unset\nindent_style = unset\n[**/{ImportCache,IC}/**.MHeader]\nindent_style = tab\n"
 					;
 					Files["/repo/src/.editorconfig"] = "[*]\ncustom = value\n";
 					TCActor<CEditorConfigResolver> Resolver = fg_Construct
@@ -155,6 +156,13 @@ namespace
 					DMibExpectTrue(Build.m_Properties.f_FindEqual("malterlib_format") == nullptr);
 					DMibExpectTrue(Build.m_Settled.f_FindEqual("malterlib_format") != nullptr);
 					DMibExpectTrue(Build.m_Uncertain.f_FindEqual("malterlib_format") == nullptr);
+
+					// A directory at the document's own level, which the leading '**/' must match as nothing.
+					auto TopCache = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo/IC");
+					DMibExpectTrue(TopCache.m_Properties.f_FindEqual("malterlib_format") == nullptr);
+					DMibExpectTrue(TopCache.m_Settled.f_FindEqual("malterlib_format") != nullptr);
+					DMibExpectTrue(TopCache.m_Uncertain.f_FindEqual("malterlib_format") == nullptr);
+					DMibExpectTrue(TopCache.m_Uncertain.f_FindEqual("indent_style") != nullptr);
 
 					auto Root = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo");
 					DMibExpectTrue(Root.m_Uncertain.f_FindEqual("malterlib_format") != nullptr);

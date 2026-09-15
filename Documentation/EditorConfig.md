@@ -38,8 +38,9 @@ The resolver caches both present and missing documents, and the chain of
 documents that applies to a directory, so the files of one directory walk the
 directory tree once. `f_ResolveBelow` judges a directory for every file under
 it: a section whose pattern covers all of them settles its properties, one that
-may cover some leaves them uncertain, and a key no document above mentions is
-neither, since a document deeper down may still set it. A walk uses that to
+may cover some leaves a property uncertain unless it would give it the value
+already settled, and a key no document above mentions is neither, since a
+document deeper down may still set it. A walk uses that to
 decide whether entering a directory can find anything. Loads run on the
 `CSharedRoundRobinBlockingActors` the resolver was constructed with, which
 resolvers may share, or on one of its own, however many resolves are in flight.

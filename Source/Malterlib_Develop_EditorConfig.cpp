@@ -122,8 +122,9 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		// A section that covers every file under the directory settles its properties for all
-		// of them; one that may cover some of them leaves those properties uncertain. A root
-		// document starts over for everything below it.
+		// of them; one that may cover some of them leaves a property uncertain unless it would
+		// give it the value already settled, as the exclusions nested under an excluded tree
+		// do. A root document starts over for everything below it.
 		void f_ApplyBelow(CStr const &_RelativeDirectory, TCMap<CStr, CStr> &o_Properties, TCSet<CStr> &o_Settled, TCSet<CStr> &o_Uncertain) const
 		{
 			if (m_bRoot)
@@ -145,7 +146,8 @@ namespace NMib::NDevelop::NPrivate
 				{
 					if (Cover == EPathGlobCover::mc_Some)
 					{
-						o_Uncertain.f_Insert(Property.f_Key());
+						if (!fs_IsSettledTo(Property.f_Key(), Property.f_Value(), o_Properties, o_Settled))
+							o_Uncertain.f_Insert(Property.f_Key());
 
 						continue;
 					}
@@ -158,6 +160,18 @@ namespace NMib::NDevelop::NPrivate
 						o_Properties[Property.f_Key()] = Property.f_Value();
 				}
 			}
+		}
+
+		static bool fs_IsSettledTo(CStr const &_Key, CStr const &_Value, TCMap<CStr, CStr> const &_Properties, TCSet<CStr> const &_Settled)
+		{
+			if (!_Settled.f_FindEqual(_Key))
+				return false;
+
+			auto pCurrent = _Properties.f_FindEqual(_Key);
+			if (fs_IsUnset(_Value))
+				return !pCurrent;
+
+			return pCurrent && *pCurrent == _Value;
 		}
 
 		bool m_bRoot = false;
