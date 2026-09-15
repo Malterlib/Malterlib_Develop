@@ -599,7 +599,10 @@ namespace NMib::NDevelop
 			// 'enum : uint32' and 'struct : CBase' name what they are built on.
 			if (mp_pTokens->f_IsText(Token, ":") && !bConditional && (bLabel || i == _iToken + 1) && !bDefines)
 			{
-				if (bLabel || Tokens[mp_Significant[_iToken]].m_Kind == ECodeTokenKind::mc_Identifier)
+				// A width behind the ':' makes it an unnamed bit-field, 'uint32 : 3', which
+				// is spelled like a label and declares one thing rather than naming a place.
+				bool bWidth = !bLabel && i + 1 < mp_Significant.f_GetLen() && Tokens[mp_Significant[i + 1]].m_Kind == ECodeTokenKind::mc_Number;
+				if (!bWidth && (bLabel || Tokens[mp_Significant[_iToken]].m_Kind == ECodeTokenKind::mc_Identifier))
 				{
 					fp_Finish(iNode, mp_Significant[i]);
 
@@ -1144,6 +1147,71 @@ namespace
 		}
 
 		return false;
+	}
+
+	// A ':' at a declaration's own level gives the width of a bit-field, 'uint8 m_Flags:2'.
+	// What stands in front of it is the name a type declares, which no other ':' has: a
+	// label ends its statement at the ':', a base clause follows a definition's keyword, an
+	// initializer list follows a parameter list, and a conditional's answers a '?'.
+	bool fg_IsBitFieldColon(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iColon)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto iNode = fg_FindEnclosingNode(_Structure, _iColon);
+		if (iNode == Nodes.f_GetLen() || Nodes[iNode].m_Kind != ECodeNodeKind::mc_Statement)
+			return false;
+
+		auto const &Statement = Nodes[iNode];
+		auto const &First = Tokens[Statement.m_iFirstToken];
+		static ch8 const *const gsc_pOther[] =
+			{
+				"case", "default", "public", "private", "protected", "struct", "class", "union", "enum"
+				, "namespace", "template", "using", "friend", "operator"
+			}
+		;
+		if (fg_IsAnyText(_Tokens, First, gsc_pOther) || fg_IsAnyText(_Tokens, First, gc_pExpressionKeywords))
+			return false;
+
+		auto iName = fg_PreviousCode(_Tokens, _iColon);
+		if (iName < 0 || Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
+			return false;
+
+		// Without a name in front of it the type itself stands there, and only the width
+		// behind the ':' tells the declaration from a label.
+		if (umint(iName) <= Statement.m_iFirstToken)
+		{
+			auto iWidth = fg_NextCode(_Tokens, _iColon);
+			if (iWidth < 0 || Tokens[umint(iWidth)].m_Kind != ECodeTokenKind::mc_Number)
+				return false;
+		}
+
+		// A parameter list in front of the ':' makes it the one that opens an initializer
+		// list, whatever stands between the two: 'C(int _A) noexcept : m_A(_A)'.
+		for (auto iChild : Statement.m_Children)
+		{
+			auto const &Child = Nodes[iChild];
+			if (Child.m_Kind == ECodeNodeKind::mc_Group && Child.m_Bracket == ECodeBracket::mc_Paren && Child.m_iLastToken < _iColon)
+				return false;
+		}
+
+		for (auto i = Statement.m_iFirstToken; i < _iColon; ++i)
+		{
+			for (auto iChild : Statement.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				{
+					i = Child.m_iLastToken;
+
+					break;
+				}
+			}
+
+			if (i < _iColon && _Tokens.f_IsText(Tokens[i], "?"))
+				return false;
+		}
+
+		return true;
 	}
 
 	// A name spelled as an underscore with nothing but lower case behind it, '_o', '_j' or
@@ -1817,6 +1885,14 @@ namespace NMib::NDevelop
 			}
 
 			return ECodeSpacing::mc_Preserve;
+		}
+
+		// A bit-field's width hugs the ':' that introduces it, on both sides:
+		// 'uint8 mp_Priority:2 = 0'.
+		if (fLeft(":") || fRight(":"))
+		{
+			if (fg_IsBitFieldColon(_Tokens, _Structure, fLeft(":") ? _iLeft : _iRight))
+				return ECodeSpacing::mc_None;
 		}
 
 		// A colon that ends a label hugs it: 'case 1:', 'public:'. The builder ends a

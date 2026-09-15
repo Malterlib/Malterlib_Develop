@@ -341,6 +341,26 @@ namespace
 						)
 					;
 					fg_ExpectFormat("Sign", "void f()\n{\n\tx = - 1 + y - - z;\n}\n", "void f()\n{\n\tx = -1 + y - -z;\n}\n");
+					// A bit-field's width hugs the ':' that introduces it, named or not. Every
+					// other ':' at a declaration's level belongs to something else: a base
+					// clause, an initializer list behind a parameter list, a conditional.
+					fg_ExpectFormat
+						(
+							"BitField"
+							, "struct C : CBase\n{\n\tuint8 m_Priority : 2 = 0;\n\tuint8 : 3;\n\tuint32 m_Value:gc_Bits;\n"
+								"\tC(int _A) noexcept\n\t\t: m_A(_A)\n\t{\n\t}\n\n\tint m_A = 1 ? 2 : 3;\n};\n"
+							, "struct C : CBase\n{\n\tuint8 m_Priority:2 = 0;\n\tuint8:3;\n\tuint32 m_Value:gc_Bits;\n"
+								"\tC(int _A) noexcept\n\t\t: m_A(_A)\n\t{\n\t}\n\n\tint m_A = 1 ? 2 : 3;\n};\n"
+						)
+					;
+					// An enumeration's underlying type and a range-for's ':' are spelled apart.
+					fg_ExpectFormat
+						(
+							"ColonKept"
+							, "enum EKind : uint32\n{\n\tmc_A\n};\n\nvoid f()\n{\n\tfor (auto &X : R)\n\t\tg(X);\n}\n"
+							, "enum EKind : uint32\n{\n\tmc_A\n};\n\nvoid f()\n{\n\tfor (auto &X : R)\n\t\tg(X);\n}\n"
+						)
+					;
 					// A gap holding a comment is not on one line, and an ambiguous pair keeps
 					// its spelling.
 					fg_ExpectFormat("Kept", "void f()\n{\n\tx = a /* c */ .b;\n\tg(c*d);\n}\n", "void f()\n{\n\tx = a /* c */ .b;\n\tg(c*d);\n}\n");

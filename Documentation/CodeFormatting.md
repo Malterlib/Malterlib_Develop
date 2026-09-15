@@ -94,7 +94,7 @@ failure, not an edit.
 | `comma-space` | No space before a comma, one space after it on the same line. |
 | `operator-space` | One space around unambiguous binary operators. |
 | `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
-| `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. |
+| `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon, a bit-field's width, and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. |
 | `block-blank-line` | Removes blank lines directly after an opening brace. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
@@ -148,6 +148,14 @@ could close a cast is not such a marker, so `(int)*pValue` keeps its spelling,
 while `sizeof`, `alignof`, `typeid`, and `noexcept` yield a value the way a
 call does and `decltype` names a type. Everywhere else the pair keeps what the
 source has.
+
+A bit-field's width hugs the `:` that introduces it, `uint8 mp_Priority:2 = 0`,
+named or not. What stands in front of that `:` is the name a type declares,
+which no other colon at a declaration's level has: a label ends its statement
+there, a base clause follows a definition's keyword, an initializer list follows
+a parameter list however many qualifiers stand between, and a conditional's
+colon answers a `?`. An unnamed bit-field, `uint32 : 3`, is spelled like a label
+and is none; the width behind the colon is what tells the two apart.
 
 Plain `=` assigns and initializes, and stands apart from both sides. Two
 spellings in the sources are not that: a capture default, which the markers
