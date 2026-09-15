@@ -1124,6 +1124,159 @@ namespace
 
 		return false;
 	}
+
+	// An operator's spelling says what it does only where an operand stands on both sides
+	// of it. Without one in front it is the unary form, '-1' and '*pValue'; without one
+	// behind it names something else, a cast's '(CFoo *)' or a pack's '&&...'. '*', '&'
+	// and '&&' are ambiguous even in that position, since a name in front of one can be a
+	// type as easily as an operand, and behind a parameter list the same token qualifies
+	// the function: 'f_Get() const &'.
+	bool fg_IsInfixOperator(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto const &Token = Tokens[_iToken];
+		if (Token.m_Kind != ECodeTokenKind::mc_Punctuator || _Structure.f_IsAngleBracket(_iToken))
+			return false;
+
+		static ch8 const *const gsc_pOperators[] =
+			{
+				"*", "/", "%", "+", "-", "<<", ">>", "<", ">", "<=", ">=", "<=>", "==", "!=", "&", "^", "|", "&&", "||"
+			}
+		;
+		if (!fg_IsAnyText(_Tokens, Token, gsc_pOperators))
+			return false;
+
+		auto iBefore = fg_PreviousCode(_Tokens, _iToken);
+		auto iAfter = fg_NextCode(_Tokens, _iToken);
+		if (iBefore < 0 || iAfter < 0)
+			return false;
+
+		// Behind 'operator' the token spells a function's name, not an operation.
+		auto const &Before = Tokens[umint(iBefore)];
+		if (_Tokens.f_IsText(Before, "operator"))
+			return false;
+
+		bool bOperand = Before.m_Kind == ECodeTokenKind::mc_Number
+			|| Before.m_Kind == ECodeTokenKind::mc_StringLiteral
+			|| Before.m_Kind == ECodeTokenKind::mc_CharLiteral
+			|| (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
+			|| _Tokens.f_IsText(Before, ")")
+			|| _Tokens.f_IsText(Before, "]")
+			|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
+		;
+		if (!bOperand)
+			return false;
+
+		auto const &After = Tokens[umint(iAfter)];
+		static ch8 const *const gsc_pCloses[] =
+			{
+				")", "]", "}", ",", ";", "..."
+			}
+		;
+		if (fg_IsAnyText(_Tokens, After, gsc_pCloses))
+			return false;
+
+		if (!fg_IsDeclaratorText(_Tokens, Token))
+			return true;
+
+		if (fg_IsDeclaratorToken(_Tokens, _Structure, _iToken))
+			return false;
+
+		// What follows a ref-qualifier is the rest of the declaration: the trailing return
+		// type, the body, a pure specifier, a requires clause or another qualifier.
+		static ch8 const *const gsc_pTails[] =
+			{
+				"->", "{", "=", "requires", "const", "volatile", "noexcept", "override", "final", "&", "&&"
+			}
+		;
+		if (fg_IsAnyText(_Tokens, After, gsc_pTails))
+			return false;
+
+		// What is left is the spelling C++ itself cannot tell apart, 'C(CStr &_A)' against
+		// 'C(a & b)', so the reading is settled only where a declaration cannot stand: behind
+		// a literal, behind the '=' that ends the declarator part of what the token stands
+		// in, or in a condition, which declares nothing without an '=' of its own.
+		if (Before.m_Kind == ECodeTokenKind::mc_Number || Before.m_Kind == ECodeTokenKind::mc_StringLiteral || Before.m_Kind == ECodeTokenKind::mc_CharLiteral)
+			return true;
+
+		auto const &Nodes = _Structure.f_GetNodes();
+
+		// A ')' closes a cast as well as a call, and '(CFoo)*pValue' spells the tokens of a
+		// multiplication, so only a call or a subscript in front of the token settles it. An
+		// operator spelled like a call yields a value the same way, apart from 'decltype',
+		// which names a type: 'decltype(m_Value) *pValue'.
+		if (_Tokens.f_IsText(Before, ")") || _Tokens.f_IsText(Before, "]"))
+		{
+			static ch8 const *const gsc_pValueOperators[] =
+				{
+					"sizeof", "alignof", "typeid", "noexcept"
+				}
+			;
+			for (auto const &Group : Nodes)
+			{
+				if (Group.m_Kind != ECodeNodeKind::mc_Group || Group.m_iLastToken != umint(iBefore))
+					continue;
+
+				auto iName = fg_PreviousCode(_Tokens, Group.m_iFirstToken);
+				if (iName < 0)
+					return false;
+
+				auto const &Name = Tokens[umint(iName)];
+				if (Name.m_Kind == ECodeTokenKind::mc_Identifier)
+					return !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords) || fg_IsAnyText(_Tokens, Name, gsc_pValueOperators);
+
+				return _Tokens.f_IsText(Name, ")") || _Tokens.f_IsText(Name, "]");
+			}
+
+			return false;
+		}
+
+		auto iNode = fg_FindEnclosingNode(_Structure, _iToken);
+		if (iNode == Nodes.f_GetLen())
+			return false;
+
+		auto const &Node = Nodes[iNode];
+		if (Node.m_Kind == ECodeNodeKind::mc_Statement && fg_IsAnyText(_Tokens, Tokens[Node.m_iFirstToken], gc_pExpressionKeywords))
+			return true;
+
+		bool bCondition = false;
+		if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Paren)
+		{
+			auto iClause = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+			bCondition = iClause >= 0
+				&& (_Tokens.f_IsText(Tokens[umint(iClause)], "if")
+					|| _Tokens.f_IsText(Tokens[umint(iClause)], "while")
+					|| _Tokens.f_IsText(Tokens[umint(iClause)], "switch"))
+			;
+		}
+
+		bool bAssigned = false;
+		auto iEnd = bCondition ? Node.m_iLastToken : _iToken;
+		for (auto i = Node.m_iFirstToken; i < iEnd; ++i)
+		{
+			for (auto iChild : Node.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				{
+					i = Child.m_iLastToken;
+
+					break;
+				}
+			}
+
+			if (i >= iEnd)
+				break;
+
+			// A separator starts the next declarator: 'int *pA = f(), *pB;'.
+			if (!bCondition && (_Tokens.f_IsText(Tokens[i], ",") || _Tokens.f_IsText(Tokens[i], ";")))
+				bAssigned = false;
+			else if (_Tokens.f_IsText(Tokens[i], "="))
+				bAssigned = true;
+		}
+
+		return bCondition ? !bAssigned : bAssigned;
+	}
 }
 
 namespace NMib::NDevelop
@@ -1389,6 +1542,30 @@ namespace NMib::NDevelop
 		if (fLeft("<") || fRight(">") || fLeft(">") || fRight("<"))
 			return ECodeSpacing::mc_Space;
 
+		// A '/' written tight between two names is a path in a macro argument, such as a
+		// log category, and keeps that spelling.
+		if (fLeft("/") || fRight("/"))
+		{
+			auto iSlash = fLeft("/") ? _iLeft : _iRight;
+			auto iBefore = fg_PreviousCode(_Tokens, iSlash);
+			auto iAfter = fg_NextCode(_Tokens, iSlash);
+			bool bTight = iBefore >= 0 && iAfter >= 0
+				&& Tokens[umint(iBefore)].m_Kind == ECodeTokenKind::mc_Identifier
+				&& Tokens[umint(iAfter)].m_Kind == ECodeTokenKind::mc_Identifier
+				&& Tokens[umint(iBefore)].f_GetEnd() == Tokens[iSlash].m_iOffset
+				&& Tokens[iSlash].f_GetEnd() == Tokens[umint(iAfter)].m_iOffset
+			;
+			if (bTight)
+				return ECodeSpacing::mc_Preserve;
+		}
+
+		// An operator in an infix position is written apart from both of its operands,
+		// whatever they are spelled with: 'nFlags & mc_Mask', '5 * 5', 'a * (b + c)'. The
+		// rules below read a parenthesis, a name or a declarator beside the operator as
+		// part of some other construct, so this stands in front of them.
+		if (fg_IsInfixOperator(_Tokens, _Structure, _iLeft) || fg_IsInfixOperator(_Tokens, _Structure, _iRight))
+			return ECodeSpacing::mc_Space;
+
 		// A keyword is separated from a parenthesis that follows it; a call name is not.
 		// Operators spelled like a call, such as sizeof and decltype, stay tight.
 		if (fRight("("))
@@ -1627,23 +1804,6 @@ namespace NMib::NDevelop
 
 			if (!bOperand)
 				return ECodeSpacing::mc_None;
-		}
-
-		// A '/' written tight between two names is a path in a macro argument, such as a
-		// log category, and keeps that spelling.
-		if (fLeft("/") || fRight("/"))
-		{
-			auto iSlash = fLeft("/") ? _iLeft : _iRight;
-			auto iBefore = fg_PreviousCode(_Tokens, iSlash);
-			auto iAfter = fg_NextCode(_Tokens, iSlash);
-			bool bTight = iBefore >= 0 && iAfter >= 0
-				&& Tokens[umint(iBefore)].m_Kind == ECodeTokenKind::mc_Identifier
-				&& Tokens[umint(iAfter)].m_Kind == ECodeTokenKind::mc_Identifier
-				&& Tokens[umint(iBefore)].f_GetEnd() == Tokens[iSlash].m_iOffset
-				&& Tokens[iSlash].f_GetEnd() == Tokens[umint(iAfter)].m_iOffset
-			;
-			if (bTight)
-				return ECodeSpacing::mc_Preserve;
 		}
 
 		static ch8 const *const gsc_pBinaryOperators[] =

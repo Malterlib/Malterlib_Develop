@@ -74,7 +74,9 @@ construct's lines.
 Prefer an explicit unsupported result over a guessed edit. Ambiguous spellings
 stay out of the matrix: plain `=` is also a lambda capture default and the tail
 of the `_o=` DSL, and `&`, `&&`, and `*` are declarators as well as operators,
-read as declarators only where `fg_IsDeclaratorToken` can prove it. The
+read as declarators only where `fg_IsDeclaratorToken` can prove it and as
+operators only where `fg_IsInfixOperator` can prove that no declaration stands
+where they do. The
 structure builder answers the same way: an unclassified construct keeps its
 layout, and `fg_GetCanonicalSpacing` returns `mc_Preserve` for a pair the
 standard does not settle, which is what makes a relayout refuse rather than

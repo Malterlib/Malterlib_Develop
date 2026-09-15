@@ -94,7 +94,7 @@ failure, not an edit.
 | `comma-space` | No space before a comma, one space after it on the same line. |
 | `operator-space` | One space around unambiguous binary operators. |
 | `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
-| `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon and a unary sign hug, a trailing return type's arrow stands apart. |
+| `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. |
 | `block-blank-line` | Removes blank lines directly after an opening brace. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
@@ -105,8 +105,9 @@ failure, not an edit.
 assignments. Plain `=` is deliberately excluded: the same token spells a lambda
 capture default and the trailing token of Malterlib's `_o=` and `_j=` DSL. `&`,
 `&&`, `*`, `.`, and `->` are excluded because they are also declarators or
-member access. An operator immediately following the `operator` keyword is a
-declarator name and is left alone.
+member access; `token-space` spells those of them that are operators, below. An
+operator immediately following the `operator` keyword is a declarator name and
+is left alone.
 
 `braces` is decided on the original source, like the trailing return type
 conversion, and the layout is then made on the converted source. A statement
@@ -131,6 +132,22 @@ rule joins with, to every pair of adjacent tokens on one line, and leaves a pair
 alone where that function does not settle the spelling. An operator function's
 name is left alone too, since the sources spell it both ways, and so is a `/`
 written tight between two names, which is a path in a macro argument.
+
+An operator with an operand on both sides of it is written apart from both,
+whatever they are spelled with: `5 * 5`, `nFlags & mc_Mask`, `a + (b | c)`.
+Without an operand in front, the same token is the unary form, `-1` and
+`*pValue`; without one behind, it belongs to something else, a cast's
+`(CFoo *)` or a pack's `&&...`. `*`, `&`, and `&&` stay ambiguous even between
+two operands, since a name in front of one can be a type as easily as a value:
+`C(CStr &_A)` and `C(a & b)` spell the same tokens. Those three are settled
+only where a declaration cannot stand: behind a literal or the closing marker
+of a call or a subscript, behind the `=` that ends the declarator part of the
+statement or parameter they stand in, or inside an `if`, `while`, or `switch`
+condition, which declares nothing without an `=` of its own. A parenthesis that
+could close a cast is not such a marker, so `(int)*pValue` keeps its spelling,
+while `sizeof`, `alignof`, `typeid`, and `noexcept` yield a value the way a
+call does and `decltype` names a type. Everywhere else the pair keeps what the
+source has.
 
 A pack's ellipsis goes with what the pack is. One that declares a pack hugs the
 name it introduces and stands apart from the type in front of it, as in

@@ -289,6 +289,35 @@ namespace
 						"void fg_B(tp_CParams && ...p_Params);\n\ntemplate <typename ...tp_CParams>\nconstexpr umint gc_n = sizeof...(tp_CParams);\n"
 					;
 					fg_ExpectFormat("EllipsisKept", Packs, Packs);
+					// An operator with an operand on both sides is written apart from both of
+					// them, whatever they are spelled with.
+					fg_ExpectFormat
+						(
+							"Infix"
+							, "void f()\n{\n\tx = 5 *  5;\n\ty = a<<2;\n\tz = b  *c;\n\tw = a+(b|c);\n}\n"
+							, "void f()\n{\n\tx = 5 * 5;\n\ty = a << 2;\n\tz = b * c;\n\tw = a + (b | c);\n}\n"
+						)
+					;
+					// A '*' or a '&' declares as well as operates, so it is settled only where
+					// a declaration cannot stand: behind a literal, behind the '=' that ends a
+					// declarator, or in a condition, which declares nothing without an '=' of
+					// its own.
+					fg_ExpectFormat
+						(
+							"InfixDeclarator"
+							, "void f()\n{\n\tCFoo *p = &x;\n\tif (nFlags&mc_Mask)\n\t\tg(a&b);\n}\n"
+							, "void f()\n{\n\tCFoo *p = &x;\n\tif (nFlags & mc_Mask)\n\t\tg(a&b);\n}\n"
+						)
+					;
+					// A cast's parenthesis leaves the reading open; a call's and that of an
+					// operator spelled like one do not.
+					fg_ExpectFormat
+						(
+							"InfixOperand"
+							, "void f()\n{\n\tx = (int)*p;\n\ty = f_Get()*2;\n\tz = sizeof(void *)*4;\n}\n"
+							, "void f()\n{\n\tx = (int)*p;\n\ty = f_Get() * 2;\n\tz = sizeof(void *) * 4;\n}\n"
+						)
+					;
 					// A member access and a scope marker hug their operands; a keyword stands
 					// apart from its parenthesis; a label's colon hugs it; a unary sign hugs its
 					// operand and a binary one is written apart.
@@ -304,7 +333,7 @@ namespace
 					fg_ExpectFormat("Sign", "void f()\n{\n\tx = - 1 + y - - z;\n}\n", "void f()\n{\n\tx = -1 + y - -z;\n}\n");
 					// A gap holding a comment is not on one line, and an ambiguous pair keeps
 					// its spelling.
-					fg_ExpectFormat("Kept", "void f()\n{\n\tx = a /* c */ .b;\n\ty = c * d;\n}\n", "void f()\n{\n\tx = a /* c */ .b;\n\ty = c * d;\n}\n");
+					fg_ExpectFormat("Kept", "void f()\n{\n\tx = a /* c */ .b;\n\tg(c*d);\n}\n", "void f()\n{\n\tx = a /* c */ .b;\n\tg(c*d);\n}\n");
 					// A template header is spaced whatever the source had, a trailing return
 					// type's arrow stands apart on both sides, and a comparison passed to a
 					// macro hugs the separators around it.
@@ -425,12 +454,14 @@ namespace
 						)
 					;
 					// A bare name in front of the list is a call as well as a constructor, a
-					// default argument is an expression, a call's argument is not settled, and
-					// neither is a '&&' behind a template argument list in front of a name.
+					// call's argument is not settled, and neither is a '&&' behind a template
+					// argument list in front of a name.
 					fg_ExpectFormat("BareName", "void f()\n{\n\tC(CStr &\n\t\t_A);\n}\n", "void f()\n{\n\tC(CStr &\n\t\t_A);\n}\n");
 					// In a class body there are no calls, so a bare name declares.
 					fg_ExpectFormat("MemberDeclaration", "struct C\n{\n\tC(CStr &\n\t\t_A);\n};\n", "struct C\n{\n\tC(CStr &_A);\n};\n");
-					fg_ExpectFormat("DefaultArgument", "void fg_F(int _A = a &\n\tb);\n", "void fg_F(int _A = a &\n\tb);\n");
+					// Behind the '=' of a default argument stands an expression, which settles
+					// the operator and lets the line be joined.
+					fg_ExpectFormat("DefaultArgument", "void fg_F(int _A = a &\n\tb);\n", "void fg_F(int _A = a & b);\n");
 					fg_ExpectFormat("CallArgument", "void f()\n{\n\tg(a &\n\t\tb);\n}\n", "void f()\n{\n\tg(a &\n\t\tb);\n}\n");
 					fg_ExpectFormat("Ternary", "void f()\n{\n\tx = y ? g(a &\n\t\tb) : c;\n}\n", "void f()\n{\n\tx = y ? g(a &\n\t\tb) : c;\n}\n");
 					fg_ExpectFormat
