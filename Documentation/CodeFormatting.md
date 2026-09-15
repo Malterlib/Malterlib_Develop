@@ -86,7 +86,7 @@ failure, not an edit.
 
 | Rule | Behavior |
 | --- | --- |
-| `indentation` | Rewrites leading whitespace in the configured style, preserving the line's existing indentation width. |
+| `indentation` | Rewrites leading whitespace in the configured style, preserving the width of a line the layout does not place. |
 | `trailing-whitespace` | Removes spaces and tabs before a line terminator. |
 | `final-newline` | Appends a terminator to an unterminated last line. Whole-file requests only. |
 | `line-ending` | Converts terminators to `end_of_line`. Whole-file requests only. |
@@ -130,9 +130,11 @@ alone where that function does not settle the spelling. An operator function's
 name is left alone too, since the sources spell it both ways, and so is a `/`
 written tight between two names, which is a path in a macro argument.
 
-`indentation` normalizes indentation characters, not indentation depth. The
-depth of a split statement's continuations and clause parentheses is decided by
-`line-break`, described under [Line structure](#line-structure).
+`indentation` normalizes indentation characters, not indentation depth. Depth
+is `line-break`'s, described under [Line structure](#line-structure): the level
+of a block's statements, and of a split statement's continuations and clause
+parentheses. This rule writes the lines that one does not place, and spells the
+ones it does the same way, so the two never disagree about a line.
 
 ## Line structure
 
@@ -231,16 +233,30 @@ that shares a line with its head opens under it, a declaration's at the
 statement's indentation and a lambda's one level in, and takes its lines along
 so that their depth still follows the brace, a comment on a line of its own
 among them; a body with a multiline token inside, whose lines could not follow,
-stays where it is. A statement
-moved off a shared line takes the level of the lines around it: the block's
-level, one level in behind a clause, `else`, or `do`, and the clause's own level
-for a guarded block. The depth of a line the source already starts is not
-changed. A case written on its label's line stays there whole, as
+stays where it is.
+
+Every statement of a block stands at the block's own level, whatever depth the
+source gave the line it starts, and the closing brace stands at the level of
+the head that opened it. What a clause, `else` or `do` guards stands one level
+in from that clause, each clause of a chain counting for one, while the block
+one guards stands at the clause's own level. A label stands one level out from
+the statements written under it, which is where `case`, `default` and an access
+specifier go. A statement whose own lines are fixed keeps the line it starts as
+well, since moving that one alone would leave the rest of them behind: a braced
+initializer written across lines, a block comment inside, a multiline token. So
+does a statement inside a conditional, whose depth the sources decide for
+themselves. A case written on its label's line stays there whole, as
 `case 1: return 1;` is written on purpose, and so do the `if` of an `else if`
 and an attribute on a clause's line. Behind a closing brace only a keyword
 starts a statement of its own, since a name there declares a variable of the
 type just defined. A lambda's terminator stands on a line of its own at the
 statement's indentation; a declaration's stays behind its closing brace.
+
+A brace holds statements, rather than the elements of a braced initializer,
+when a statement terminator stands at its own level or an element of it starts
+with a keyword only a statement begins with. A body whose every statement is
+compound, such as a lambda that does nothing but loop, has neither a terminator
+of its own nor an initializer's shape, and the keyword is what tells it apart.
 
 ## Conditional directives
 

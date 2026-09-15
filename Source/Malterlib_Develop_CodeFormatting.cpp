@@ -513,6 +513,7 @@ namespace
 		bool fp_IsBreakGap(umint _iToken) const;
 		bool fp_IsGuard(umint _iNode) const;
 		void fp_LayoutBlockLines(umint _iNode, umint _iIndent);
+		bool fp_KeepsOwnLines(umint _iNode) const;
 		void fp_PlaceBody(umint _iNode, umint _iBlock, umint _iIndent, bool _bDeclarator);
 		bool fp_PlaceBlock(umint _iBlock, umint _iIndent, umint _nReference);
 		bool fp_CanPlaceBlock(umint _iBlock) const;
@@ -553,6 +554,7 @@ namespace
 		NContainer::TCVector<umint> m_iBlockEnd;				// Indexed by token: the closing brace of the block the token opens, or the token count.
 		NContainer::TCVector<uint8> m_bOpaqueDirective;			// Indexed by token: a directive whose branches cut a construct, so nothing is read across it.
 		NContainer::TCVector<umint> m_nOpaqueBefore;			// Indexed by token: how many opaque directives stand in front of it.
+		NContainer::TCVector<uint8> m_bInConditional;			// Indexed by token: the token stands inside a conditional group's branches.
 		NContainer::TCVector<CCodeFormattingRange> m_Conditionals;	// Source spans of the '#if' groups, for saying which one a structure was cut by.
 		NContainer::TCVector<uint8> m_GapState;					// Indexed by token: what the gap in front of it becomes.
 		NContainer::TCVector<umint> m_GapIndent;				// The indentation a break in front of the token takes.
@@ -980,6 +982,12 @@ namespace
 
 			// An all-whitespace line is normalized by the trailing whitespace rule.
 			if (iIndent == iEnd)
+				continue;
+
+			// A line the layout placed takes its indentation from that decision, already
+			// spelled the way this rule would spell it.
+			auto iToken = m_Tokens.f_FindToken(iIndent);
+			if (fp_IsBreakGap(iToken))
 				continue;
 
 			umint nColumns = 0;
@@ -1504,7 +1512,6 @@ namespace
 		}
 		else
 		{
-			fp_RuleIndentation();
 			fp_RuleTrailingWhitespace();
 			fp_RuleLineEndings();
 			fp_RuleFinalNewline();
@@ -1512,6 +1519,9 @@ namespace
 			fp_RuleLineBreaks();
 			fp_RuleTokenSpacing();
 			fp_EmitLayout();
+			// The layout writes the indentation of every line it places, so what this rule
+			// is left to spell is only the lines it did not.
+			fp_RuleIndentation();
 
 			fp_LimitJoinedLines();
 
@@ -2075,21 +2085,10 @@ namespace
 					while (nKeep && pGap[nKeep - 1] != '\n' && pGap[nKeep - 1] != '\r')
 						--nKeep;
 
-					// The edit keeps the line terminator in front of the indentation it
-					// writes, so that it covers the whole of what the indentation rule would
-					// write on that line rather than tying with it.
-					umint nAnchor = nKeep;
-					if (nAnchor && pGap[nAnchor - 1] == '\n')
-						--nAnchor;
+					iStart += nKeep;
+					nLength -= nKeep;
 
-					if (nAnchor && pGap[nAnchor - 1] == '\r')
-						--nAnchor;
-
-					CStr Terminator(pGap + nAnchor, nKeep - nAnchor);
-					iStart += nAnchor;
-					nLength -= nAnchor;
-
-					return Terminator + fp_MakeIndent(m_GapIndent[i]);
+					return fp_MakeIndent(m_GapIndent[i]);
 				}
 			;
 			CStr Replacement;
@@ -2142,19 +2141,12 @@ namespace
 				continue;
 
 			auto iStart = m_Lines.f_GetLineStart(iLine);
-			auto iAnchor = iStart;
-			if (iAnchor && Source.f_GetStr()[iAnchor - 1] == '\n')
-				--iAnchor;
-
-			if (iAnchor && Source.f_GetStr()[iAnchor - 1] == '\r')
-				--iAnchor;
-
-			auto nLength = Tokens[i].m_iOffset - iAnchor;
-			CStr Replacement = CStr(Source.f_GetStr() + iAnchor, iStart - iAnchor) + fp_MakeIndent(m_CommentIndent[i]);
-			if (Replacement == CStr(Source.f_GetStr() + iAnchor, nLength))
+			auto nLength = Tokens[i].m_iOffset - iStart;
+			CStr Replacement = fp_MakeIndent(m_CommentIndent[i]);
+			if (Replacement == CStr(Source.f_GetStr() + iStart, nLength))
 				continue;
 
-			fp_AddEdit("line-break", iAnchor, nLength, Replacement, "the body's lines move with its brace");
+			fp_AddEdit("line-break", iStart, nLength, Replacement, "the body's lines move with its brace");
 		}
 	}
 
@@ -2746,6 +2738,18 @@ namespace
 		// Without any parameter list the statement is a declaration too, such as a class
 		// head, unless its body is a lambda's: 'Dispatch = [&] { ... }'.
 		bool bDeclarator = iBeforeParen >= 0 && Tokens[umint(iBeforeParen)].m_Kind == ECodeTokenKind::mc_Identifier;
+		// An operator's name ends in the symbol it overloads rather than in an identifier,
+		// and a lambda's parameter list stands behind its capture list or its own template
+		// parameter list. What is left is a declaration, whose body opens at the
+		// statement's own indentation.
+		if (!bDeclarator && iBeforeParen >= 0)
+		{
+			bool bIntroducer = fg_IsCaptureList(m_Tokens, m_Structure, umint(iBeforeParen))
+				|| (m_Structure.f_IsAngleBracket(umint(iBeforeParen)) && fp_ClosesLambdaIntroducer(umint(iBeforeParen)))
+			;
+			if (!bIntroducer)
+				bDeclarator = fg_ClosesParameterList(m_Tokens, m_Structure, iFirstParenGroup);
+		}
 		if (!iFirstParenGroupStart && iBlock != TCLimitsInt<umint>::mc_Max)
 		{
 			auto iBeforeBrace = fp_PreviousCode(Nodes[iBlock].m_iFirstToken);
@@ -3353,6 +3357,32 @@ namespace
 	// is the 'if' of an 'else if', and an attribute on a clause's line. Behind a closing
 	// brace only a keyword starts a statement of its own; a name there declares a variable
 	// of the type just defined.
+	// True when the statement writes its own lines, so its first one cannot be moved
+	// without leaving the rest of them where they are. A block takes its lines along, so
+	// what stands inside one says nothing about the statement around it.
+	bool CFormattingAnalyzer::fp_KeepsOwnLines(umint _iNode) const
+	{
+		auto const &Node = m_Structure.f_GetNodes()[_iNode];
+		if (Node.m_bFixedLineBreaks || Node.m_bHasMultiLineToken || Node.m_bHasMultiLineBrace)
+			return true;
+
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		for (auto i = Node.m_iFirstToken; i <= Node.m_iLastToken; ++i)
+		{
+			if (i < m_iBlockEnd.f_GetLen() && m_iBlockEnd[i] <= Node.m_iLastToken)
+			{
+				i = m_iBlockEnd[i];
+
+				continue;
+			}
+
+			if (Tokens[i].m_Kind == ECodeTokenKind::mc_BlockComment)
+				return true;
+		}
+
+		return false;
+	}
+
 	void CFormattingAnalyzer::fp_LayoutBlockLines(umint _iNode, umint _iIndent)
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
@@ -3360,8 +3390,17 @@ namespace
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
 		bool bBraced = Node.m_Kind == ECodeNodeKind::mc_Block;
-		if (bBraced && !fp_IsFirstOnLine(Node.m_iLastToken))
-			fp_OwnLineBefore(Node.m_iLastToken, _iIndent);
+		// A conditional whose branches cut a construct leaves the statements around it no
+		// depth of their own, since the token stream runs through every branch at once. Such
+		// a block keeps the depths the source gave its lines.
+		bool bDepths = !fp_HasOpaqueDirective(Node.m_iFirstToken, Node.m_iLastToken);
+		if (bBraced)
+		{
+			if (!fp_IsFirstOnLine(Node.m_iLastToken))
+				fp_OwnLineBefore(Node.m_iLastToken, _iIndent);
+			else if (bDepths && !m_bInConditional[Node.m_iLastToken] && fp_GetStatementIndent(Node.m_iLastToken) != _iIndent)
+				fp_IndentBefore(Node.m_iLastToken, _iIndent);
+		}
 
 		static ch8 const *const gsc_pStatementKeywords[] =
 			{
@@ -3369,6 +3408,11 @@ namespace
 			}
 		;
 		umint nLevel = bBraced ? _iIndent + nTab : _iIndent;
+		umint nPlaced = nLevel;
+		// The clause whose statement is still to come, and the depth that clause was
+		// written at: what it guards stands one level in from there.
+		umint iGuard = TCLimitsInt<umint>::mc_Max;
+		umint nGuard = 0;
 		umint iPrevious = TCLimitsInt<umint>::mc_Max;
 		bool bOnLabelLine = false;
 		for (auto iChild : Node.m_Children)
@@ -3377,21 +3421,23 @@ namespace
 			auto iFirst = Child.m_iFirstToken;
 			auto const &First = Tokens[iFirst];
 			bool bFirstOnLine = fp_IsFirstOnLine(iFirst);
-			bool bGuarded = false;
+			bool bGuarded = iGuard != TCLimitsInt<umint>::mc_Max;
 			bool bLabelled = false;
 			bool bAfterBlock = false;
 			if (iPrevious != TCLimitsInt<umint>::mc_Max)
 			{
 				auto const &Previous = Nodes[iPrevious];
-				bGuarded = fp_IsGuard(iPrevious);
 				bLabelled = m_Tokens.f_IsText(Tokens[Previous.m_iLastToken], ":");
 				bAfterBlock = m_Tokens.f_IsText(Tokens[Previous.m_iLastToken], "}");
 			}
 
 			// A case written on its label's line stays there whole: 'case 1: a = 1; break;'.
 			bOnLabelLine = !bFirstOnLine && (bLabelled || bOnLabelLine);
-			bool bElseIf = bGuarded && m_Tokens.f_IsText(Tokens[Nodes[iPrevious].m_iFirstToken], "else") && m_Tokens.f_IsText(First, "if");
-			if (m_bProbing && m_bAllowConversions && bGuarded && !bElseIf)
+			// The clause the statement stands directly behind, which is the one whose braces
+			// the standard decides; an attribute on its line stands between the two.
+			bool bDirectlyGuarded = bGuarded && iPrevious == iGuard;
+			bool bElseIf = bDirectlyGuarded && m_Tokens.f_IsText(Tokens[Nodes[iPrevious].m_iFirstToken], "else") && m_Tokens.f_IsText(First, "if");
+			if (m_bProbing && m_bAllowConversions && bDirectlyGuarded && !bElseIf)
 			{
 				if (m_Tokens.f_IsText(First, "{"))
 					fp_DropBraces(iChild, iPrevious);
@@ -3402,29 +3448,48 @@ namespace
 			// An attribute is written on the clause's line: 'if (x) [[unlikely]]'.
 			auto iSecond = fp_NextCode(iFirst);
 			bool bAttribute = m_Tokens.f_IsText(First, "[") && iSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSecond)], "[");
-			bool bMove = !bFirstOnLine && Child.m_Kind != ECodeNodeKind::mc_Unsupported && !m_Tokens.f_IsText(First, ";") && !bOnLabelLine && !bElseIf && !bAttribute;
-			if (bMove && bAfterBlock)
+			// A label stands one level out from the statements written under it, whether it
+			// is a case, an access specifier or a target to jump to.
+			bool bLabel = m_Tokens.f_IsText(Tokens[Child.m_iLastToken], ":");
+			umint nPlace = nLevel;
+			if (bGuarded)
+				nPlace = m_Tokens.f_IsText(First, "{") ? nGuard : nGuard + nTab;
+			else if (bLabel && nLevel >= nTab)
+				nPlace = nLevel - nTab;
+
+			bool bStays = Child.m_Kind == ECodeNodeKind::mc_Unsupported || bOnLabelLine || bElseIf || bAttribute || m_Tokens.f_IsText(First, ";");
+			// Behind a closing brace only a keyword starts a statement of its own, since a
+			// name there declares a variable of the type just defined.
+			if (!bStays && !bFirstOnLine && bAfterBlock)
 			{
-				bMove = false;
+				bool bKeyword = false;
 				for (auto pKeyword : gsc_pStatementKeywords)
-					bMove |= m_Tokens.f_IsText(First, pKeyword);
+					bKeyword |= m_Tokens.f_IsText(First, pKeyword);
+
+				bStays = !bKeyword;
 			}
 
-			if (bMove)
+			umint nWritten = bFirstOnLine ? fp_GetStatementIndent(iFirst) : nPlaced;
+			if (!bStays && !bFirstOnLine)
 			{
-				umint nPlace = nLevel;
-				if (bGuarded && !m_Tokens.f_IsText(First, "{"))
-					nPlace += nTab;
-
 				fp_OwnLineBefore(iFirst, nPlace);
+				nWritten = nPlace;
+			}
+			else if (!bStays && bDepths && !m_bInConditional[iFirst] && nWritten != nPlace && !fp_KeepsOwnLines(iChild))
+			{
+				fp_IndentBefore(iFirst, nPlace);
+				nWritten = nPlace;
 			}
 
-			// The level the next statement returns to.
-			if (bLabelled)
-				nLevel = bFirstOnLine ? fp_GetStatementIndent(iFirst) : fp_GetStatementIndent(Nodes[iPrevious].m_iFirstToken) + nTab;
-			else if (!bGuarded && !bElseIf && !bOnLabelLine && (bFirstOnLine || bMove))
-				nLevel = fp_GetStatementIndent(iFirst);
+			if (fp_IsGuard(iChild))
+			{
+				iGuard = iChild;
+				nGuard = nWritten;
+			}
+			else
+				iGuard = TCLimitsInt<umint>::mc_Max;
 
+			nPlaced = nWritten;
 			iPrevious = iChild;
 		}
 	}
@@ -3576,7 +3641,19 @@ namespace
 			}
 
 			if (iNext == iNode)
-				return true;
+			{
+				// A branch that ends on a clause leaves the statement it guards to the next
+				// one, which is a construct cut in two that no node shows: the builder ends
+				// a clause at its condition, so the pieces are separate children.
+				umint iBefore = TCLimitsInt<umint>::mc_Max;
+				for (auto iChild : Node.m_Children)
+				{
+					if (Nodes[iChild].m_iLastToken < _iDirective)
+						iBefore = iChild;
+				}
+
+				return iBefore == TCLimitsInt<umint>::mc_Max || !fp_IsGuard(iBefore);
+			}
 
 			iNode = iNext;
 		}
@@ -3689,6 +3766,24 @@ namespace
 		m_nOpaqueBefore[0] = 0;
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 			m_nOpaqueBefore[i + 1] = m_nOpaqueBefore[i] + m_bOpaqueDirective[i];
+
+		// Which tokens a conditional holds. The depth the sources give the lines inside one
+		// varies with the file, so the standard does not settle it and they keep theirs.
+		m_bInConditional.f_SetLen(Tokens.f_GetLen());
+		umint nDepth = 0;
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor)
+			{
+				auto Keyword = fp_GetDirectiveKeyword(i);
+				if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
+					++nDepth;
+				else if (Keyword == "endif" && nDepth)
+					--nDepth;
+			}
+
+			m_bInConditional[i] = nDepth != 0;
+		}
 	}
 
 	// A node the builder could not close names a token past the end, so the range is taken
@@ -4254,8 +4349,15 @@ namespace
 			// A capture list, or a template parameter list that only a lambda can end, is
 			// what one part of an introducer stands behind.
 			auto const &Before = m_Tokens.f_GetTokens()[umint(iBefore)];
+			bool bIntroducer = m_Tokens.f_IsText(Before, "]") || m_Structure.f_IsAngleBracket(umint(iBefore));
+			// An empty scope is nothing to move down: only a part of an introducer takes a
+			// line of its own while holding nothing, and '(*pFunctor)()' stays whole.
+			auto iInner = fp_NextCode(Nodes[Scopes[i]].m_iFirstToken);
+			if (!bIntroducer && iInner >= 0 && umint(iInner) == Nodes[Scopes[i]].m_iLastToken)
+				continue;
+
 			Breaks.f_Insert(Nodes[Scopes[i]].m_iFirstToken);
-			Introducer.f_Insert(m_Tokens.f_IsText(Before, "]") || m_Structure.f_IsAngleBracket(umint(iBefore)));
+			Introducer.f_Insert(bIntroducer);
 		}
 
 		auto const &Tokens = m_Tokens.f_GetTokens();

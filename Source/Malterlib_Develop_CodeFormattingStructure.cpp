@@ -384,14 +384,37 @@ namespace NMib::NDevelop
 	}
 
 	// A brace that holds statements is a block, even inside an argument list, where it is a
-	// lambda body. A braced initializer never has a statement terminator at its own level.
+	// lambda body. A braced initializer holds expressions: it never has a statement
+	// terminator at its own level, and no element of one can start with a keyword only a
+	// statement begins with, which is what a body whose every statement is compound has
+	// instead of a terminator: 'mutable { for (auto &Entry : Entries) { ... } }'.
 	bool CCodeStructure::fp_IsBlockBrace(umint _iToken) const
 	{
+		static ch8 const *const gsc_pStatementKeywords[] =
+			{
+				"if", "else", "for", "while", "do", "switch", "try", "catch"
+				, "return", "co_return", "break", "continue", "goto", "case", "default"
+			}
+		;
 		auto const &Tokens = mp_pTokens->f_GetTokens();
 		umint nDepth = 0;
 		for (auto i = _iToken; i < mp_Significant.f_GetLen(); ++i)
 		{
 			auto const &Token = Tokens[mp_Significant[i]];
+			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
+			{
+				if (nDepth != 1)
+					continue;
+
+				for (auto pKeyword : gsc_pStatementKeywords)
+				{
+					if (mp_pTokens->f_IsText(Token, pKeyword))
+						return true;
+				}
+
+				continue;
+			}
+
 			if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 				continue;
 
@@ -515,6 +538,11 @@ namespace NMib::NDevelop
 		bool bConditional = false;
 		auto const &First = Tokens[mp_Significant[_iToken]];
 		bool bLabel = mp_pTokens->f_IsText(First, "case");
+		bool bDefines = mp_pTokens->f_IsText(First, "enum")
+			|| mp_pTokens->f_IsText(First, "struct")
+			|| mp_pTokens->f_IsText(First, "class")
+			|| mp_pTokens->f_IsText(First, "union")
+		;
 		bool bClause = mp_pTokens->f_IsText(First, "if")
 			|| mp_pTokens->f_IsText(First, "for")
 			|| mp_pTokens->f_IsText(First, "while")
@@ -561,8 +589,10 @@ namespace NMib::NDevelop
 				;
 			}
 
-			// A label ends its statement: the body after it belongs on its own line.
-			if (mp_pTokens->f_IsText(Token, ":") && !bConditional && (bLabel || i == _iToken + 1))
+			// A label ends its statement: the body after it belongs on its own line. A
+			// definition's underlying type is spelled the same way and is no label:
+			// 'enum : uint32' and 'struct : CBase' name what they are built on.
+			if (mp_pTokens->f_IsText(Token, ":") && !bConditional && (bLabel || i == _iToken + 1) && !bDefines)
 			{
 				if (bLabel || Tokens[mp_Significant[_iToken]].m_Kind == ECodeTokenKind::mc_Identifier)
 				{
@@ -1512,9 +1542,14 @@ namespace NMib::NDevelop
 
 		// A colon that ends a label hugs it: 'case 1:', 'public:'. The builder ends a
 		// statement at such a colon, which is how it is told from the one of a conditional,
-		// an initializer list or a class head.
+		// an initializer list or a class head. An anonymous enumeration's base type is
+		// written both ways, tight after 'enum' and apart behind a name, so it keeps what
+		// it has.
 		if (fRight(":"))
 		{
+			if (fLeft("enum"))
+				return ECodeSpacing::mc_Preserve;
+
 			for (auto const &Node : _Structure.f_GetNodes())
 			{
 				if (Node.m_Kind == ECodeNodeKind::mc_Statement && Node.m_iLastToken == _iRight && Node.m_iFirstToken != _iRight)

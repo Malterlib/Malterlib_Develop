@@ -203,8 +203,9 @@ namespace
 			{
 				DMibTestCategory("Indentation")
 				{
-					fg_ExpectFormat("SpacesToTabs", "void f()\n{\n        int a;\n}\n", "void f()\n{\n\t\tint a;\n}\n");
-					fg_ExpectFormat("MixedIndent", "void f()\n{\n \t int a;\n}\n", "void f()\n{\n\t int a;\n}\n");
+					// The depth is the line-break rule's; this rule only spells it with tabs.
+					fg_ExpectFormat("SpacesToTabs", "void f()\n{\n    int a;\n}\n", "void f()\n{\n\tint a;\n}\n");
+					fg_ExpectFormat("MixedIndent", "void f()\n{\n \tint a;\n}\n", "void f()\n{\n\tint a;\n}\n");
 					fg_ExpectFormat("AlreadyTabs", "void f()\n{\n\tint a;\n}\n", "void f()\n{\n\tint a;\n}\n");
 					// Layout inside a multiline literal or comment is protected.
 					fg_ExpectFormat("RawStringBody", "auto x = R\"(\n    keep\n)\";\n", "auto x = R\"(\n    keep\n)\";\n");
@@ -518,6 +519,54 @@ namespace
 							, "void f()\n{\n\tco_await g\n\t\t(\n\t\t\th\n\t\t\t(\n\t\t\t\t[&]() -> TCFuture<void>\n\t\t\t\t{\n\t\t\t\t\tco_return {};\n\t\t\t\t}\n\t\t\t)\n\t\t)\n\t;\n}\n"
 						)
 					;
+				};
+
+				DMibTestCategory("Depth")
+				{
+					// Every statement of a block stands at the block's own level, whatever
+					// depth the source gave the line it starts, and so does the closing brace.
+					fg_ExpectFormat
+						(
+							"Statements"
+							, "void f()\n{\n\t\tg();\n\th();\n\t\t\ti();\n\t}\n"
+							, "void f()\n{\n\tg();\n\th();\n\ti();\n}\n"
+						)
+					;
+					// A label stands one level out from the statements written under it.
+					fg_ExpectFormat
+						(
+							"Labels"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\t\tcase 1:\n\t\t\t\tg();\n\t\t\tbreak;\n\t\tdefault:\n\t\t\tbreak;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\tbreak;\n\tdefault:\n\t\tbreak;\n\t}\n}\n"
+						)
+					;
+					// What a clause guards stands one level in from the clause, each clause
+					// of a chain counting for one.
+					fg_ExpectFormat
+						(
+							"Guarded"
+							, "void f()\n{\n\tif (a)\n\t\t\tg();\n\telse\n\t{\n\t\t\th();\n\t}\n\n\tfor (auto &E : R)\n\t\tif (b)\n\t\t\t\ti();\n}\n"
+							, "void f()\n{\n\tif (a)\n\t\tg();\n\telse\n\t\th();\n\n\tfor (auto &E : R)\n\t\tif (b)\n\t\t\ti();\n}\n"
+							, false
+						)
+					;
+					// A lambda body holds statements even where every one of them is
+					// compound, which leaves it no terminator of its own to be told by.
+					fg_ExpectFormat
+						(
+							"LambdaBody"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\t\tfor (auto &E : R)\n\t\t\t\t\t{\n\t\t\t\t\t\tE.f_Go();\n\t\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\tfor (auto &E : R)\n\t\t\t\t{\n\t\t\t\t\tE.f_Go();\n\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// A statement whose own lines are fixed keeps the one it starts too: a
+					// braced initializer written across lines, and a block comment inside.
+					CStr Initializer = "void f()\n{\n\tCJsonSorted Json =\n\t\t{\n\t\t\t\"Name\"_j= \"John\"\n\t\t\t, \"Age\"_j= 30\n\t\t}\n\t;\n}\n";
+					fg_ExpectFormat("Initializer", Initializer, Initializer);
+					// The depth of a line inside a conditional is the file's own business:
+					// the sources indent one by conditional nesting and by nothing at all.
+					CStr Conditional = "void f()\n{\n#if DDebug\n\t\tg();\n#endif\n\th();\n}\n";
+					fg_ExpectFormat("Conditional", Conditional, Conditional);
 				};
 
 				DMibTestCategory("Braces")
@@ -1146,7 +1195,7 @@ namespace
 						(
 							"Region"
 							, "void f()\n{\n\t// malterlib-format off\n        int a;\n\t// malterlib-format on\n        int b;\n}\n"
-							, "void f()\n{\n\t// malterlib-format off\n        int a;\n\t// malterlib-format on\n\t\tint b;\n}\n"
+							, "void f()\n{\n\t// malterlib-format off\n        int a;\n\t// malterlib-format on\n\tint b;\n}\n"
 						)
 					;
 				};
@@ -1212,14 +1261,14 @@ namespace
 					}
 				;
 
-				DMibExpect(fFormatRange("SecondLine", 11, 15, ECodeRangePolicy::mc_Expand), ==, "void f()\n{\n\t\tint a;\n        int b;\n        int c;\n}\n");
+				DMibExpect(fFormatRange("SecondLine", 11, 15, ECodeRangePolicy::mc_Expand), ==, "void f()\n{\n\tint a;\n        int b;\n        int c;\n}\n");
 				// A cursor selects the line it sits on.
-				DMibExpect(fFormatRange("Cursor", 14, 0, ECodeRangePolicy::mc_Expand), ==, "void f()\n{\n\t\tint a;\n        int b;\n        int c;\n}\n");
+				DMibExpect(fFormatRange("Cursor", 14, 0, ECodeRangePolicy::mc_Expand), ==, "void f()\n{\n\tint a;\n        int b;\n        int c;\n}\n");
 				// A partial selection is expanded to whole lines by default.
-				DMibExpect(fFormatRange("PartialExpanded", 14, 2, ECodeRangePolicy::mc_Expand), ==, "void f()\n{\n\t\tint a;\n        int b;\n        int c;\n}\n");
+				DMibExpect(fFormatRange("PartialExpanded", 14, 2, ECodeRangePolicy::mc_Expand), ==, "void f()\n{\n\tint a;\n        int b;\n        int c;\n}\n");
 				// Strict ranges never touch bytes the caller did not select.
 				DMibExpect(fFormatRange("PartialStrict", 14, 2, ECodeRangePolicy::mc_Strict), ==, Source);
-				DMibExpect(fFormatRange("WholeLineStrict", 11, 15, ECodeRangePolicy::mc_Strict), ==, "void f()\n{\n\t\tint a;\n        int b;\n        int c;\n}\n");
+				DMibExpect(fFormatRange("WholeLineStrict", 11, 15, ECodeRangePolicy::mc_Strict), ==, "void f()\n{\n\tint a;\n        int b;\n        int c;\n}\n");
 
 				DMibTestCategory("Reported")
 				{
@@ -1279,7 +1328,7 @@ namespace
 			{
 				DMibTestCategory("Coordinates")
 				{
-					auto Result = fg_Analyze("void f()\n{\n        int a;\n}\n");
+					auto Result = fg_Analyze("void f()\n{\n    int a;\n}\n");
 					DMibAssert(Result.m_Diagnostics.f_GetLen(), ==, 1u);
 					DMibExpect(Result.m_Diagnostics[0].m_Rule, ==, "indentation");
 					DMibExpect(Result.m_Diagnostics[0].m_iLine, ==, 3u);
