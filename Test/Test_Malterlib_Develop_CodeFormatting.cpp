@@ -385,6 +385,46 @@ namespace
 					;
 				};
 
+				DMibTestCategory("Blocks")
+				{
+					// A body opens on a line of its own, and its closing brace takes one too.
+					fg_ExpectFormat("EmptyBody", "void f(){}\n", "void f()\n{\n}\n");
+					fg_ExpectFormat("BodyAfterInitializer", "struct C\n{\n\tC(int _A)\n\t\t: m_A(_A){}\n};\n", "struct C\n{\n\tC(int _A)\n\t\t: m_A(_A)\n\t{\n\t}\n};\n");
+					fg_ExpectFormat("BraceOnHead", "void f() {\n\tg();\n}\n", "void f()\n{\n\tg();\n}\n");
+					fg_ExpectFormat("OneLine", "void f() { g(); }\n", "void f()\n{\n\tg();\n}\n");
+					fg_ExpectFormat("Definition", "struct C { int a; };\n", "struct C\n{\n\tint a;\n};\n");
+					// Each statement takes a line of its own at the block's level.
+					fg_ExpectFormat("Statements", "void f()\n{\n\tg(); h();\n}\n", "void f()\n{\n\tg();\n\th();\n}\n");
+					// What a clause guards stands one level in; a guarded block at the clause's level.
+					fg_ExpectFormat("Guarded", "void f()\n{\n\tif (a) g();\n\telse h(); k();\n}\n", "void f()\n{\n\tif (a)\n\t\tg();\n\telse\n\t\th();\n\tk();\n}\n");
+					fg_ExpectFormat
+						(
+							"ClauseBlocks"
+							, "void f()\n{\n\tif (a) {\n\t\tg();\n\t} else {\n\t\th();\n\t}\n}\n"
+							, "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t}\n\telse\n\t{\n\t\th();\n\t}\n}\n"
+						)
+					;
+					fg_ExpectFormat("DoWhile", "void f()\n{\n\tdo {\n\t\tg();\n\t} while (a);\n}\n", "void f()\n{\n\tdo\n\t{\n\t\tg();\n\t}\n\twhile (a);\n}\n");
+					// A lambda's body sits one level in and takes its lines along, and its
+					// terminator stands at the statement's indentation.
+					fg_ExpectFormat("Lambda", "void f()\n{\n\tauto g = [&] {\n\t\th();\n\t};\n}\n", "void f()\n{\n\tauto g = [&]\n\t\t{\n\t\t\th();\n\t\t}\n\t;\n}\n");
+					// 'else if' and a case written on its label's line are kept as written.
+					CStr ElseIf = "void f()\n{\n\tif (a)\n\t\tg();\n\telse if (b)\n\t\th();\n}\n";
+					fg_ExpectFormat("ElseIf", ElseIf, ElseIf);
+					CStr Cases = "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1: a = 1; break;\n\tcase 2: return;\n\tdefault: break;\n\t}\n}\n";
+					fg_ExpectFormat("CompactCases", Cases, Cases);
+					// A name behind a closing brace declares a variable of the type just defined.
+					CStr Instance = "struct\n{\n\tint a;\n} g_Instance;\n";
+					fg_ExpectFormat("Instance", Instance, Instance);
+					CStr Attribute = "void f()\n{\n\tif (a) [[unlikely]]\n\t\tg();\n}\n";
+					fg_ExpectFormat("Attribute", Attribute, Attribute);
+					// A body that would move with a comment inside stays, since the comment's
+					// line could not follow; one that stays in place opens on its own line.
+					CStr Commented = "void f()\n{\n\tauto g = [&] {\n\t\t// why\n\t\th();\n\t};\n}\n";
+					fg_ExpectFormat("CommentedLambda", Commented, Commented);
+					fg_ExpectFormat("CommentedBody", "void f() {\n\t// why\n\tg();\n}\n", "void f()\n{\n\t// why\n\tg();\n}\n");
+				};
+
 				DMibTestCategory("Bodies")
 				{
 					// An empty body after a braced member initializer has no terminator of its

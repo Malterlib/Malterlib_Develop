@@ -94,7 +94,7 @@ result is stable; either check failing is a formatter failure, not an edit.
 | `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
 | `block-blank-line` | Removes blank lines directly after an opening brace. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
-| `line-break` | Brings a split construct back to one line when it fits and nothing forbids it. |
+| `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
 | `line-length` | Diagnostic only; the engine does not yet split an overlong line. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
@@ -188,6 +188,21 @@ the statement a clause guards each keep their own line.
 
 A line that nothing above can shorten, such as one long literal, is reported by
 `line-length` and left alone.
+
+A block's braces and each of its statements take a line of their own. A body
+that shares a line with its head opens under it, a declaration's at the
+statement's indentation and a lambda's one level in, and takes its lines along
+so that their depth still follows the brace; a body with a comment or a
+directive inside, whose lines could not follow, stays where it is. A statement
+moved off a shared line takes the level of the lines around it: the block's
+level, one level in behind a clause, `else`, or `do`, and the clause's own level
+for a guarded block. The depth of a line the source already starts is not
+changed. A case written on its label's line stays there whole, as
+`case 1: return 1;` is written on purpose, and so do the `if` of an `else if`
+and an attribute on a clause's line. Behind a closing brace only a keyword
+starts a statement of its own, since a name there declares a variable of the
+type just defined. A lambda's terminator stands on a line of its own at the
+statement's indentation; a declaration's stays behind its closing brace.
 
 ## Protected regions
 

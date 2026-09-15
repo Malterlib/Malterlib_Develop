@@ -432,7 +432,9 @@ namespace
 		{
 			mc_Keep
 			, mc_Inline
-			, mc_Break
+			, mc_Break				// A split construct starts a line here.
+			, mc_OwnLine			// A block's brace or a statement takes a line of its own here.
+			, mc_Indent				// The line keeps its break and takes the indentation its body moved to.
 		};
 
 		void fp_PrepareLineProtection();
@@ -484,6 +486,13 @@ namespace
 		bool fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent);
 		void fp_BreakBefore(umint _iToken, umint _iIndent);
 		void fp_BreakAfter(umint _iToken, umint _iIndent);
+		void fp_OwnLineBefore(umint _iToken, umint _iIndent);
+		void fp_IndentBefore(umint _iToken, umint _iIndent);
+		bool fp_IsBreakGap(umint _iToken) const;
+		bool fp_IsGuard(umint _iNode) const;
+		void fp_LayoutBlockLines(umint _iNode, umint _iIndent);
+		void fp_PlaceBody(umint _iNode, umint _iBlock, umint _iIndent, bool _bDeclarator);
+		void fp_ShiftBlock(umint _iBlock, aint _nDelta);
 		void fp_MarkInline(umint _iFirst, umint _iLast);
 		void fp_EmitLayout();
 		bool fp_IsRangeJoinable(umint _iNode, umint _iFirst, umint _iLast) const;
@@ -877,6 +886,9 @@ namespace
 
 	bool CFormattingAnalyzer::fp_IsFirstOnLine(umint _iToken) const
 	{
+		if (fp_IsBreakGap(_iToken))
+			return true;
+
 		auto iPrevious = fp_PreviousSignificant(_iToken);
 
 		return iPrevious < 0 || m_Tokens.f_GetTokens()[umint(iPrevious)].m_bMultiLine;
@@ -1108,7 +1120,7 @@ namespace
 			if (m_Structure.f_IsAngleBracket(i) && m_Tokens.f_IsText(Token, ">"))
 			{
 				auto iPrevious = fp_PreviousCode(i);
-				bool bBreak = i < m_GapState.f_GetLen() && m_GapState[i] == uint8(EGap::mc_Break);
+				bool bBreak = fp_IsBreakGap(i);
 				if (!bBreak && iPrevious >= 0 && m_Structure.f_IsAngleBracket(umint(iPrevious)) && m_Tokens.f_IsText(Tokens[umint(iPrevious)], ">"))
 					fp_RemoveSpaceBefore(i, "angle-space", "nested template argument lists close as one '>>'");
 
@@ -1774,8 +1786,13 @@ namespace
 
 	// A statement's own indentation is where its first token already sits. Splitting places
 	// new lines relative to that, so no separate model of scope depth is needed.
+	// The indentation a statement starting at the token is laid out against: the one the
+	// layout gave it, or else the column the source wrote it at.
 	umint CFormattingAnalyzer::fp_GetStatementIndent(umint _iToken) const
 	{
+		if (fp_IsBreakGap(_iToken))
+			return m_GapIndent[_iToken];
+
 		return fp_GetColumn(m_Tokens.f_GetTokens()[_iToken].m_iOffset) - 1;
 	}
 
@@ -1838,6 +1855,29 @@ namespace
 			fp_BreakBefore(umint(iNext), _iIndent);
 	}
 
+	void CFormattingAnalyzer::fp_OwnLineBefore(umint _iToken, umint _iIndent)
+	{
+		m_GapState[_iToken] = uint8(EGap::mc_OwnLine);
+		m_GapIndent[_iToken] = _iIndent;
+	}
+
+	void CFormattingAnalyzer::fp_IndentBefore(umint _iToken, umint _iIndent)
+	{
+		m_GapState[_iToken] = uint8(EGap::mc_Indent);
+		m_GapIndent[_iToken] = _iIndent;
+	}
+
+	// True when the layout has decided that the token starts a line.
+	bool CFormattingAnalyzer::fp_IsBreakGap(umint _iToken) const
+	{
+		if (_iToken >= m_GapState.f_GetLen())
+			return false;
+
+		auto State = EGap(m_GapState[_iToken]);
+
+		return State == EGap::mc_Break || State == EGap::mc_OwnLine || State == EGap::mc_Indent;
+	}
+
 	// The range is written on one line: every gap inside it takes its inline spelling.
 	void CFormattingAnalyzer::fp_MarkInline(umint _iFirst, umint _iLast)
 	{
@@ -1891,12 +1931,28 @@ namespace
 			if (bOwned)
 				continue;
 
+			auto iStart = Tokens[umint(iPrevious)].f_GetEnd();
+			auto nLength = Tokens[i].m_iOffset - iStart;
 			CStr Replacement;
 			CStr Explanation;
-			if (State == EGap::mc_Break)
+			if (State == EGap::mc_Break || State == EGap::mc_OwnLine)
 			{
 				Replacement = Ending + fp_MakeIndent(m_GapIndent[i]);
-				Explanation = "a split construct puts this on its own line";
+				Explanation = State == EGap::mc_Break ? "a split construct puts this on its own line" : "a block's braces and each of its statements take a line of their own";
+			}
+			else if (State == EGap::mc_Indent)
+			{
+				// The line keeps its breaks, blank lines included; only its indentation moves.
+				if (!bNewline)
+					continue;
+
+				auto pGap = m_Request.m_Source.f_GetStr() + iStart;
+				umint nKeep = nLength;
+				while (nKeep && pGap[nKeep - 1] != '\n' && pGap[nKeep - 1] != '\r')
+					--nKeep;
+
+				Replacement = CStr(pGap, nKeep) + fp_MakeIndent(m_GapIndent[i]);
+				Explanation = "the body's lines move with its brace";
 			}
 			else
 			{
@@ -1911,8 +1967,6 @@ namespace
 				Explanation = "the construct fits on one line";
 			}
 
-			auto iStart = Tokens[umint(iPrevious)].f_GetEnd();
-			auto nLength = Tokens[i].m_iOffset - iStart;
 			if (Replacement == CStr(m_Request.m_Source.f_GetStr() + iStart, nLength))
 				continue;
 
@@ -2632,7 +2686,10 @@ namespace
 				fp_ConvertTrailingReturn(_iNode, iDeclFirst, _iIndent);
 
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
+			{
+				fp_PlaceBody(_iNode, iBlock, _iIndent, bDeclarator);
 				fp_LayoutNode(iBlock, _iIndent);
+			}
 
 			return;
 		}
@@ -2644,7 +2701,23 @@ namespace
 				fp_LayoutInitializerList(_iNode, iInitializerList, iHeadLastWithInitializers, _iIndent + nTab);
 
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
+			{
+				fp_PlaceBody(_iNode, iBlock, _iIndent, bDeclarator);
 				fp_LayoutNode(iBlock, _iIndent);
+
+				// A lambda's terminator stands on a line of its own, at the statement's
+				// indentation, where a declaration's stays behind its closing brace: '};'.
+				// A body that could not be placed keeps its terminator as written too.
+				auto iLast = Node.m_iLastToken;
+				bool bLambdaTerminator = !bDeclarator
+					&& fp_IsFirstOnLine(Nodes[iBlock].m_iFirstToken)
+					&& m_Tokens.f_IsText(Tokens[iLast], ";")
+					&& fp_PreviousCode(iLast) == aint(Nodes[iBlock].m_iLastToken)
+					&& !fp_IsFirstOnLine(iLast)
+				;
+				if (bLambdaTerminator)
+					fp_OwnLineBefore(iLast, _iIndent);
+			}
 
 			return;
 		}
@@ -2729,10 +2802,167 @@ namespace
 			// A declaration's body opens at the statement's own indentation. A lambda's does
 			// not: it belongs to an expression and sits one level in, under the lambda.
 			// After an operator split the brace is already on a continuation line.
-			if (bJoinable && !m_bOperatorSplit)
-				fp_BreakBefore(Nodes[iBlock].m_iFirstToken, bDeclarator ? _iIndent : _iIndent + nTab);
+			auto iBrace = Nodes[iBlock].m_iFirstToken;
+			if (!fp_IsFirstOnLine(iBrace))
+				fp_PlaceBody(_iNode, iBlock, _iIndent, bDeclarator);
+			else if (bJoinable && !m_bOperatorSplit)
+				fp_BreakBefore(iBrace, bDeclarator ? _iIndent : _iIndent + nTab);
 
 			fp_LayoutNode(iBlock, _iIndent);
+		}
+	}
+
+	// A body that shares a line with its head opens on a line of its own, and takes its
+	// lines along so that their depth still follows the brace: a declaration's body at the
+	// statement's indentation, a lambda's one level in. A comment or a directive inside
+	// could not follow, so a body that would have to move stays where it is. A block that
+	// is the statement is placed by the block around it, and after an operator split the
+	// brace already stands on a continuation line.
+	void CFormattingAnalyzer::fp_PlaceBody(umint _iNode, umint _iBlock, umint _iIndent, bool _bDeclarator)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Block = Nodes[_iBlock];
+		auto iBrace = Block.m_iFirstToken;
+		if (Block.m_Kind != ECodeNodeKind::mc_Block || m_bOperatorSplit || iBrace == Nodes[_iNode].m_iFirstToken || fp_IsFirstOnLine(iBrace))
+			return;
+
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		umint nIndent = _bDeclarator ? _iIndent : _iIndent + nTab;
+		auto nDelta = aint(nIndent) - aint(_iIndent);
+		if (nDelta && (Block.m_bHasComment || Block.m_bHasDirective || Block.m_bHasMultiLineToken))
+			return;
+
+		fp_OwnLineBefore(iBrace, nIndent);
+		if (nDelta)
+			fp_ShiftBlock(_iBlock, nDelta);
+	}
+
+	// Moves every line the block's tokens start by the given number of columns.
+	void CFormattingAnalyzer::fp_ShiftBlock(umint _iBlock, aint _nDelta)
+	{
+		auto const &Block = m_Structure.f_GetNodes()[_iBlock];
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		for (auto i = Block.m_iFirstToken + 1; i <= Block.m_iLastToken; ++i)
+		{
+			switch (Tokens[i].m_Kind)
+			{
+				case ECodeTokenKind::mc_ByteOrderMark:
+				case ECodeTokenKind::mc_Whitespace:
+				case ECodeTokenKind::mc_Newline:
+				case ECodeTokenKind::mc_LineSplice:
+				case ECodeTokenKind::mc_LineComment:
+				case ECodeTokenKind::mc_BlockComment:
+				case ECodeTokenKind::mc_Preprocessor:
+					continue;
+				default: break;
+			}
+
+			if (fp_IsBreakGap(i) || !fp_IsFirstOnLine(i))
+				continue;
+
+			auto nIndent = aint(fp_GetStatementIndent(i)) + _nDelta;
+			if (nIndent >= 0)
+				fp_IndentBefore(i, umint(nIndent));
+		}
+	}
+
+	// A clause that ends at its condition, and a keyword that only introduces the
+	// statement after it, guard that statement.
+	bool CFormattingAnalyzer::fp_IsGuard(umint _iNode) const
+	{
+		auto const &Node = m_Structure.f_GetNodes()[_iNode];
+		if (Node.m_Kind != ECodeNodeKind::mc_Statement)
+			return false;
+
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &First = Tokens[Node.m_iFirstToken];
+		if (Node.m_iFirstToken == Node.m_iLastToken)
+			return m_Tokens.f_IsText(First, "else") || m_Tokens.f_IsText(First, "do") || m_Tokens.f_IsText(First, "try");
+
+		bool bClause = m_Tokens.f_IsText(First, "if")
+			|| m_Tokens.f_IsText(First, "for")
+			|| m_Tokens.f_IsText(First, "while")
+			|| m_Tokens.f_IsText(First, "switch")
+			|| m_Tokens.f_IsText(First, "catch")
+		;
+
+		return bClause && m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ")");
+	}
+
+	// Every brace of a block and every statement in it takes a line of its own: the
+	// statements at the block's level, what a clause guards one level in, and a guarded
+	// block at the clause's own level. Only what shares a line is moved; the depth of a
+	// line the source already starts is not the layout's to decide, so the level a moved
+	// statement takes is read from the lines around it. A case that shares its label's
+	// line is left there, since 'case 1: return 1;' is written that way on purpose, and so
+	// is the 'if' of an 'else if', and an attribute on a clause's line. Behind a closing
+	// brace only a keyword starts a statement of its own; a name there declares a variable
+	// of the type just defined.
+	void CFormattingAnalyzer::fp_LayoutBlockLines(umint _iNode, umint _iIndent)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Node = Nodes[_iNode];
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		bool bBraced = Node.m_Kind == ECodeNodeKind::mc_Block;
+		if (bBraced && !fp_IsFirstOnLine(Node.m_iLastToken))
+			fp_OwnLineBefore(Node.m_iLastToken, _iIndent);
+
+		static ch8 const *const gsc_pStatementKeywords[] =
+			{
+				"else", "while", "catch", "if", "for", "do", "switch", "try", "return", "co_return", "break", "continue", "goto", "case", "default", "{"
+			}
+		;
+		umint nLevel = bBraced ? _iIndent + nTab : _iIndent;
+		umint iPrevious = TCLimitsInt<umint>::mc_Max;
+		bool bOnLabelLine = false;
+		for (auto iChild : Node.m_Children)
+		{
+			auto const &Child = Nodes[iChild];
+			auto iFirst = Child.m_iFirstToken;
+			auto const &First = Tokens[iFirst];
+			bool bFirstOnLine = fp_IsFirstOnLine(iFirst);
+			bool bGuarded = false;
+			bool bLabelled = false;
+			bool bAfterBlock = false;
+			if (iPrevious != TCLimitsInt<umint>::mc_Max)
+			{
+				auto const &Previous = Nodes[iPrevious];
+				bGuarded = fp_IsGuard(iPrevious);
+				bLabelled = m_Tokens.f_IsText(Tokens[Previous.m_iLastToken], ":");
+				bAfterBlock = m_Tokens.f_IsText(Tokens[Previous.m_iLastToken], "}");
+			}
+
+			// A case written on its label's line stays there whole: 'case 1: a = 1; break;'.
+			bOnLabelLine = !bFirstOnLine && (bLabelled || bOnLabelLine);
+			bool bElseIf = bGuarded && m_Tokens.f_IsText(Tokens[Nodes[iPrevious].m_iFirstToken], "else") && m_Tokens.f_IsText(First, "if");
+			// An attribute is written on the clause's line: 'if (x) [[unlikely]]'.
+			auto iSecond = fp_NextCode(iFirst);
+			bool bAttribute = m_Tokens.f_IsText(First, "[") && iSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSecond)], "[");
+			bool bMove = !bFirstOnLine && Child.m_Kind != ECodeNodeKind::mc_Unsupported && !m_Tokens.f_IsText(First, ";") && !bOnLabelLine && !bElseIf && !bAttribute;
+			if (bMove && bAfterBlock)
+			{
+				bMove = false;
+				for (auto pKeyword : gsc_pStatementKeywords)
+					bMove |= m_Tokens.f_IsText(First, pKeyword);
+			}
+
+			if (bMove)
+			{
+				umint nPlace = nLevel;
+				if (bGuarded && !m_Tokens.f_IsText(First, "{"))
+					nPlace += nTab;
+
+				fp_OwnLineBefore(iFirst, nPlace);
+			}
+
+			// The level the next statement returns to.
+			if (bLabelled)
+				nLevel = bFirstOnLine ? fp_GetStatementIndent(iFirst) : fp_GetStatementIndent(Nodes[iPrevious].m_iFirstToken) + nTab;
+			else if (!bGuarded && !bElseIf && !bOnLabelLine && (bFirstOnLine || bMove))
+				nLevel = fp_GetStatementIndent(iFirst);
+
+			iPrevious = iChild;
 		}
 	}
 
@@ -2744,6 +2974,7 @@ namespace
 		{
 			case ECodeNodeKind::mc_File:
 			{
+				fp_LayoutBlockLines(_iNode, 0);
 				for (auto iChild : Node.m_Children)
 					fp_LayoutNode(iChild, 0);
 
@@ -2751,6 +2982,11 @@ namespace
 			}
 			case ECodeNodeKind::mc_Block:
 			{
+				// A block whose brace still shares a line has no level to place its lines at;
+				// the head that owns the brace decides where it goes first.
+				if (fp_IsFirstOnLine(Node.m_iFirstToken))
+					fp_LayoutBlockLines(_iNode, fp_GetStatementIndent(Node.m_iFirstToken));
+
 				auto nTab = m_Request.m_Settings.m_nTabWidth;
 				for (auto iChild : Node.m_Children)
 					fp_LayoutNode(iChild, _iIndent + nTab);
@@ -3437,7 +3673,7 @@ namespace
 					umint iLine = iLineFirst;
 					for (umint i = iLineFirst + 1; i <= umint(iHead); ++i)
 					{
-						if (m_GapState[i] == uint8(EGap::mc_Break))
+						if (fp_IsBreakGap(i))
 							iLine = i;
 					}
 
