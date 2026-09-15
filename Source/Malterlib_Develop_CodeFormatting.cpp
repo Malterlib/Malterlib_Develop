@@ -515,8 +515,13 @@ namespace
 		void fp_LayoutBlockLines(umint _iNode, umint _iIndent);
 		void fp_PlaceBody(umint _iNode, umint _iBlock, umint _iIndent, bool _bDeclarator);
 		bool fp_PlaceBlock(umint _iBlock, umint _iIndent, umint _nReference);
+		bool fp_CanPlaceBlock(umint _iBlock) const;
 		void fp_ShiftBlock(umint _iBlock, aint _nDelta);
 		void fp_PrepareBlockEnds();
+		void fp_PrepareDirectives();
+		NStr::CStr fp_GetDirectiveKeyword(umint _iToken) const;
+		bool fp_IsDirectiveParallel(umint _iDirective, umint _iOpen, umint _iClose) const;
+		bool fp_HasOpaqueDirective(umint _iFirst, umint _iLast) const;
 		umint fp_GetSourceLineIndent(umint _iToken) const;
 		void fp_MarkInline(umint _iFirst, umint _iLast);
 		void fp_EmitLayout();
@@ -546,8 +551,13 @@ namespace
 		umint m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
 		NContainer::TCVector<umint> m_TokenDepth;				// Bracket nesting of each token, for finding a range's own level.
 		NContainer::TCVector<umint> m_iBlockEnd;				// Indexed by token: the closing brace of the block the token opens, or the token count.
+		NContainer::TCVector<uint8> m_bOpaqueDirective;			// Indexed by token: a directive whose branches cut a construct, so nothing is read across it.
+		NContainer::TCVector<umint> m_nOpaqueBefore;			// Indexed by token: how many opaque directives stand in front of it.
+		NContainer::TCVector<CCodeFormattingRange> m_Conditionals;	// Source spans of the '#if' groups, for saying which one a structure was cut by.
 		NContainer::TCVector<uint8> m_GapState;					// Indexed by token: what the gap in front of it becomes.
 		NContainer::TCVector<umint> m_GapIndent;				// The indentation a break in front of the token takes.
+		NContainer::TCVector<uint8> m_bCommentMoved;			// Indexed by token: a comment on a line of its own that moves with the block around it.
+		NContainer::TCVector<umint> m_CommentIndent;			// The indentation such a comment's line takes.
 		NContainer::TCVector<CCodeFormattingEdit> m_Structural;	// Token changes: return types moved behind their parameter lists, braces dropped.
 		NContainer::TCVector<uint8> m_bProtectedStart;
 		NContainer::TCVector<uint8> m_bProtectedEnd;
@@ -1426,6 +1436,7 @@ namespace
 
 		fp_PrepareLineProtection();
 		fp_PrepareTokenDepth();
+		fp_PrepareDirectives();
 		CStr Explanation;
 		if (!fp_CollectDisabledRegions(Explanation))
 			return fFailed(Explanation);
@@ -1631,7 +1642,9 @@ namespace
 			if (Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice || Kind == ECodeTokenKind::mc_Whitespace)
 				continue;
 
-			if (Kind == ECodeTokenKind::mc_LineComment)
+			// A line comment and a directive each end the line they stand on, so a construct
+			// holding one is wider than any line rather than unmeasurable.
+			if (Kind == ECodeTokenKind::mc_LineComment || (Kind == ECodeTokenKind::mc_Preprocessor && !m_bOpaqueDirective[i]))
 			{
 				nColumns += gc_nBlockWidth;
 
@@ -1656,7 +1669,7 @@ namespace
 						bNewline = true;
 					else if (GapKind == ECodeTokenKind::mc_Whitespace)
 						nGap += fp_GetTokenColumns(Tokens[iGap]);
-					else if (GapKind == ECodeTokenKind::mc_LineComment)
+					else if (GapKind == ECodeTokenKind::mc_LineComment || (GapKind == ECodeTokenKind::mc_Preprocessor && !m_bOpaqueDirective[iGap]))
 						bComment = true;
 					else
 						return false;
@@ -1893,14 +1906,20 @@ namespace
 		for (umint i = _iFirst; i <= _iLast; ++i)
 		{
 			auto Kind = Tokens[i].m_Kind;
-			if (Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor)
+			if (Kind == ECodeTokenKind::mc_BlockComment || (Kind == ECodeTokenKind::mc_Preprocessor && m_bOpaqueDirective[i]))
 				return false;
 
 			// A line break is layout; only a token whose own text spans lines is fixed. A
 			// line comment ends its line and so forbids joining across it, which measuring
 			// it as wider than any line takes care of, while the lines around it are laid
-			// out as usual.
-			if (Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice || Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_LineComment)
+			// out as usual. A transparent directive ends its line the same way.
+			bool bLayout = Kind == ECodeTokenKind::mc_Newline
+				|| Kind == ECodeTokenKind::mc_LineSplice
+				|| Kind == ECodeTokenKind::mc_Whitespace
+				|| Kind == ECodeTokenKind::mc_LineComment
+				|| Kind == ECodeTokenKind::mc_Preprocessor
+			;
+			if (bLayout)
 				continue;
 
 			if (Tokens[i].m_bMultiLine)
@@ -1920,7 +1939,7 @@ namespace
 
 			bool bFixed = Child.m_Kind == ECodeNodeKind::mc_Block
 				|| Child.m_Kind == ECodeNodeKind::mc_Unsupported
-				|| Child.m_bHasDirective
+				|| fp_HasOpaqueDirective(Child.m_iFirstToken, Child.m_iLastToken)
 				|| Child.m_bHasMultiLineToken
 				|| Child.m_bHasMultiLineBrace
 			;
@@ -1986,9 +2005,11 @@ namespace
 			m_GapState[i] = uint8(EGap::mc_Inline);
 	}
 
-	// Writes the layout decisions out as edits. A gap that keeps what the source has, one a
-	// comment or directive stands in, and an inline gap the source already writes on one
-	// line are left to the other rules.
+	// Writes the layout decisions out as edits. A gap that keeps what the source has, one an
+	// opaque directive stands in, and an inline gap the source already writes on one line
+	// are left to the other rules. A gap holding a comment or a transparent directive keeps
+	// its lines, and those lines their own text, so only the indentation the token starts
+	// its line at is written.
 	void CFormattingAnalyzer::fp_EmitLayout()
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
@@ -2019,7 +2040,7 @@ namespace
 				continue;
 
 			bool bNewline = false;
-			bool bComment = false;
+			bool bKeepLines = false;
 			bool bOwned = false;
 			for (umint iGap = umint(iPrevious) + 1; iGap < i; ++iGap)
 			{
@@ -2027,7 +2048,14 @@ namespace
 				if (Kind == ECodeTokenKind::mc_Newline)
 					bNewline = true;
 				else if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment)
-					bComment = true;
+					bKeepLines = true;
+				else if (Kind == ECodeTokenKind::mc_Preprocessor)
+				{
+					if (m_bOpaqueDirective[iGap])
+						bOwned = true;
+					else
+						bKeepLines = true;
+				}
 				else if (Kind != ECodeTokenKind::mc_Whitespace)
 					bOwned = true;
 			}
@@ -2037,8 +2065,9 @@ namespace
 
 			auto iStart = Tokens[umint(iPrevious)].f_GetEnd();
 			auto nLength = Tokens[i].m_iOffset - iStart;
-			// A gap holding a comment keeps its lines, and one keeping its lines keeps any
-			// blank lines too; only the indentation of the line the token starts moves.
+			// A gap holding a comment or a directive keeps its lines, and one keeping its
+			// lines keeps any blank lines too; only the indentation of the line the token
+			// starts moves, so the edit covers that indentation alone.
 			auto fKeepLines = [&]
 				{
 					auto pGap = m_Request.m_Source.f_GetStr() + iStart;
@@ -2046,17 +2075,31 @@ namespace
 					while (nKeep && pGap[nKeep - 1] != '\n' && pGap[nKeep - 1] != '\r')
 						--nKeep;
 
-					return CStr(pGap, nKeep) + fp_MakeIndent(m_GapIndent[i]);
+					// The edit keeps the line terminator in front of the indentation it
+					// writes, so that it covers the whole of what the indentation rule would
+					// write on that line rather than tying with it.
+					umint nAnchor = nKeep;
+					if (nAnchor && pGap[nAnchor - 1] == '\n')
+						--nAnchor;
+
+					if (nAnchor && pGap[nAnchor - 1] == '\r')
+						--nAnchor;
+
+					CStr Terminator(pGap + nAnchor, nKeep - nAnchor);
+					iStart += nAnchor;
+					nLength -= nAnchor;
+
+					return Terminator + fp_MakeIndent(m_GapIndent[i]);
 				}
 			;
 			CStr Replacement;
 			CStr Explanation;
 			if (State == EGap::mc_Break || State == EGap::mc_OwnLine)
 			{
-				if (bComment && !bNewline)
+				if (bKeepLines && !bNewline)
 					continue;
 
-				Replacement = bComment ? fKeepLines() : Ending + fp_MakeIndent(m_GapIndent[i]);
+				Replacement = bKeepLines ? fKeepLines() : Ending + fp_MakeIndent(m_GapIndent[i]);
 				Explanation = State == EGap::mc_Break ? "a split construct puts this on its own line" : "a block's braces and each of its statements take a line of their own";
 			}
 			else if (State == EGap::mc_Indent)
@@ -2069,7 +2112,7 @@ namespace
 			}
 			else
 			{
-				if (!bNewline || bComment)
+				if (!bNewline || bKeepLines)
 					continue;
 
 				auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iPrevious), i);
@@ -2084,6 +2127,34 @@ namespace
 				continue;
 
 			fp_AddEdit("line-break", iStart, nLength, Replacement, Explanation);
+		}
+
+		// A comment standing on a line of its own belongs to the block around it, and its
+		// line is written at the depth that block moved to.
+		auto const &Source = m_Request.m_Source;
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (!m_bCommentMoved[i])
+				continue;
+
+			auto iLine = m_Lines.f_FindLine(Tokens[i].m_iOffset);
+			if (m_bProtectedStart[iLine])
+				continue;
+
+			auto iStart = m_Lines.f_GetLineStart(iLine);
+			auto iAnchor = iStart;
+			if (iAnchor && Source.f_GetStr()[iAnchor - 1] == '\n')
+				--iAnchor;
+
+			if (iAnchor && Source.f_GetStr()[iAnchor - 1] == '\r')
+				--iAnchor;
+
+			auto nLength = Tokens[i].m_iOffset - iAnchor;
+			CStr Replacement = CStr(Source.f_GetStr() + iAnchor, iStart - iAnchor) + fp_MakeIndent(m_CommentIndent[i]);
+			if (Replacement == CStr(Source.f_GetStr() + iAnchor, nLength))
+				continue;
+
+			fp_AddEdit("line-break", iAnchor, nLength, Replacement, "the body's lines move with its brace");
 		}
 	}
 
@@ -2943,7 +3014,7 @@ namespace
 			return false;
 
 		auto nDelta = aint(_iIndent) - aint(_nReference);
-		if (nDelta && (Block.m_bHasComment || Block.m_bHasDirective || Block.m_bHasMultiLineToken))
+		if (nDelta && !fp_CanPlaceBlock(_iBlock))
 			return false;
 
 		fp_OwnLineBefore(Block.m_iFirstToken, _iIndent);
@@ -2953,6 +3024,16 @@ namespace
 		return true;
 	}
 
+	// Whether the block's lines can follow a move. A multiline token spells its own lines
+	// and an opaque directive fixes the ones around it, so neither can be brought to a new
+	// depth. A directive keeps the column its own convention gives it either way.
+	bool CFormattingAnalyzer::fp_CanPlaceBlock(umint _iBlock) const
+	{
+		auto const &Block = m_Structure.f_GetNodes()[_iBlock];
+
+		return !Block.m_bHasMultiLineToken && !fp_HasOpaqueDirective(Block.m_iFirstToken, Block.m_iLastToken);
+	}
+
 	// Moves every line the block's tokens start by the given number of columns.
 	void CFormattingAnalyzer::fp_ShiftBlock(umint _iBlock, aint _nDelta)
 	{
@@ -2960,14 +3041,31 @@ namespace
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		for (auto i = Block.m_iFirstToken + 1; i <= Block.m_iLastToken; ++i)
 		{
-			switch (Tokens[i].m_Kind)
+			// A comment on a line of its own is one of the block's lines and moves with it.
+			// One trailing code keeps its place behind that code, and a directive the column
+			// its own convention gives it.
+			auto Kind = Tokens[i].m_Kind;
+			if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment)
+			{
+				if (!fp_IsFirstOnLine(i))
+					continue;
+
+				auto nIndent = aint(fp_GetSourceLineIndent(i)) + _nDelta;
+				if (nIndent < 0)
+					continue;
+
+				m_bCommentMoved[i] = 1;
+				m_CommentIndent[i] = umint(nIndent);
+
+				continue;
+			}
+
+			switch (Kind)
 			{
 				case ECodeTokenKind::mc_ByteOrderMark:
 				case ECodeTokenKind::mc_Whitespace:
 				case ECodeTokenKind::mc_Newline:
 				case ECodeTokenKind::mc_LineSplice:
-				case ECodeTokenKind::mc_LineComment:
-				case ECodeTokenKind::mc_BlockComment:
 				case ECodeTokenKind::mc_Preprocessor:
 					continue;
 				default: break;
@@ -3368,23 +3466,45 @@ namespace
 
 	void CFormattingAnalyzer::fp_RuleLineBreaks()
 	{
-		// Brackets that do not nest as written make every line position a guess, so the
-		// file keeps its layout. Say so rather than silently leaving it unformatted.
-		if (!m_Structure.f_IsComplete())
-		{
-			if (!m_bProbing)
-				fp_AddDiagnostic("structure", m_Structure.f_GetIncompleteOffset(), 0, "this construct's brackets do not nest as written, so the file's line structure was left alone", false);
-
-			return;
-		}
-
+		// Every gap starts out keeping what the source has, so the rules that read the
+		// decisions have them to read even where no layout is made.
 		auto nTokens = m_Tokens.f_GetTokens().f_GetLen();
 		m_GapState.f_SetLen(nTokens);
 		m_GapIndent.f_SetLen(nTokens);
+		m_bCommentMoved.f_SetLen(nTokens);
+		m_CommentIndent.f_SetLen(nTokens);
 		for (umint i = 0; i < nTokens; ++i)
 		{
 			m_GapState[i] = uint8(EGap::mc_Keep);
 			m_GapIndent[i] = 0;
+			m_bCommentMoved[i] = 0;
+			m_CommentIndent[i] = 0;
+		}
+
+		// Brackets that do not nest as written make every line position a guess, so the
+		// file keeps its layout. Say so rather than silently leaving it unformatted.
+		if (!m_Structure.f_IsComplete())
+		{
+			// A conditional whose branches each spell a piece of one construct is the one
+			// shape where brackets that do not nest is what the source means, so it is
+			// named as itself rather than reported as the construct it left open.
+			bool bConditional = !m_Conditionals.f_IsEmpty();
+			if (!m_bProbing)
+			{
+				fp_AddDiagnostic
+					(
+						"structure"
+						, bConditional ? m_Conditionals[0].m_iOffset : m_Structure.f_GetIncompleteOffset()
+						, 0
+						, bConditional
+							? "the branches of this conditional each hold a piece of one construct, so the file's line structure was left alone"
+							: "this construct's brackets do not nest as written, so the file's line structure was left alone"
+						, false
+					)
+				;
+			}
+
+			return;
 		}
 
 		fp_PrepareBlockEnds();
@@ -3403,6 +3523,183 @@ namespace
 			if (Node.m_Kind == ECodeNodeKind::mc_Block && Node.m_Bracket == ECodeBracket::mc_Brace)
 				m_iBlockEnd[Node.m_iFirstToken] = Node.m_iLastToken;
 		}
+	}
+
+	// The name the directive spells, such as 'if' or 'endif'.
+	CStr CFormattingAnalyzer::fp_GetDirectiveKeyword(umint _iToken) const
+	{
+		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		auto pText = m_Request.m_Source.f_GetStr() + Token.m_iOffset;
+		umint i = 0;
+		while (i < Token.m_nLength && pText[i] != '#')
+			++i;
+
+		++i;
+		while (i < Token.m_nLength && fg_IsSpaceOrTab(pText[i]))
+			++i;
+
+		umint iStart = i;
+		while (i < Token.m_nLength && pText[i] >= 'a' && pText[i] <= 'z')
+			++i;
+
+		return CStr(pText + iStart, i - iStart);
+	}
+
+	// True when nothing the directive stands in the middle of is cut by it: every construct
+	// spanning the directive spans the whole conditional group, so the branches are
+	// alternatives inside one construct rather than pieces of one spread over several.
+	bool CFormattingAnalyzer::fp_IsDirectiveParallel(umint _iDirective, umint _iOpen, umint _iClose) const
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		if (Nodes.f_IsEmpty())
+			return false;
+
+		umint iNode = 0;
+		for (;;)
+		{
+			auto const &Node = Nodes[iNode];
+			// A directive is trivia, so a node never starts or ends on one: a node spanning
+			// the group has its first token in front of the opening directive and its last
+			// behind the closing one.
+			if (iNode && (Node.m_iFirstToken > _iOpen || Node.m_iLastToken < _iClose))
+				return false;
+
+			umint iNext = iNode;
+			for (auto iChild : Node.m_Children)
+			{
+				if (Nodes[iChild].m_iFirstToken < _iDirective && Nodes[iChild].m_iLastToken > _iDirective)
+				{
+					iNext = iChild;
+
+					break;
+				}
+			}
+
+			if (iNext == iNode)
+				return true;
+
+			iNode = iNext;
+		}
+	}
+
+	// A conditional group holds alternatives: the token stream reads its branches one after
+	// another, which is the same shape as any single branch only where no construct is cut
+	// by a branch boundary. Where one is, every directive of the group is opaque and the
+	// construct around it keeps the lines the source gave it, as before. A directive that
+	// is transparent only fixes the line it stands on, exactly as a line comment does.
+	void CFormattingAnalyzer::fp_PrepareDirectives()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		m_bOpaqueDirective.f_SetLen(Tokens.f_GetLen());
+		for (auto &bOpaque : m_bOpaqueDirective)
+			bOpaque = 0;
+
+		struct CConditional
+		{
+			TCVector<umint> m_Directives;
+			bool m_bClosed = false;
+		};
+		TCVector<CConditional> Conditionals;
+		TCVector<umint> Open;
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor)
+				continue;
+
+			auto Keyword = fp_GetDirectiveKeyword(i);
+			if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
+			{
+				Open.f_Insert(Conditionals.f_GetLen());
+				Conditionals.f_Insert().m_Directives.f_Insert(i);
+
+				continue;
+			}
+
+			bool bBranch = Keyword == "else" || Keyword == "elif" || Keyword == "elifdef" || Keyword == "elifndef";
+			if (!bBranch && Keyword != "endif")
+				continue;
+
+			// A branch or an end whose opening directive the file does not hold leaves the
+			// group unknown, so nothing may be read across it.
+			if (Open.f_IsEmpty())
+			{
+				m_bOpaqueDirective[i] = 1;
+
+				continue;
+			}
+
+			auto &Conditional = Conditionals[Open.f_GetLast()];
+			Conditional.m_Directives.f_Insert(i);
+			if (!bBranch)
+			{
+				Conditional.m_bClosed = true;
+				Open.f_Remove(Open.f_GetLen() - 1);
+			}
+		}
+
+		for (auto const &Conditional : Conditionals)
+		{
+			auto const &Directives = Conditional.m_Directives;
+			// A branch that opens a bracket it does not close, or closes one it did not
+			// open, spells a piece of a construct rather than a whole alternative. The
+			// token stream then holds no construct the file ever compiles, and the file is
+			// reported as such rather than laid out against a shape nothing has.
+			bool bBalanced = Conditional.m_bClosed;
+			for (umint iBranch = 0; bBalanced && iBranch + 1 < Directives.f_GetLen(); ++iBranch)
+			{
+				aint nDepth = 0;
+				aint nLowest = 0;
+				for (auto i = Directives[iBranch] + 1; i < Directives[iBranch + 1]; ++i)
+				{
+					auto const &Token = Tokens[i];
+					if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
+						continue;
+
+					if (m_Tokens.f_IsText(Token, "(") || m_Tokens.f_IsText(Token, "[") || m_Tokens.f_IsText(Token, "{"))
+						++nDepth;
+					else if (m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]") || m_Tokens.f_IsText(Token, "}"))
+					{
+						--nDepth;
+						nLowest = nDepth < nLowest ? nDepth : nLowest;
+					}
+				}
+
+				bBalanced = !nDepth && !nLowest;
+			}
+
+			bool bParallel = bBalanced;
+			for (umint i = 0; bParallel && i < Directives.f_GetLen(); ++i)
+				bParallel = fp_IsDirectiveParallel(Directives[i], Directives[0], Directives.f_GetLast());
+
+			if (bParallel)
+				continue;
+
+			if (!bBalanced)
+			{
+				auto &Span = m_Conditionals.f_Insert();
+				Span.m_iOffset = Tokens[Directives[0]].m_iOffset;
+				Span.m_nLength = Tokens[Directives.f_GetLast()].f_GetEnd() - Span.m_iOffset;
+			}
+
+			for (auto iDirective : Directives)
+				m_bOpaqueDirective[iDirective] = 1;
+		}
+
+		m_nOpaqueBefore.f_SetLen(Tokens.f_GetLen() + 1);
+		m_nOpaqueBefore[0] = 0;
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+			m_nOpaqueBefore[i + 1] = m_nOpaqueBefore[i] + m_bOpaqueDirective[i];
+	}
+
+	// A node the builder could not close names a token past the end, so the range is taken
+	// to where the source does end.
+	bool CFormattingAnalyzer::fp_HasOpaqueDirective(umint _iFirst, umint _iLast) const
+	{
+		auto nTokens = m_Tokens.f_GetTokens().f_GetLen();
+		if (_iFirst >= nTokens)
+			return false;
+
+		return m_nOpaqueBefore[(_iLast < nTokens ? _iLast : nTokens - 1) + 1] > m_nOpaqueBefore[_iFirst];
 	}
 
 	// The indentation of the line the token stands on in the source, whatever the layout
@@ -4188,6 +4485,12 @@ namespace
 
 			auto iBrace = Child.m_iFirstToken;
 			auto nReference = fp_GetSourceLineIndent(_iFirst);
+			// A body whose lines cannot follow a move keeps the head it opens under where it
+			// is too. Moving the head alone would leave the two at depths that disagree, and
+			// the next pass would read that as a layout still to be made.
+			if (nReference != _iIndent && !fp_CanPlaceBlock(iChild))
+				return false;
+
 			auto iHeadLast = fp_PreviousCode(iBrace);
 			if (iHeadLast >= 0 && umint(iHeadLast) >= _iFirst)
 				fp_LayoutRange(_iNode, _iFirst, umint(iHeadLast), _iIndent, _bClause, _bIndentContinuations);
@@ -4202,6 +4505,71 @@ namespace
 			return true;
 		}
 
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		// A directive ends the line it stands on, so each stretch of the range between two
+		// of them is a line of its own. Each is laid out as one, which is what keeps a
+		// construct a conditional runs through from being opened up to make room that no
+		// line of it needs.
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto nLevel = m_TokenDepth[_iFirst];
+		TCVector<umint> Cuts;
+		for (umint i = _iFirst; i <= _iLast; ++i)
+		{
+			// Only a directive standing at the range's own level cuts it. One inside a
+			// construct within it belongs to that construct, and a closing marker behind a
+			// directive stays where the marker's own scope puts it.
+			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor || m_bOpaqueDirective[i] || m_TokenDepth[i] != nLevel)
+				continue;
+
+			auto iNext = fp_NextCode(i);
+			if (iNext < 0 || umint(iNext) > _iLast || umint(iNext) <= _iFirst || m_TokenDepth[umint(iNext)] != nLevel)
+				continue;
+
+			Cuts.f_Insert(umint(iNext));
+		}
+
+		if (!Cuts.f_IsEmpty())
+		{
+			// An operator standing at a cut is one the construct is written broken at, so
+			// every operator that binds as loosely takes a line of its own even where its
+			// segment would have fitted on one. Where no cut stands at an operator there is
+			// no such operator to speak of: the branches are alternatives, not one
+			// expression, and what any of them holds binds tighter than the cut between
+			// them. A segment's scopes are opened only where its line is still too long.
+			TCVector<umint> Operators;
+			fp_FindLooseOperators(_iFirst, _iLast, Operators);
+			bool bCutAtOperator = false;
+			for (auto iOperator : Operators)
+			{
+				for (auto iCut : Cuts)
+					bCutAtOperator |= iOperator == iCut;
+			}
+
+			auto nContinuation = _bIndentContinuations ? _iIndent + nTab : _iIndent;
+			for (umint iCut = 0; iCut <= Cuts.f_GetLen(); ++iCut)
+			{
+				auto iStart = iCut ? Cuts[iCut - 1] : _iFirst;
+				auto iEnd = iCut < Cuts.f_GetLen() ? umint(fp_PreviousCode(Cuts[iCut])) : _iLast;
+				if (iEnd < iStart)
+					continue;
+
+				bool bSplitSegment = false;
+				for (auto iOperator : Operators)
+				{
+					// One that opens the segment already stands on a line of its own.
+					bSplitSegment |= bCutAtOperator && iOperator > iStart && iOperator <= iEnd;
+				}
+
+				auto nSegmentIndent = iCut ? nContinuation : _iIndent;
+				if (iCut)
+					fp_BreakBefore(iStart, nSegmentIndent);
+
+				fp_LayoutRange(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iCut, _bIndentContinuations && !iCut, bSplitSegment);
+			}
+
+			return true;
+		}
+
 		// Fitting is not the same as being written that way: a range the layout keeps on
 		// one line is put there, so the result does not depend on where the source broke.
 		if (!_bMustSplit && fp_FitsInline(_iFirst, _iLast, _iIndent))
@@ -4211,7 +4579,6 @@ namespace
 			return false;
 		}
 
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
 		TCVector<umint> Operators;
 		fp_FindLooseOperators(_iFirst, _iLast, Operators);
 		if (Operators.f_IsEmpty())

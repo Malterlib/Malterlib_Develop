@@ -64,6 +64,13 @@ long. Layout decisions are recorded per gap between tokens and written out
 once; never emit an edit from inside the layout, since a decision must not
 depend on an edit already made or on where the source broke its lines.
 
+A conditional's branches reach the engine as one token stream, one branch after
+another. That is the same shape as any single branch only while no construct is
+cut by a branch boundary; where one is, the directives are opaque and the
+construct around them keeps its lines. A transparent directive ends the line it
+stands on, as a line comment does, and the stretches between directives are the
+construct's lines.
+
 Prefer an explicit unsupported result over a guessed edit. Ambiguous spellings
 stay out of the matrix: plain `=` is also a lambda capture default and the tail
 of the `_o=` DSL, and `&`, `&&`, and `*` are declarators as well as operators,

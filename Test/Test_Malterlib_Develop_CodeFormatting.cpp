@@ -450,10 +450,15 @@ namespace
 					fg_ExpectFormat("Instance", Instance, Instance);
 					CStr Attribute = "void f()\n{\n\tif (a) [[unlikely]]\n\t\tg();\n}\n";
 					fg_ExpectFormat("Attribute", Attribute, Attribute);
-					// A body that would move with a comment inside stays, since the comment's
-					// line could not follow; one that stays in place opens on its own line.
-					CStr Commented = "void f()\n{\n\tauto g = [&] {\n\t\t// why\n\t\th();\n\t};\n}\n";
-					fg_ExpectFormat("CommentedLambda", Commented, Commented);
+					// A comment on a line of its own is one of the body's lines and follows it:
+					// a body that moves takes the comment to the depth the brace moved to.
+					fg_ExpectFormat
+						(
+							"CommentedLambda"
+							, "void f()\n{\n\tauto g = [&] {\n\t\t// why\n\t\th();\n\t};\n}\n"
+							, "void f()\n{\n\tauto g = [&]\n\t\t{\n\t\t\t// why\n\t\t\th();\n\t\t}\n\t;\n}\n"
+						)
+					;
 					fg_ExpectFormat("CommentedBody", "void f() {\n\t// why\n\tg();\n}\n", "void f()\n{\n\t// why\n\tg();\n}\n");
 					// A call holding a lambda body is written split: the body opens under its
 					// introducer at the element's indentation, its lines follow it, what
@@ -988,6 +993,47 @@ namespace
 							, Split + Captures + "\n\t\t" + Template + "\n\t\t" + Params + " -> TCFuture<void>" + Body
 						)
 					;
+				};
+
+				DMibTestCategory("Directives")
+				{
+					// The branches of a conditional are alternatives inside one construct,
+					// so the construct is laid out and each directive only ends the line it
+					// stands on: what follows one starts the next line, at the level the
+					// construct gives it.
+					fg_ExpectFormat
+						(
+							"Chain"
+							, "void f()\n{\n\tco_return co_await m_Promises\n#if 1\n\t\t.f_Insert()\n#else\n\t\t\t.f_Insert()\n#endif\n\t\t\t.f_Future()\n\t;\n}\n"
+							, "void f()\n{\n\tco_return co_await m_Promises\n#if 1\n\t\t.f_Insert()\n#else\n\t\t.f_Insert()\n#endif\n\t\t.f_Future()\n\t;\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"Arguments"
+							, "void f()\n{\n\tg(a\n#if 1\n\t\t, b\n#else\n\t\t\t, c\n#endif\n\t\t, d\n\t);\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\ta\n#if 1\n\t\t\t, b\n#else\n\t\t\t, c\n#endif\n\t\t\t, d\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// A stretch between two directives is a line of its own and is only
+					// broken further where it is too long, so a construct one runs through
+					// is not opened up to make room no line of it needs.
+					CStr Qualifier = "struct C\n{\n\t~C()\n#if DDebug\n\t\tnoexcept(false)\n#endif\n\t;\n};\n";
+					fg_ExpectFormat("Qualifier", Qualifier, Qualifier);
+					// An operator standing at a directive is one the construct is written
+					// broken at, so every operator binding as loosely keeps its own line.
+					CStr Condition = "void f()\n{\n\tif constexpr\n\t(\n\t\t(a || !b)\n\t\t&& (c || d)\n#if DDebug\n\t\t&& false\n#endif\n\t)\n\t{\n\t\tg();\n\t}\n}\n";
+					fg_ExpectFormat("Condition", Condition, Condition);
+					CStr Statements = "void f()\n{\n\tg();\n#if 1\n\th();\n#else\n\ti();\n#endif\n\tj();\n}\n";
+					fg_ExpectFormat("Statements", Statements, Statements);
+					// A branch that spells a piece of a construct rather than a whole
+					// alternative leaves the file no shape to be laid out against, and a
+					// branch that ends a clause the next one begins again leaves the
+					// construct around it cut in two. Both keep the lines the source gave.
+					CStr Cut = "void f()\n{\n#if 1\n\tg(a\n#else\n\tg(b\n#endif\n\t);\n}\n";
+					fg_ExpectFormat("Cut", Cut, Cut);
+					CStr Guard = "void f()\n{\n#if 1\n\tif (a)\n#else\n\tif (b)\n#endif\n\t\t\tg();\n}\n";
+					fg_ExpectFormat("Guard", Guard, Guard);
 				};
 
 				DMibTestCategory("TrailingReturn")

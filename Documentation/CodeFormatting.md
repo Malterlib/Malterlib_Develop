@@ -204,12 +204,12 @@ plan writes are the lines a later pass sees.
 
 The decisions are kept per gap between tokens and written out once, so no
 decision depends on an edit already made, or on where the source happened to
-break its lines. A construct that contains a block comment, a preprocessor
-directive, a multiline token, or a braced initializer written across lines
-keeps its lines; only its inner constructs are brought back to one line where
-they fit. A line comment only ends its line: a construct holding one never
-fits on a line and is split, and the lines around the comment are laid out and
-indented as usual, the comment staying at the end of its own.
+break its lines. A construct that contains a block comment, a multiline token,
+or a braced initializer written across lines keeps its lines; only its inner
+constructs are brought back to one line where they fit. A line comment only
+ends its line: a construct holding one never fits on a line and is split, and
+the lines around the comment are laid out and indented as usual, the comment
+staying at the end of its own.
 A lambda body inside a call is different: a block never fits on a line, so the
 call is written split, the scope holding the body is the one opened while what
 stands in front of it stays on the line where it fits, the body opens under its
@@ -229,8 +229,9 @@ A line that nothing above can shorten, such as one long literal, is reported by
 A block's braces and each of its statements take a line of their own. A body
 that shares a line with its head opens under it, a declaration's at the
 statement's indentation and a lambda's one level in, and takes its lines along
-so that their depth still follows the brace; a body with a comment or a
-directive inside, whose lines could not follow, stays where it is. A statement
+so that their depth still follows the brace, a comment on a line of its own
+among them; a body with a multiline token inside, whose lines could not follow,
+stays where it is. A statement
 moved off a shared line takes the level of the lines around it: the block's
 level, one level in behind a clause, `else`, or `do`, and the clause's own level
 for a guarded block. The depth of a line the source already starts is not
@@ -240,6 +241,55 @@ and an attribute on a clause's line. Behind a closing brace only a keyword
 starts a statement of its own, since a name there declares a variable of the
 type just defined. A lambda's terminator stands on a line of its own at the
 statement's indentation; a declaration's stays behind its closing brace.
+
+## Conditional directives
+
+The branches of `#if` … `#elif` … `#else` … `#endif` are alternatives, and the
+engine reads no branch separately: it sees the branches one after another. That
+is the same shape as any single branch as long as no construct is cut by a
+branch boundary, which is what the engine requires before it lays out a
+construct a conditional runs through. Where a construct spanning a boundary
+does not span the whole group, every directive of the group is opaque and the
+construct around it keeps the lines the source gave it:
+
+```cpp
+#if DDebug
+	if (a)
+#else
+	if (b)
+#endif
+		g();
+```
+
+A branch that opens a bracket it does not close, or closes one it did not open,
+holds a piece of a construct rather than a whole alternative. The file then has
+no line structure to be laid out against, which `structure` reports, naming the
+conditional rather than the construct it left open.
+
+Everywhere else a directive is transparent: it only ends the line it stands on,
+as a line comment does. The construct around it is written split, each stretch
+between two directives is a line of its own at the level the construct gives
+it, and a stretch is only broken further where it is still too long, so no
+construct is opened up to make room that no line of it needs. An operator
+standing at a directive is one the construct is written broken at, and then
+every operator that binds as loosely takes a line of its own; where no
+directive stands at an operator none is broken, since what a branch holds binds
+tighter than the boundary around it.
+
+```cpp
+	co_return co_await m_Promises
+#if DDebug
+		.f_Insert()
+#else
+		.f_Insert()
+#endif
+		.f_Future()
+	;
+```
+
+Directive lines themselves are never rewritten. The sources spell them both at
+column one and indented by conditional depth, so the standard does not settle
+them and they keep what they have, a block moving around them included.
 
 ## Protected regions
 
