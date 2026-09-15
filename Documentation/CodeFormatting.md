@@ -132,6 +132,16 @@ alone where that function does not settle the spelling. An operator function's
 name is left alone too, since the sources spell it both ways, and so is a `/`
 written tight between two names, which is a path in a macro argument.
 
+A pack's ellipsis goes with what the pack is. One that declares a pack hugs the
+name it introduces and stands apart from the type in front of it, as in
+`typename ...tp_CParams` and `NTraits::TCDecay<tp_CParams> ...p_Params`; one
+that expands a pack has no name to hug and is written tight against what it
+expands, as in `tp_CParams...>` and `fg_Forward<tp_CParams>(p_Params)...`. The
+name behind the ellipsis is what tells the two apart. A declarator in front of
+one is the exception: `&&...p_Params` and `&& ...p_Params` are both written,
+so that pair keeps what it has, and `sizeof...` and a fold's ellipsis are
+spelled by the rules for the tokens around them.
+
 `indentation` normalizes indentation characters, not indentation depth. Depth
 is `line-break`'s, described under [Line structure](#line-structure): the level
 of a block's statements, and of a split statement's continuations and clause

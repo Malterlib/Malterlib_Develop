@@ -265,6 +265,30 @@ namespace
 
 				DMibTestCategory("TokenSpace")
 				{
+					// A pack's ellipsis hugs the name it introduces and stands apart from the
+					// type in front of it; one that expands a pack hugs what it expands.
+					fg_ExpectFormat
+						(
+							"Ellipsis"
+							, "template <typename... tp_CParams>\nauto fg_F(NTraits::TCDecay<tp_CParams>  ... p_Params) -> TCFuture<t_CResult>\n{\n"
+								"\tg(fg_Forward<tp_CParams>(p_Params)  ...);\n}\n"
+							, "template <typename ...tp_CParams>\nauto fg_F(NTraits::TCDecay<tp_CParams> ...p_Params) -> TCFuture<t_CResult>\n{\n"
+								"\tg(fg_Forward<tp_CParams>(p_Params)...);\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"EllipsisExpansion"
+							, "template <typename ...tp_CParams>\nstruct C : TCBase<t_CResult, tp_CParams  ...>\n{\n};\n"
+							, "template <typename ...tp_CParams>\nstruct C : TCBase<t_CResult, tp_CParams...>\n{\n};\n"
+						)
+					;
+					// A declarator in front of one is written both ways, and 'sizeof...' and a
+					// fold's ellipsis are spelled by rules of their own.
+					CStr Packs = "template <typename ...tp_CParams>\nvoid fg_A(tp_CParams &&...p_Params);\n\ntemplate <typename ...tp_CParams>\n"
+						"void fg_B(tp_CParams && ...p_Params);\n\ntemplate <typename ...tp_CParams>\nconstexpr umint gc_n = sizeof...(tp_CParams);\n"
+					;
+					fg_ExpectFormat("EllipsisKept", Packs, Packs);
 					// A member access and a scope marker hug their operands; a keyword stands
 					// apart from its parenthesis; a label's colon hugs it; a unary sign hugs its
 					// operand and a binary one is written apart.

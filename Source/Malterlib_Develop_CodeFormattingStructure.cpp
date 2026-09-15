@@ -948,6 +948,15 @@ namespace
 	// of the name, since C++ then reads the parenthesis as a parameter list even where an
 	// initializer would also parse, and otherwise when what follows the list can only
 	// follow a function.
+	// True when the ellipsis introduces a pack rather than expanding one, which the name
+	// behind it says: 'typename ...tp_CParams' declares, 'tp_CParams...>' expands.
+	bool fg_DeclaresPack(CCodeTokenStream const &_Tokens, umint _iEllipsis)
+	{
+		auto iAfter = fg_NextCode(_Tokens, _iEllipsis);
+
+		return iAfter >= 0 && _Tokens.f_GetTokens()[umint(iAfter)].m_Kind == ECodeTokenKind::mc_Identifier;
+	}
+
 	// The 'operator' of a subscript operator's name, whose brackets are the only thing a
 	// ']' in front of a parameter list can close besides a capture list.
 	aint fg_NameSubscriptOperator(CCodeTokenStream const &_Tokens, umint _iClose)
@@ -1307,6 +1316,11 @@ namespace NMib::NDevelop
 			if (Right.m_Kind == ECodeTokenKind::mc_Identifier)
 				return ECodeSpacing::mc_Space;
 
+			// A pack declared behind the list is separated from it and one expanded is
+			// written tight: 'TCDecay<tp_CParams> ...p_Params' against 'tp_CParams...>'.
+			if (fRight("..."))
+				return fg_DeclaresPack(_Tokens, _iRight) ? ECodeSpacing::mc_Space : ECodeSpacing::mc_None;
+
 			// A declarator behind the list is separated from it: 'TCVector<int> &'.
 			if (fg_IsDeclaratorText(_Tokens, Right))
 				return ECodeSpacing::mc_Space;
@@ -1515,6 +1529,21 @@ namespace NMib::NDevelop
 			if (iBefore >= 0 && _Structure.f_IsAngleBracket(umint(iBefore)))
 				return ECodeSpacing::mc_Preserve;
 		}
+
+		// A pack's ellipsis goes with what the pack is: a declaration's hugs the name it
+		// introduces and stands apart from the type in front of it, as in
+		// 'NTraits::TCDecay<tp_CParams> ...p_Params' and 'typename ...tp_CParams'; an
+		// expansion has no name to hug and is written tight against what it expands, as in
+		// 'tp_CParams...>', 'fg_Forward<tp_CParams>(p_Params)...' and 'sizeof...(X)'. A
+		// declarator in front of one is the exception above, spelled both ways.
+		bool bPackOperand = Left.m_Kind == ECodeTokenKind::mc_Identifier || fLeft(">") || fLeft(")") || fLeft("]");
+		if (fRight("...") && bPackOperand)
+		{
+			return fg_DeclaresPack(_Tokens, _iRight) ? ECodeSpacing::mc_Space : ECodeSpacing::mc_None;
+		}
+
+		if (fLeft("...") && Right.m_Kind == ECodeTokenKind::mc_Identifier)
+			return ECodeSpacing::mc_None;
 
 		// What follows a parameter list is the function's qualifiers and specifiers, and
 		// they are separated from it and from each other. Without a spelling for these the
