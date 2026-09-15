@@ -256,7 +256,8 @@ themselves. A case written on its label's line stays there whole, as
 and an attribute on a clause's line. Behind a closing brace only a keyword
 starts a statement of its own, since a name there declares a variable of the
 type just defined. A lambda's terminator stands on a line of its own at the
-statement's indentation; a declaration's stays behind its closing brace.
+statement's indentation, wherever the source left it, on that line already or
+behind the brace; a declaration's stays behind its closing brace.
 
 A brace holds statements, rather than the elements of a braced initializer,
 when a statement terminator stands at its own level or an element of it starts

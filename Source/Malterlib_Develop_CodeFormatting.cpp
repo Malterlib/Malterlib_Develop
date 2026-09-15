@@ -2926,10 +2926,11 @@ namespace
 					&& fp_IsFirstOnLine(Nodes[iBlock].m_iFirstToken)
 					&& m_Tokens.f_IsText(Tokens[iLast], ";")
 					&& fp_PreviousCode(iLast) == aint(Nodes[iBlock].m_iLastToken)
-					&& !fp_IsFirstOnLine(iLast)
 				;
-				if (bLambdaTerminator)
+				if (bLambdaTerminator && !fp_IsFirstOnLine(iLast))
 					fp_OwnLineBefore(iLast, _iIndent);
+				else if (bLambdaTerminator && fp_GetStatementIndent(iLast) != _iIndent)
+					fp_IndentBefore(iLast, _iIndent);
 			}
 
 			return;

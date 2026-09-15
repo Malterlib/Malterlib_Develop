@@ -533,6 +533,15 @@ namespace
 							, "void f()\n{\n\tauto g = [&]\n\t\t{\n\t\t\th();\n\t\t}\n\t;\n\treturn [&]\n\t\t{\n\t\t\ti();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A lambda's terminator likewise stands at the statement's indentation
+					// wherever the source left it, on its own line or behind the brace.
+					fg_ExpectFormat
+						(
+							"Terminator"
+							, "void f()\n{\n\tauto g = [&]\n\t\t{\n\t\t\th();\n\t\t}\n;\n\treturn [&]\n\t\t{\n\t\t\ti();\n\t\t}\n\t\t\t\t;\n}\n"
+							, "void f()\n{\n\tauto g = [&]\n\t\t{\n\t\t\th();\n\t\t}\n\t;\n\treturn [&]\n\t\t{\n\t\t\ti();\n\t\t}\n\t;\n}\n"
+						)
+					;
 					// Whose body it is the capture list in front of the brace says, not the
 					// first parenthesis of the statement, which here opens a call.
 					fg_ExpectFormat
