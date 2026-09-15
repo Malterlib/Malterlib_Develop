@@ -98,12 +98,11 @@ failure, not an edit.
 | `block-blank-line` | Removes blank lines directly after an opening brace. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
-| `line-length` | Diagnostic only; the engine does not yet split an overlong line. |
+| `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
-assignments. Plain `=` is deliberately excluded: the same token spells a lambda
-capture default and the trailing token of Malterlib's `_o=` and `_j=` DSL. `&`,
+assignments. Plain `=` is excluded here; `token-space` spells it, below. `&`,
 `&&`, `*`, `.`, and `->` are excluded because they are also declarators or
 member access; `token-space` spells those of them that are operators, below. An
 operator immediately following the `operator` keyword is a declarator name and
@@ -148,6 +147,17 @@ could close a cast is not such a marker, so `(int)*pValue` keeps its spelling,
 while `sizeof`, `alignof`, `typeid`, and `noexcept` yield a value the way a
 call does and `decltype` names a type. Everywhere else the pair keeps what the
 source has.
+
+Plain `=` assigns and initializes, and stands apart from both sides. Two
+spellings in the sources are not that: a capture default, which the markers
+around it settle as `[=]` and `[=, &m_Value]`, and the tail of Malterlib's
+`_o=` and `_j=` command-line DSL, which hugs the key in front of it. A DSL
+marker is told from every other name by its shape, an underscore with nothing
+but lower case behind it, which no declared name in Malterlib has. Settling the
+token is also what lets a statement broken at its `=` be measured, and so
+joined when it fits and broken further when it does not; what does not fit
+gives at its scopes, as in `auto Value = fg_Function` with the argument list
+opened under it, never in front of the name.
 
 A pack's ellipsis goes with what the pack is. One that declares a pack hugs the
 name it introduces and stands apart from the type in front of it, as in
@@ -254,8 +264,13 @@ most of it written one element per line on purpose, including Malterlib's `_o=`
 and `_j=` command-line DSL. A template header, a `requires` clause, a label, and
 the statement a clause guards each keep their own line.
 
-A line that nothing above can shorten, such as one long literal, is reported by
-`line-length` and left alone.
+A line that is still too long after all of that is broken again, so the layout
+does not depend on where the source happened to break: an element the source
+wrote split is measured like any other, and the scopes inside it open in turn
+until every line of the result fits. A line that nothing above can shorten,
+such as one long literal, is reported by `line-length` and left alone. That
+report is made on the result, so it names the lines that are still too long
+once every other rule has run, against the source line each came from.
 
 A block's braces and each of its statements take a line of their own. A body
 opens where its head puts it, a declaration's at the statement's indentation

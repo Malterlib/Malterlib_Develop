@@ -537,7 +537,7 @@ namespace
 		bool fp_TryJoin(umint _iFirstToken, umint _iLastToken, umint _iStartColumn);
 		bool fp_MeasureJoinedWidth(umint _iFirstToken, umint _iLastToken, umint &o_nColumns) const;
 		umint fp_GetTokenColumns(CCodeToken const &_Token) const;
-		void fp_DiagnoseLineLength();
+		void fp_DiagnoseLineLength(NContainer::TCVector<CCodeFormattingEdit> const &_Edits);
 		void fp_EnsureSingleSpace(umint _iToken, bool _bBefore, CStr const &_Rule, CStr const &_Explanation);
 		void fp_RemoveSpaceBefore(umint _iToken, CStr const &_Rule, CStr const &_Explanation);
 		void fp_RemoveFollowingBlankLines(umint _iToken, CStr const &_Rule, CStr const &_Explanation);
@@ -1345,56 +1345,47 @@ namespace
 		}
 	}
 
-	void CFormattingAnalyzer::fp_DiagnoseLineLength()
+	// The limit applies to the lines the rules produce, not to the ones the source has: a
+	// line they break up is no violation, and only what they leave too long is reported,
+	// against the source line the result's line came from.
+	void CFormattingAnalyzer::fp_DiagnoseLineLength(NContainer::TCVector<CCodeFormattingEdit> const &_Edits)
 	{
 		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
 		if (!nMaxColumns)
 			return;
 
-		auto const &Source = m_Request.m_Source;
-		for (umint iLine = 0; iLine < m_Lines.f_GetLineCount(); ++iLine)
+		auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, _Edits);
+		CTextLineMap Lines(Formatted);
+		auto iReported = TCLimitsInt<umint>::mc_Max;
+		for (umint iLine = 0; iLine < Lines.f_GetLineCount(); ++iLine)
 		{
-			if (!fp_IsLineSelected(iLine))
-				continue;
-
-			auto iStart = m_Lines.f_GetLineStart(iLine);
-			auto nLength = m_Lines.f_GetLine(iLine).m_nLength;
+			auto iStart = Lines.f_GetLineStart(iLine);
+			auto nLength = Lines.f_GetLine(iLine).m_nLength;
 			// The file-leading byte-order mark occupies no column.
 			if (!iLine)
 			{
-				auto nBom = fg_GetTextBomLength(Source);
+				auto nBom = fg_GetTextBomLength(Formatted);
 				iStart += nBom;
 				nLength -= fg_Min(nBom, nLength);
 			}
 
 			umint nColumns = 0;
-			if (!fg_MeasureTextColumns(Source.f_GetStr() + iStart, nLength, m_Request.m_Settings.m_nTabWidth, nColumns))
-			{
-				fp_AddDiagnostic
-					(
-						"line-length"
-						, m_Lines.f_GetLineStart(iLine)
-						, m_Lines.f_GetLine(iLine).m_nLength
-						, "line length overflows the column counter and exceeds max_line_length = {}"_f << nMaxColumns
-						, false
-					)
-				;
-
-				continue;
-			}
-
-			if (nColumns <= nMaxColumns)
+			bool bMeasured = fg_MeasureTextColumns(Formatted.f_GetStr() + iStart, nLength, m_Request.m_Settings.m_nTabWidth, nColumns);
+			if (bMeasured && nColumns <= nMaxColumns)
 				continue;
 
-			fp_AddDiagnostic
-				(
-					"line-length"
-					, m_Lines.f_GetLineStart(iLine)
-					, m_Lines.f_GetLine(iLine).m_nLength
-					, "line length {} exceeds max_line_length = {}"_f << nColumns << nMaxColumns
-					, false
-				)
+			// Several lines of the result can come from one line of the source, which is
+			// then named once.
+			auto iSource = m_Lines.f_FindLine(fg_MapOffsetToOriginal(_Edits, Lines.f_GetLineStart(iLine)));
+			if (iSource == iReported || !fp_IsLineSelected(iSource))
+				continue;
+
+			iReported = iSource;
+			CStr Explanation = bMeasured
+				? "line length {} exceeds max_line_length = {}"_f << nColumns << nMaxColumns
+				: "line length overflows the column counter and exceeds max_line_length = {}"_f << nMaxColumns
 			;
+			fp_AddDiagnostic("line-length", m_Lines.f_GetLineStart(iSource), m_Lines.f_GetLine(iSource).m_nLength, Explanation, false);
 		}
 	}
 }
@@ -1542,7 +1533,7 @@ namespace
 				Diagnostic.m_bHasAutomaticFix = true;
 			}
 
-			fp_DiagnoseLineLength();
+			fp_DiagnoseLineLength(Result.m_Edits);
 		}
 
 		for (auto const &Diagnostic : m_Diagnostics)

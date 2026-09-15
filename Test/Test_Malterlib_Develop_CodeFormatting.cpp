@@ -251,11 +251,21 @@ namespace
 				{
 					fg_ExpectFormat("Compare", "void f()\n{\n\tif (a==b || c!=d)\n\t\tg();\n}\n", "void f()\n{\n\tif (a == b || c != d)\n\t\tg();\n}\n");
 					fg_ExpectFormat("Compound", "void f()\n{\n\ta+=1;\n\tb<<=2;\n}\n", "void f()\n{\n\ta += 1;\n\tb <<= 2;\n}\n");
-					// A lone '=' is also a capture default and the tail of the '_o=' DSL, so it is
-					// left alone rather than rewritten from an ambiguous reading.
-					fg_ExpectFormat("AssignIsAmbiguous", "void f()\n{\n\tint a=1;\n}\n", "void f()\n{\n\tint a=1;\n}\n");
+					// A lone '=' assigns and initializes. A capture default is settled by the
+					// markers around it, and behind a DSL marker the same token is the tail of
+					// a spelling that hugs the key it follows.
+					fg_ExpectFormat("Assign", "void f()\n{\n\tint a=1;\n\tint b =2;\n}\n", "void f()\n{\n\tint a = 1;\n\tint b = 2;\n}\n");
 					fg_ExpectFormat("CaptureDefault", "void f()\n{\n\tauto g = [=]{};\n}\n", "void f()\n{\n\tauto g = [=]{};\n}\n");
 					fg_ExpectFormat("FormattingDsl", "auto g_Option = \"Names\"_o= _o[\"--file\"];\n", "auto g_Option = \"Names\"_o= _o[\"--file\"];\n");
+					// A statement broken at its '=' is brought back together, and what then
+					// does not fit gives at its scopes, not in front of the name.
+					fg_ExpectFormat
+						(
+							"AssignJoins"
+							, "void f()\n{\n\tauto Value\n\t\t= fg_G(5)\n\t;\n}\n"
+							, "void f()\n{\n\tauto Value = fg_G(5);\n}\n"
+						)
+					;
 					fg_ExpectFormat("OperatorName", "struct C\n{\n\tbool operator==(C const &_Other) const;\n};\n", "struct C\n{\n\tbool operator==(C const &_Other) const;\n};\n");
 					// Declarators keep their Malterlib spelling; they are not expression operators.
 					fg_ExpectFormat("Declarator", "void f(CStr const &_A, CStr &&_B);\n", "void f(CStr const &_A, CStr &&_B);\n");
@@ -885,6 +895,26 @@ namespace
 						}
 					;
 					fSplit("Call", "void f()\n{\n\tg(@, @, @);\n}\n", "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t\t, @\n\t\t)\n\t;\n}\n");
+					// A line the layout has already broken is broken again while it is still too
+					// long: the scopes inside it open in turn until every line of the result
+					// fits, whether the source wrote the construct on one line or split.
+					CStr Half = "(a + b)";
+					for (umint i = 0; i < 3; ++i)
+						Half = CStr("(@ + @)").f_Replace("@", Half);
+
+					CStr Element = CStr("(@ + @)").f_Replace("@", Half);
+					fg_ExpectFormat
+						(
+							"Deep"
+							, CStr("void f()\n{\n\tint x =\n\t\t(\n\t\t\t#\n\t\t\t+ #\n\t\t)\n\t;\n}\n").f_Replace("#", Element)
+							, CStr
+								(
+									"void f()\n{\n\tint x =\n\t\t(\n\t\t\t(\n\t\t\t\t@\n\t\t\t\t+ @\n\t\t\t)\n"
+									"\t\t\t+\n\t\t\t(\n\t\t\t\t@\n\t\t\t\t+ @\n\t\t\t)\n\t\t)\n\t;\n}\n"
+								)
+								.f_Replace("@", Half)
+						)
+					;
 					// A clause's parenthesis sits at the statement's own indentation, and a
 					// split clause puts braces around the statement it guards.
 					fg_ExpectFormat
@@ -1454,6 +1484,18 @@ namespace
 					DMibExpectTrue(Result.f_HasUnfixableDiagnostics());
 					// An indivisible overlong line stays visible and is not rewritten.
 					DMibExpectTrue(Result.m_Edits.f_IsEmpty());
+
+					// One the layout breaks up is no violation of the result's making, so it
+					// is not reported as one left to resolve.
+					DMibTestPath("Split");
+					CStr Operand = "(a + b)";
+					for (umint i = 0; i < 4; ++i)
+						Operand = CStr("(@ + @)").f_Replace("@", Operand);
+
+					auto Broken = fg_Analyze(CStr("void f()\n{\n\tint x = @;\n}\n").f_Replace("@", Operand));
+					DMibExpectTrue(Broken.m_Status == ECodeFormattingStatus::mc_Complete);
+					DMibExpectFalse(Broken.m_Edits.f_IsEmpty());
+					DMibExpectFalse(Broken.f_HasUnfixableDiagnostics());
 				};
 			};
 

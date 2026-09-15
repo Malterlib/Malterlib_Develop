@@ -1125,6 +1125,24 @@ namespace
 		return false;
 	}
 
+	// A name spelled as an underscore with nothing but lower case behind it, '_o', '_j' or
+	// '_' itself, is one of Malterlib's DSL markers rather than something declared: a
+	// parameter's underscore is followed by a capital, and nothing else takes one at all.
+	bool fg_IsDSLMarker(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
+	{
+		auto Text = _Tokens.f_GetText(_Token);
+		if (Text.f_IsEmpty() || Text.f_GetStr()[0] != '_')
+			return false;
+
+		for (umint i = 1; i < Text.f_GetLen(); ++i)
+		{
+			if (Text.f_GetStr()[i] < 'a' || Text.f_GetStr()[i] > 'z')
+				return false;
+		}
+
+		return true;
+	}
+
 	// An operator's spelling says what it does only where an operand stands on both sides
 	// of it. Without one in front it is the unary form, '-1' and '*pValue'; without one
 	// behind it names something else, a cast's '(CFoo *)' or a pack's '&&...'. '*', '&'
@@ -1557,6 +1575,20 @@ namespace NMib::NDevelop
 			;
 			if (bTight)
 				return ECodeSpacing::mc_Preserve;
+		}
+
+		// Plain '=' assigns and initializes, and is written apart from both sides. Behind
+		// one of Malterlib's DSL markers it is instead the tail of a spelling that hugs the
+		// key it follows, '"Names"_o= _o[...]', and a marker is told from every other name
+		// by its shape: an underscore with nothing but lower case behind it, which no
+		// declared name has. A capture default is settled by the markers around it, and an
+		// operator function's name keeps whatever spelling it has.
+		if ((fLeft("=") || fRight("=")) && !fLeft("operator"))
+		{
+			if (fRight("=") && Left.m_Kind == ECodeTokenKind::mc_Identifier && fg_IsDSLMarker(_Tokens, Left))
+				return ECodeSpacing::mc_Preserve;
+
+			return ECodeSpacing::mc_Space;
 		}
 
 		// An operator in an infix position is written apart from both of its operands,

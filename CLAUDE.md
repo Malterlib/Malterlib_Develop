@@ -72,15 +72,20 @@ stands on, as a line comment does, and the stretches between directives are the
 construct's lines.
 
 Prefer an explicit unsupported result over a guessed edit. Ambiguous spellings
-stay out of the matrix: plain `=` is also a lambda capture default and the tail
-of the `_o=` DSL, and `&`, `&&`, and `*` are declarators as well as operators,
-read as declarators only where `fg_IsDeclaratorToken` can prove it and as
-operators only where `fg_IsInfixOperator` can prove that no declaration stands
-where they do. The
-structure builder answers the same way: an unclassified construct keeps its
-layout, and `fg_GetCanonicalSpacing` returns `mc_Preserve` for a pair the
-standard does not settle, which is what makes a relayout refuse rather than
-guess.
+stay out of the matrix: `&`, `&&`, and `*` are declarators as well as
+operators, read as declarators only where `fg_IsDeclaratorToken` can prove it
+and as operators only where `fg_IsInfixOperator` can prove that no declaration
+stands where they do. The structure builder answers the same way: an
+unclassified construct keeps its layout, and `fg_GetCanonicalSpacing` returns
+`mc_Preserve` for a pair the standard does not settle, which is what makes a
+relayout refuse rather than guess.
+
+Leaving a pair unsettled costs more than an unchanged gap. A line holding one
+has no single-line form to measure, so the layout cannot join it and, until the
+gap is settled, cannot break it up either: every statement split at its `=`
+went unlaid out for that reason, overlong lines included. Settle what the
+sources really do spell one way, and keep `mc_Preserve` for what they spell
+two.
 
 Corpus trials are part of the work, not a final check. Every structural bug in
 the line-break rule so far was found by reading a diff of already-correct
