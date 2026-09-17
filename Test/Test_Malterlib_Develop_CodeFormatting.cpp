@@ -294,6 +294,16 @@ namespace
 					fg_ExpectFormat("CallKept", "void f()\n{\n\tauto A = g(1);\n\tauto B = h(a, i(b));\n}\n", "void f()\n{\n\tauto A = g(1);\n\tauto B = h(a, i(b));\n}\n");
 					// Declarators keep their Malterlib spelling; they are not expression operators.
 					fg_ExpectFormat("Declarator", "void f(CStr const &_A, CStr &&_B);\n", "void f(CStr const &_A, CStr &&_B);\n");
+					// Directly inside a template argument list a parenthesis behind a type spells a
+					// function type, whose parameters it declares. A call in a value argument is
+					// written tight against its name and is none.
+					fg_ExpectFormat
+						(
+							"FunctionType"
+							, "TCFunction<void (CFoo && _A)> g_A;\nTCFunctor<TCFuture<void> (CStr && _B, int * _p)> g_B;\nconstexpr bool gc_C = TCFoo<fg_F(a && b)>::mc_Value;\n"
+							, "TCFunction<void (CFoo &&_A)> g_A;\nTCFunctor<TCFuture<void> (CStr &&_B, int *_p)> g_B;\nconstexpr bool gc_C = TCFoo<fg_F(a && b)>::mc_Value;\n"
+						)
+					;
 					// A ref-qualifier declares nothing, so what follows it is the rest of the
 					// declaration rather than a name, and stands apart from it.
 					fg_ExpectFormat

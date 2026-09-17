@@ -1087,6 +1087,20 @@ namespace
 		if (_Tokens.f_IsText(Tokens[umint(iName)], "catch"))
 			return true;
 
+		// Directly inside a template argument list a parenthesis behind a type spells a
+		// function type, whose parameters it declares: 'TCFunction<void (CFoo &&_Value)>'.
+		// A type ends in a template argument list of its own, or in a name written apart
+		// from the parenthesis, which a call in a value argument never is.
+		if (Group.m_iParent < Nodes.f_GetLen() && Nodes[Group.m_iParent].m_Kind == ECodeNodeKind::mc_Group && Nodes[Group.m_iParent].m_Bracket == ECodeBracket::mc_Angle)
+		{
+			auto const &Name = Tokens[umint(iName)];
+			if (_Structure.f_IsAngleBracket(umint(iName)) && _Tokens.f_IsText(Name, ">"))
+				return true;
+
+			if (Name.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords) && Name.f_GetEnd() != Tokens[Group.m_iFirstToken].m_iOffset)
+				return true;
+		}
+
 		// A lambda stands anywhere an expression does; a subscript operator's name is a
 		// declaration's, and what stands in front of it is read as one.
 		if (_Tokens.f_IsText(Tokens[umint(iName)], "]") && fg_NameSubscriptOperator(_Tokens, umint(iName)) < 0)
