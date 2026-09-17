@@ -1176,15 +1176,17 @@ namespace
 
 		// Directly inside a template argument list a parenthesis behind a type spells a
 		// function type, whose parameters it declares: 'TCFunction<void (CFoo &&_Value)>'.
-		// A type ends in a template argument list of its own, or in a name written apart
-		// from the parenthesis, which a call in a value argument never is.
+		// A type ends in a name or in a template argument list of its own, and either is
+		// spelled apart from the parenthesis, which a call in a value argument is not:
+		// 'TCFoo<fg_GetHash<t_pMember>(t_Hash)>' passes what the call yields.
 		if (Group.m_iParent < Nodes.f_GetLen() && Nodes[Group.m_iParent].m_Kind == ECodeNodeKind::mc_Group && Nodes[Group.m_iParent].m_Bracket == ECodeBracket::mc_Angle)
 		{
 			auto const &Name = Tokens[umint(iName)];
-			if (_Structure.f_IsAngleBracket(umint(iName)) && _Tokens.f_IsText(Name, ">"))
+			bool bApart = Name.f_GetEnd() != Tokens[Group.m_iFirstToken].m_iOffset;
+			if (bApart && _Structure.f_IsAngleBracket(umint(iName)) && _Tokens.f_IsText(Name, ">"))
 				return true;
 
-			if (Name.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords) && Name.f_GetEnd() != Tokens[Group.m_iFirstToken].m_iOffset)
+			if (bApart && Name.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords))
 				return true;
 		}
 
@@ -1845,7 +1847,10 @@ namespace NMib::NDevelop
 
 			// A parameter list after a template argument's type spells a function type,
 			// which the standard separates: TCActorFunctor<TCFuture<void> (CStr _Host)>.
-			// Anywhere else the same spelling is a call or a construction, and stays tight.
+			// A template argument is as often a value the same spelling yields, and only
+			// the spelling tells the two apart, since a call written as an argument hugs
+			// its parentheses: 'TCFoo<fg_GetHash<t_pMember>(t_Hash)>'. Anywhere else a
+			// parenthesis behind an argument list is a call or a construction.
 			if (fRight("("))
 			{
 				auto const &Nodes = _Structure.f_GetNodes();
@@ -1855,8 +1860,9 @@ namespace NMib::NDevelop
 						continue;
 
 					auto const &Parent = Nodes[Node.m_iParent];
+					bool bType = Parent.m_Bracket == ECodeBracket::mc_Angle && Left.f_GetEnd() != Right.m_iOffset;
 
-					return Parent.m_Bracket == ECodeBracket::mc_Angle ? ECodeSpacing::mc_Space : ECodeSpacing::mc_None;
+					return bType ? ECodeSpacing::mc_Space : ECodeSpacing::mc_None;
 				}
 
 				return ECodeSpacing::mc_None;
