@@ -950,6 +950,25 @@ namespace
 							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A member chain behind a call that holds a body resumes under the call's
+					// closing marker. Where it does not fit it is broken at every member, each
+					// under that marker, however the source had broken or joined it.
+					CStr Chain;
+					for (umint i = 0; i < 16; ++i)
+						Chain += ".f_CallSync()";
+
+					CStr Broken;
+					for (umint i = 0; i < 16; ++i)
+						Broken += "\t.f_CallSync()\n";
+
+					fg_ExpectFormat
+						(
+							"ResumedChain"
+							, CStr("void f()\n{\n\t(\n\t\tg_D / [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t)\n\t.f_CallSync()\n\t\t.f_CallSync()\n\t\t@;\n}\n").f_Replace("@", Chain)
+							, CStr("void f()\n{\n\t(\n\t\tg_D / [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t)\n\t.f_CallSync()\n\t.f_CallSync()\n@}\n")
+								.f_Replace("@", Broken.f_Left(Broken.f_GetLen() - 1) + ";\n")
+						)
+					;
 					// A statement split at the parenthesis it opens with has no continuation
 					// level, so its terminator ends its last line rather than standing among its
 					// lines as one more of them. One that only starts with a parenthesis has.

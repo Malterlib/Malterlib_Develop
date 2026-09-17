@@ -407,6 +407,11 @@ starts a statement of its own, since a name there declares a variable of the
 type just defined. A lambda's terminator stands on a line of its own at the
 statement's indentation, wherever the source left it, on that line already or
 behind the brace; a declaration's stays behind its closing brace.
+A member chain that resumes under a call's closing marker and does not fit is
+broken at every member, each under that marker. Taken one scope at a time it
+would be broken only as far as it had to be, and end in a line of as many calls
+as happened to fit.
+
 A statement split at the parenthesis it opens with is the exception to a split
 statement's terminator taking a line of its own. Its lines have no continuation
 level and stand where the statement does, so a terminator on a line of its own

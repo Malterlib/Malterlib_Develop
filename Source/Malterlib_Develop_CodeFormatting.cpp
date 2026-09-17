@@ -5198,6 +5198,13 @@ namespace
 			// What follows the scope resumes under its closing marker.
 			iLineFirst = umint(iNext);
 			fp_BreakBefore(iLineFirst, nLineIndent);
+
+			// A member chain that resumes there and does not fit is broken at every member,
+			// each under the marker. Taken a scope at a time it would be broken only as far
+			// as it had to be, and end in a line of as many calls as happened to fit.
+			bool bMember = m_Tokens.f_IsText(Tokens[iLineFirst], ".") || m_Tokens.f_IsText(Tokens[iLineFirst], "->");
+			if (bMember && !fp_FitsInline(iLineFirst, _iLast, nLineIndent) && fp_LayoutMembers(_iNode, iLineFirst, _iLast, nLineIndent, nLineIndent))
+				break;
 		}
 
 		return bSplit;
