@@ -489,6 +489,23 @@ namespace
 							, "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t\th();\n\t}\n}\n\nstruct C\n{\n\tint m_A; // Comment\n};\n"
 						)
 					;
+					// A function's body is set off from what follows it, a comment behind its
+					// brace included, unless that is the end of the scope it stands in, a
+					// directive, or a macro invoked for the function directly under it. The
+					// requirements of a requires expression are no body.
+					fg_ExpectFormat
+						(
+							"AfterFunction"
+							, "struct C\n{\n\tbool f_A() const\n\t{\n\t\treturn true;\n\t}\n\tC(int _A)\n\t\t: m_A(_A)\n\t{\n\t} // Comment\n\tint m_A;\n"
+								"\tvoid f_B()\n\t{\n\t}\n};\n"
+							, "struct C\n{\n\tbool f_A() const\n\t{\n\t\treturn true;\n\t}\n\n\tC(int _A)\n\t\t: m_A(_A)\n\t{\n\t} // Comment\n\n\tint m_A;\n"
+								"\tvoid f_B()\n\t{\n\t}\n};\n"
+						)
+					;
+					CStr AfterFunctionKept = "void f_A()\n{\n}\nDMibImplement(f_A);\n\nvoid f_B()\n{\n}\n#if 1\nint g_A;\n#endif\n\n"
+						"auto f_C(auto _f)\n\trequires requires\n\t{\n\t\t_f();\n\t}\n{\n}\n"
+					;
+					fg_ExpectFormat("AfterFunctionKept", AfterFunctionKept, AfterFunctionKept);
 					// One blank line separates what it separates, wherever it stands.
 					fg_ExpectFormat("Double", "int g_A;\n\n\n\nvoid f()\n{\n\tg();\n\n \n\th();\n}\n", "int g_A;\n\nvoid f()\n{\n\tg();\n\n\th();\n}\n");
 					// An access specifier opens a section of its class: a blank line sets it off

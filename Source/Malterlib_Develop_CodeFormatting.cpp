@@ -1417,6 +1417,86 @@ namespace
 			i = iNext - 1;
 		}
 
+		// A function's body is set off from what follows it by a blank line, unless that is
+		// the end of the scope the function stands in. A directive behind the body belongs
+		// to a conditional whose lines are its own.
+		auto const &Nodes = m_Structure.f_GetNodes();
+		for (umint iNode = 0; m_Structure.f_IsComplete() && iNode < Nodes.f_GetLen(); ++iNode)
+		{
+			auto const &Node = Nodes[iNode];
+			if (Node.m_Kind != ECodeNodeKind::mc_Statement || Node.m_iParent >= Nodes.f_GetLen())
+				continue;
+
+			auto ParentKind = Nodes[Node.m_iParent].m_Kind;
+			if (ParentKind != ECodeNodeKind::mc_Block && ParentKind != ECodeNodeKind::mc_File)
+				continue;
+
+			umint iParameters = TCLimitsInt<umint>::mc_Max;
+			bool bBody = false;
+			for (auto iChild : Node.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_Kind == ECodeNodeKind::mc_Group && Child.m_Bracket == ECodeBracket::mc_Paren && iParameters == TCLimitsInt<umint>::mc_Max)
+					iParameters = Child.m_iLastToken;
+
+				bBody |= Child.m_Kind == ECodeNodeKind::mc_Block && Child.m_iLastToken == Node.m_iLastToken;
+			}
+
+			if (!bBody || iParameters == TCLimitsInt<umint>::mc_Max || !fg_ClosesParameterList(m_Tokens, m_Structure, iParameters))
+				continue;
+
+			umint iNewline = TCLimitsInt<umint>::mc_Max;
+			umint nNewlines = 0;
+			umint iNext = Node.m_iLastToken + 1;
+			for (; iNext < Tokens.f_GetLen(); ++iNext)
+			{
+				auto Kind = Tokens[iNext].m_Kind;
+				if (Kind == ECodeTokenKind::mc_Newline)
+				{
+					if (!nNewlines)
+						iNewline = iNext;
+
+					++nNewlines;
+				}
+				else if (Kind != ECodeTokenKind::mc_Whitespace && !(Kind == ECodeTokenKind::mc_LineComment && !nNewlines))
+					break;
+			}
+
+			// A brace behind the block says the block was no body: a requires expression's
+			// requirements end in one, with the function's body below them.
+			bool bEndsScope = iNext < Tokens.f_GetLen() && (m_Tokens.f_IsText(Tokens[iNext], "}") || m_Tokens.f_IsText(Tokens[iNext], "{"));
+			if (iNext >= Tokens.f_GetLen() || nNewlines > 1 || Tokens[iNext].m_Kind == ECodeTokenKind::mc_Preprocessor || bEndsScope)
+				continue;
+
+			// A macro invoked directly under a body belongs to the function, as the one
+			// that implements the streaming of the type it was written for does.
+			if (Tokens[iNext].m_Kind == ECodeTokenKind::mc_Identifier)
+			{
+				auto Name = m_Tokens.f_GetText(Tokens[iNext]);
+				auto iOpen = fp_NextCode(iNext);
+				bool bMacro = Name.f_GetLen() > 1
+					&& Name.f_GetStr()[0] == 'D'
+					&& Name.f_GetStr()[1] >= 'A'
+					&& Name.f_GetStr()[1] <= 'Z'
+					&& iOpen >= 0
+					&& m_Tokens.f_IsText(Tokens[umint(iOpen)], "(")
+				;
+				if (bMacro)
+					continue;
+			}
+
+			if (!nNewlines)
+			{
+				if (fg_IsCodeToken(Tokens[iNext]))
+					m_bBlankBefore[iNext] = 1;
+
+				continue;
+			}
+
+			auto Newline = m_Tokens.f_GetText(Tokens[iNewline]);
+			fp_AddEdit("function-blank-line", Tokens[iNewline].m_iOffset, Tokens[iNewline].m_nLength, Newline + Newline, "a blank line follows a function's body");
+		}
+
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 		{
 			auto const &Token = Tokens[i];

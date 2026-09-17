@@ -98,6 +98,7 @@ formatter failure, not an edit.
 | `block-blank-line` | Removes blank lines directly after an opening brace and directly in front of a closing one. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `blank-line` | Collapses a run of blank lines into one. |
+| `function-blank-line` | One blank line after a function's body, unless the scope the function stands in ends there. |
 | `access-blank-line` | One blank line in front of `public:`, `private:`, or `protected:`, and none after it. The first specifier in a class stands directly under the opening brace. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
 | `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |
@@ -155,6 +156,15 @@ source reads the same with the moved words left out, and has as many of each.
 The other specifiers have no order the sources agree on, `inline_always static`
 and `static constexpr` and `constexpr inline_always` each being the common
 spelling of its pair, so they stay where they are written.
+
+`function-blank-line` sets a function's body off from what follows it, a comment
+behind its closing brace staying on that line. Nothing is added in front of the
+closing brace of the scope the function stands in, in front of a directive,
+whose conditional has lines of its own, or in front of a macro invoked directly
+under the body, which belongs to the function as the one that implements the
+streaming of a type does. Only a function's body counts: a lambda's ends in the
+statement's terminator, and the requirements of a requires expression have the
+body below them.
 
 `access-blank-line` leaves a specifier alone where a comment or a directive
 stands between it and what is in front of it, since the blank line then belongs
