@@ -694,6 +694,23 @@ namespace
 					fg_ExpectFormat("BraceOnHead", "void f() {\n\tg();\n}\n", "void f()\n{\n\tg();\n}\n");
 					fg_ExpectFormat("OneLine", "void f() { g(); }\n", "void f()\n{\n\tg();\n}\n");
 					fg_ExpectFormat("Definition", "struct C { int a; };\n", "struct C\n{\n\tint a;\n};\n");
+					// A definition's keyword stands behind the template header that declares it,
+					// and a template's body holds statements the same way: one whose only member
+					// is a function definition has no terminator at its own level to say so.
+					fg_ExpectFormat
+						(
+							"TemplateDefinition"
+							, "template <typename t_C>\nstruct TCFoo\n{\n\tint f_Get(t_C &&_Value) { return 0; }\n};\n"
+							, "template <typename t_C>\nstruct TCFoo\n{\n\tint f_Get(t_C &&_Value)\n\t{\n\t\treturn 0;\n\t}\n};\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"SpecializedDefinition"
+							, "template <>\nstruct TCFoo<int>\n{\n\tint f_Get(int &&_Value) { return 0; }\n};\n"
+							, "template <>\nstruct TCFoo<int>\n{\n\tint f_Get(int &&_Value)\n\t{\n\t\treturn 0;\n\t}\n};\n"
+						)
+					;
 					// Each statement takes a line of its own at the block's level.
 					fg_ExpectFormat("Statements", "void f()\n{\n\tg(); h();\n}\n", "void f()\n{\n\tg();\n\th();\n}\n");
 					// What a clause guards stands one level in; a guarded block at the clause's level.

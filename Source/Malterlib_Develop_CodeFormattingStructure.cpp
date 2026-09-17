@@ -669,7 +669,41 @@ namespace NMib::NDevelop
 				// 'T x{...}' is an initializer while 'struct C {...}' is a body, and both have
 				// an identifier in front of the brace. A statement terminator at the brace's
 				// own level is what tells the two apart.
-				auto const &First = Tokens[mp_Significant[_iToken]];
+				// A template header stands in front of the head it declares, so the head is
+				// what the statement spells behind it: 'template <typename t_C> struct TCFoo {'.
+				// The builder reads such a header as an argument list only when its '<' stands
+				// tight against 'template', which is why it is stepped over by its brackets.
+				auto iHead = _iToken;
+				while
+				(
+					iHead + 1 < i
+					&& mp_pTokens->f_IsText(Tokens[mp_Significant[iHead]], "template")
+					&& mp_pTokens->f_IsText(Tokens[mp_Significant[iHead + 1]], "<")
+				)
+				{
+					umint nHeader = 0;
+					auto iEnd = iHead + 1;
+					for (; iEnd < i; ++iEnd)
+					{
+						auto const &Header = Tokens[mp_Significant[iEnd]];
+						if (mp_pTokens->f_IsText(Header, "<"))
+							++nHeader;
+						else if (mp_pTokens->f_IsText(Header, ">"))
+							--nHeader;
+						else if (mp_pTokens->f_IsText(Header, ">>"))
+							nHeader = nHeader < 2 ? 0 : nHeader - 2;
+
+						if (!nHeader)
+							break;
+					}
+
+					if (iEnd >= i)
+						break;
+
+					iHead = iEnd + 1;
+				}
+
+				auto const &First = Tokens[mp_Significant[iHead]];
 				bool bDefinition = mp_pTokens->f_IsText(First, "struct")
 					|| mp_pTokens->f_IsText(First, "class")
 					|| mp_pTokens->f_IsText(First, "union")

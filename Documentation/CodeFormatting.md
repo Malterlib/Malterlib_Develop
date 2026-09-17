@@ -500,6 +500,11 @@ when a statement terminator stands at its own level or an element of it starts
 with a keyword only a statement begins with. A body whose every statement is
 compound, such as a lambda that does nothing but loop, has neither a terminator
 of its own nor an initializer's shape, and the keyword is what tells it apart.
+A definition's keyword stands behind the template header that declares it, and
+the head is read from there: without stepping over `template <typename t_C>`,
+a class template whose body holds nothing but a function definition would be
+read as an initializer, and nothing inside it would be laid out or spaced as a
+declaration.
 
 ## Conditional directives
 
