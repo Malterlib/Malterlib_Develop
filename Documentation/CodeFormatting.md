@@ -458,6 +458,12 @@ behind a subscript initializes an array. A guarded statement that holds a body
 is laid out across lines whether or not the source wrote it on one, so `braces`
 puts it within them.
 
+A named cast's parenthesis belongs to the head the way a C cast's does, since
+what it yields is what the rest of the expression is written on. It stays closed
+while everything up to the next scope fits on the line, so that the line gives
+at the call behind it: `reinterpret_cast<CCallActor>(_Actor).template f_Bind`
+with the scopes of `f_Bind` opened below.
+
 A member chain that resumes under a call's closing marker and does not fit is
 broken at every member, each under that marker. Taken one scope at a time it
 would be broken only as far as it had to be, and end in a line of as many calls

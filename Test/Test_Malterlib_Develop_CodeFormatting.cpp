@@ -1200,6 +1200,25 @@ namespace
 					;
 					// A value written broken at its operators by the comments behind them is one too.
 					fg_ExpectFormat("AssignComment", "void f()\n{\n\tValue = x // Why\n\t\t+ y\n\t;\n}\n", "void f()\n{\n\tValue\n\t\t= x // Why\n\t\t+ y\n\t;\n}\n");
+					// A named cast's parenthesis belongs to the head, as a C cast's does: the line
+					// gives at the call behind it, and comes back closed where it was opened.
+					fg_ExpectFormat
+						(
+							"NamedCast"
+							, CStr
+								(
+									"void f()\n{\n\treturn reinterpret_cast<CCall>\n\t\t(\n\t\t\t_Actor\n\t\t)\n"
+									"\t\t.template f_Bind<&C::f_A_@, &C::f_B_@>(fg_Forward<tf_F>(_f), a_@);\n}\n"
+								)
+								.f_Replace("@", Name)
+							, CStr
+								(
+									"void f()\n{\n\treturn reinterpret_cast<CCall>(_Actor).template f_Bind\n\t\t<\n\t\t\t&C::f_A_@\n\t\t\t, &C::f_B_@\n\t\t>\n"
+									"\t\t(fg_Forward<tf_F>(_f), a_@)\n\t;\n}\n"
+								)
+								.f_Replace("@", Name)
+						)
+					;
 					// A line the layout has already broken is broken again while it is still too
 					// long: the scopes inside it open in turn until every line of the result
 					// fits, whether the source wrote the construct on one line or split.

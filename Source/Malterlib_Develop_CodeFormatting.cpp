@@ -601,6 +601,7 @@ namespace
 		bool fp_ClosesLambdaIntroducer(umint _iToken) const;
 		umint fp_SkipTemplateHeader(umint _iToken) const;
 		bool fp_IsCastGroup(umint _iNode) const;
+		bool fp_IsNamedCast(umint _iOpen) const;
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent, bool _bMustSplit = false);
 		bool fp_LayoutMembers(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
 		bool fp_LayoutHead(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
@@ -4917,6 +4918,36 @@ namespace
 		return false;
 	}
 
+	// Whether the parenthesis opening at the token holds the operand of a named cast:
+	// 'static_cast<CFoo &>(_Value)'.
+	bool CFormattingAnalyzer::fp_IsNamedCast(umint _iOpen) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto iClose = fp_PreviousCode(_iOpen);
+		if (iClose < 0 || !m_Structure.f_IsAngleBracket(umint(iClose)) || !m_Tokens.f_IsText(Tokens[umint(iClose)], ">"))
+			return false;
+
+		for (auto const &Node : m_Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != umint(iClose))
+				continue;
+
+			auto iKeyword = fp_PreviousCode(Node.m_iFirstToken);
+			if (iKeyword < 0)
+				return false;
+
+			auto const &Keyword = Tokens[umint(iKeyword)];
+
+			return m_Tokens.f_IsText(Keyword, "static_cast")
+				|| m_Tokens.f_IsText(Keyword, "reinterpret_cast")
+				|| m_Tokens.f_IsText(Keyword, "const_cast")
+				|| m_Tokens.f_IsText(Keyword, "dynamic_cast")
+			;
+		}
+
+		return false;
+	}
+
 	// A parenthesised type in front of an operand is a cast: nothing separates the closing
 	// parenthesis from what follows, while a call or a clause has a name or a keyword in
 	// front of the opening one.
@@ -5290,6 +5321,42 @@ namespace
 				bSplit |= fp_LayoutMembers(_iNode, iLineFirst, _iLast, nLineIndent, nContinuation);
 
 				break;
+			}
+
+			// A named cast converts its operand and yields what the rest of the expression is
+			// written on, so its parenthesis belongs to the head the way a C cast's does: it
+			// stays closed while everything up to the next scope fits on the line, and the
+			// line gives at the call behind it, 'static_cast<CFoo &>(_Value).f_Bind' with the
+			// scopes of 'f_Bind' opened below.
+			{
+				auto const &Link = Nodes[Scopes[iScope]];
+				auto iMember = fp_NextCode(Link.m_iLastToken);
+				bool bChained = !Link.m_bHasBlock
+					&& Link.m_Bracket == ECodeBracket::mc_Paren
+					&& fp_IsNamedCast(Link.m_iFirstToken)
+					&& iMember >= 0
+					&& umint(iMember) <= _iLast
+					&& (m_Tokens.f_IsText(Tokens[umint(iMember)], ".") || m_Tokens.f_IsText(Tokens[umint(iMember)], "->"))
+				;
+				umint iNextScope = TCLimitsInt<umint>::mc_Max;
+				for (auto iChild : Node.m_Children)
+				{
+					auto const &Child = Nodes[iChild];
+					if (!bChained || Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_iFirstToken <= Link.m_iLastToken || Child.m_iLastToken > _iLast)
+						continue;
+
+					auto iInner = fp_NextCode(Child.m_iFirstToken);
+					if (iInner >= 0 && umint(iInner) != Child.m_iLastToken)
+						iNextScope = fg_Min(iNextScope, Child.m_iFirstToken);
+				}
+
+				auto iLinkHead = iNextScope != TCLimitsInt<umint>::mc_Max ? fp_PreviousCode(iNextScope) : aint(-1);
+				if (iLinkHead >= 0 && umint(iLinkHead) > Link.m_iLastToken && fp_FitsInline(iLineFirst, umint(iLinkHead), nLineIndent))
+				{
+					++iScope;
+
+					continue;
+				}
 			}
 
 			auto const &Scope = Nodes[Scopes[iScope]];
