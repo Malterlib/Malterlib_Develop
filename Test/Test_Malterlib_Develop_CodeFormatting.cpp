@@ -786,6 +786,18 @@ namespace
 							, "void f()\n{\n\tfg_Move(x).f_OnResultSet\n\t\t(\n\t\t\t[&]\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A call on what another call yields spells one call expression with it, and
+					// gives its own line only where the line has nothing later to give: the
+					// body below opens whatever else is done, so the expression in front of it
+					// stays whole. Without one the argument list moves down, as an actor call's
+					// does.
+					fg_ExpectFormat
+						(
+							"YieldedCall"
+							, "void f()\n{\n\tActor.f_CallActor(&C::f_Fn)(a, b).f_OnResultSet([&](int _R) { g(_R); });\n}\n"
+							, "void f()\n{\n\tActor.f_CallActor(&C::f_Fn)(a, b).f_OnResultSet\n\t\t(\n\t\t\t[&](int _R)\n\t\t\t{\n\t\t\t\tg(_R);\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// An arrow behind a call's arguments is a member access, not a trailing
 					// return type.
 					fg_ExpectFormat
@@ -1209,6 +1221,16 @@ namespace
 						}
 					;
 					fSplit("Call", "void f()\n{\n\tg(@, @, @);\n}\n", "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t\t, @\n\t\t)\n\t;\n}\n");
+					// An actor call's arguments stand behind the parenthesis that names the
+					// function, and are what moves down: the two lists are one call expression,
+					// so the line gives between them only when nothing later can give.
+					fSplit
+						(
+							"ActorCall"
+							, "void f()\n{\n\tActor.f_CallActor(&C::f_Fn)(@, @);\n}\n"
+							, "void f()\n{\n\tActor.f_CallActor(&C::f_Fn)\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// A value broken at its operators starts a line of its own with the '=', so
 					// that every operand stands under the one in front of it. One whose first
 					// operand has to be opened, or takes a lambda's body, keeps the '=' on the

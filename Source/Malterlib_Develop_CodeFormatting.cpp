@@ -5300,6 +5300,7 @@ namespace
 			// what one part of an introducer stands behind.
 			auto const &Before = m_Tokens.f_GetTokens()[umint(iBefore)];
 			bool bIntroducer = m_Tokens.f_IsText(Before, "]") || m_Structure.f_IsAngleBracket(umint(iBefore));
+
 			// An empty scope is nothing to move down: only a part of an introducer takes a
 			// line of its own while holding nothing, and '(*pFunctor)()' stays whole.
 			auto iInner = fp_NextCode(Nodes[Scopes[i]].m_iFirstToken);
@@ -5371,6 +5372,29 @@ namespace
 
 				if (!fp_FitsInline(iLineFirst, umint(iBefore), nLineIndent))
 					break;
+
+				// A call on what another call yields spells one call expression with it,
+				// 'f_CallActor(&C::f_Fn)(_Params)', and moves down only where the line has
+				// nothing later to give. A scope holding a lambda body is such a thing: it
+				// opens below whatever else is done, and what stands in front of it stays on
+				// the line where it fits, the whole call expression included.
+				bool bYielded = m_Tokens.f_IsText(Tokens[Breaks[i]], "(") && m_Tokens.f_IsText(Tokens[umint(iBefore)], ")");
+				if (bYielded)
+				{
+					bool bBodyBelow = false;
+					for (auto iOther : Scopes)
+					{
+						auto const &Other = Nodes[iOther];
+						if (!Other.m_bHasBlock || Other.m_iFirstToken <= Breaks[i])
+							continue;
+
+						auto iBodyHead = fp_PreviousCode(Other.m_iFirstToken);
+						bBodyBelow |= iBodyHead >= 0 && umint(iBodyHead) >= iLineFirst && fp_FitsInline(iLineFirst, umint(iBodyHead), nLineIndent);
+					}
+
+					if (bBodyBelow)
+						continue;
+				}
 
 				iBreak = i;
 

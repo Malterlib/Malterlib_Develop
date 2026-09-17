@@ -357,7 +357,11 @@ further only while it is still too long:
    parameter list behind its capture list, and a trailing return type behind a
    parameter list, each move down whole. A lambda's capture list, template
    parameter list and parameter list are one introducer: they stand together
-   on a line or each takes one of its own.
+   on a line or each takes one of its own. A call on what another call yields
+   spells one call expression with it, `f_CallActor(&C::f_Fn)(_Params)`, and
+   moves down only where the line has nothing later to give: where a scope
+   holding a lambda body stands behind it, that body opens below whatever else
+   is done, and the whole call expression stays on the line in front of it.
 3. The first scope on the line is opened: its opening and closing markers take
    lines of their own and every element stands on one, laid out the same way.
    What follows the closing marker resumes under it. A function's qualifiers
