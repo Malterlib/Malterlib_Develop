@@ -450,6 +450,21 @@ namespace
 				DMibTestCategory("BlankLines")
 				{
 					fg_ExpectFormat("AfterBrace", "void f()\n{\n\n\tint a;\n}\n", "void f()\n{\n\tint a;\n}\n");
+					// One blank line separates what it separates, wherever it stands.
+					fg_ExpectFormat("Double", "int g_A;\n\n\n\nvoid f()\n{\n\tg();\n\n \n\th();\n}\n", "int g_A;\n\nvoid f()\n{\n\tg();\n\n\th();\n}\n");
+					// An access specifier opens a section of its class: a blank line sets it off
+					// from the one in front of it, none follows it, and the first stands under the
+					// opening brace. One with a comment above it keeps the lines around that, and
+					// one still on the line of a member gets its blank line with its own.
+					fg_ExpectFormat
+						(
+							"Access"
+							, "struct C\n{\npublic:\n\n\tC();\nprivate:\n\n\tint m_A;\n\n\n\t// Comment\nprotected:\n\tint m_B; public:\n\tint m_C;\n};\n"
+							, "struct C\n{\npublic:\n\tC();\n\nprivate:\n\tint m_A;\n\n\t// Comment\nprotected:\n\tint m_B;\n\npublic:\n\tint m_C;\n};\n"
+						)
+					;
+					// A base clause's 'public' is no label.
+					fg_ExpectFormat("BaseClause", "struct C : public CBase\n{\n};\n", "struct C : public CBase\n{\n};\n");
 					fg_ExpectFormat("AfterBraceMultiple", "void f()\n{\n\t\n\n\tint a;\n}\n", "void f()\n{\n\tint a;\n}\n");
 					fg_ExpectFormat
 						(

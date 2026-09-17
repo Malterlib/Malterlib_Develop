@@ -97,6 +97,8 @@ formatter failure, not an edit.
 | `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon, a bit-field's width, and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. |
 | `block-blank-line` | Removes blank lines directly after an opening brace. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
+| `blank-line` | Collapses a run of blank lines into one. |
+| `access-blank-line` | One blank line in front of `public:`, `private:`, or `protected:`, and none after it. The first specifier in a class stands directly under the opening brace. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
 | `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |
 | `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source. |
@@ -153,6 +155,14 @@ source reads the same with the moved words left out, and has as many of each.
 The other specifiers have no order the sources agree on, `inline_always static`
 and `static constexpr` and `constexpr inline_always` each being the common
 spelling of its pair, so they stay where they are written.
+
+`access-blank-line` leaves a specifier alone where a comment or a directive
+stands between it and what is in front of it, since the blank line then belongs
+in front of that comment, if anywhere. A specifier still written on the line of
+a member gets its blank line from the layout, together with the line of its
+own. The blank-line rules never overlap: where none may stand, behind a brace
+or a label, that rule takes the whole run, and `blank-line` only ever takes
+what is left of one behind its first.
 
 `braces` is decided on the original source, like the trailing return type
 conversion, and the layout is then made on the converted source. A statement

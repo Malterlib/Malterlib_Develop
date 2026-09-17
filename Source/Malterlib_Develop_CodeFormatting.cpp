@@ -667,6 +667,7 @@ namespace
 		NContainer::TCVector<uint8> m_GapState;					// Indexed by token: what the gap in front of it becomes.
 		NContainer::TCVector<umint> m_GapIndent;				// The indentation a break in front of the token takes.
 		NContainer::TCVector<uint8> m_bCommentMoved;			// Indexed by token: a comment on a line of its own that moves with the block around it.
+		NContainer::TCVector<uint8> m_bBlankBefore;			// A blank line stands in front of the token, which the layout writes where it writes the gap.
 		NContainer::TCVector<umint> m_CommentIndent;			// The indentation such a comment's line takes.
 		NContainer::TCVector<CCodeFormattingEdit> m_Structural;	// Token changes: return types moved behind their parameter lists, braces dropped.
 		NContainer::TCVector<uint8> m_bProtectedStart;
@@ -1380,6 +1381,41 @@ namespace
 	void CFormattingAnalyzer::fp_RuleBlankLines()
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
+		m_bBlankBefore.f_SetLen(Tokens.f_GetLen());
+		for (auto &bBlank : m_bBlankBefore)
+			bBlank = 0;
+
+		// One blank line separates what it separates; a second adds nothing. The first of a
+		// run stays, and the rules below take that one too where none belongs.
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Newline)
+				continue;
+
+			umint nNewlines = 1;
+			umint iKeepEnd = 0;
+			umint iRunEnd = 0;
+			umint iNext = i + 1;
+			for (; iNext < Tokens.f_GetLen(); ++iNext)
+			{
+				if (Tokens[iNext].m_Kind == ECodeTokenKind::mc_Whitespace)
+					continue;
+
+				if (Tokens[iNext].m_Kind != ECodeTokenKind::mc_Newline)
+					break;
+
+				++nNewlines;
+				iRunEnd = Tokens[iNext].f_GetEnd();
+				if (nNewlines == 2)
+					iKeepEnd = iRunEnd;
+			}
+
+			if (nNewlines > 2)
+				fp_AddEdit("blank-line", iKeepEnd, iRunEnd - iKeepEnd, {}, "one blank line separates, and a second adds nothing");
+
+			i = iNext - 1;
+		}
+
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 		{
 			auto const &Token = Tokens[i];
@@ -1392,6 +1428,58 @@ namespace
 
 			if (Token.m_Kind != ECodeTokenKind::mc_Identifier)
 				continue;
+
+			// An access specifier opens a section of its class: a blank line sets it off from
+			// the section in front of it, and its members follow it at once. The first in a
+			// class stands under the opening brace, and one with a comment or a directive
+			// above it keeps the lines around that.
+			if (m_Tokens.f_IsText(Token, "public") || m_Tokens.f_IsText(Token, "private") || m_Tokens.f_IsText(Token, "protected"))
+			{
+				auto iColon = fp_NextCode(i);
+				auto iBefore = fp_PreviousCode(i);
+				if (iColon < 0 || iBefore < 0 || !m_Tokens.f_IsText(Tokens[umint(iColon)], ":"))
+					continue;
+
+				auto const &Before = Tokens[umint(iBefore)];
+				bool bLabel = m_Tokens.f_IsText(Before, "{") || m_Tokens.f_IsText(Before, "}") || m_Tokens.f_IsText(Before, ";") || m_Tokens.f_IsText(Before, ":");
+				if (!bLabel)
+					continue;
+
+				fp_RemoveFollowingBlankLines(umint(iColon), "access-blank-line", "no blank line follows an access specifier");
+				if (m_Tokens.f_IsText(Before, "{"))
+					continue;
+
+				umint nNewlines = 0;
+				umint iNewline = 0;
+				bool bPlain = true;
+				for (umint iGap = umint(iBefore) + 1; iGap < i; ++iGap)
+				{
+					if (Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline)
+					{
+						++nNewlines;
+						iNewline = iGap;
+					}
+					else if (Tokens[iGap].m_Kind != ECodeTokenKind::mc_Whitespace)
+						bPlain = false;
+				}
+
+				if (!bPlain || nNewlines > 1)
+					continue;
+
+				// A specifier still on the line of what is in front of it gets its line from
+				// the layout, which writes the blank one with it.
+				if (!nNewlines)
+				{
+					m_bBlankBefore[i] = 1;
+
+					continue;
+				}
+
+				auto Newline = m_Tokens.f_GetText(Tokens[iNewline]);
+				fp_AddEdit("access-blank-line", Tokens[iNewline].m_iOffset, Tokens[iNewline].m_nLength, Newline + Newline, "a blank line stands in front of an access specifier");
+
+				continue;
+			}
 
 			bool bCase = m_Tokens.f_IsText(Token, "case");
 			if (!bCase && !m_Tokens.f_IsText(Token, "default"))
@@ -2209,7 +2297,7 @@ namespace
 				if (bKeepLines && !bNewline)
 					continue;
 
-				Replacement = bKeepLines ? fKeepLines() : Ending + fp_MakeIndent(m_GapIndent[i]);
+				Replacement = bKeepLines ? fKeepLines() : (m_bBlankBefore[i] ? Ending + Ending : Ending) + fp_MakeIndent(m_GapIndent[i]);
 				Explanation = State == EGap::mc_Break ? "a split construct puts this on its own line" : "a block's braces and each of its statements take a line of their own";
 			}
 			else if (State == EGap::mc_Indent)
