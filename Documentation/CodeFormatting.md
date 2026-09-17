@@ -439,7 +439,10 @@ no line structure to be laid out against, which `structure` reports, naming the
 conditional rather than the construct it left open.
 
 Everywhere else a directive is transparent: it only ends the line it stands on,
-as a line comment does. The construct around it is written split, each stretch
+as a line comment does. A line comment inside a construct is treated the same
+way: what stands behind it is a line of its own and is measured as one, so a
+base clause under `class CFoo // Comment` stays closed where it fits, and a
+member chain broken at a comment stays broken at every member. The construct around it is written split, each stretch
 between two directives is a line of its own at the level the construct gives
 it, and a stretch is only broken further where it is still too long, so no
 construct is opened up to make room that no line of it needs. An operator

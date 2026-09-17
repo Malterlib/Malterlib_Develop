@@ -950,6 +950,16 @@ namespace
 							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A line comment ends the line it stands on, so what stands behind it is a
+					// line of its own, measured as one: a base clause under a commented head
+					// stays closed where it fits, and comes back closed where it was opened.
+					fg_ExpectFormat
+						(
+							"CommentHead"
+							, "template <typename t_C>\nclass TCFoo // Comment\n\t: public TCBase\n\t<\n\t\tt_C\n\t\t, CEmpty\n\t>\n{\n\tint m_A;\n};\n"
+							, "template <typename t_C>\nclass TCFoo // Comment\n\t: public TCBase<t_C, CEmpty>\n{\n\tint m_A;\n};\n"
+						)
+					;
 					fg_ExpectFormat
 						(
 							"CommentMembers"

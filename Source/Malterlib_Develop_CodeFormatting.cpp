@@ -5233,7 +5233,10 @@ namespace
 			// Only a directive standing at the range's own level cuts it. One inside a
 			// construct within it belongs to that construct, and a closing marker behind a
 			// directive stays where the marker's own scope puts it.
-			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor || m_bOpaqueDirective[i] || m_TokenDepth[i] != nLevel)
+			// A line comment ends its line the same way, and what stands behind it starts
+			// the next: 'class CFoo // Comment' above its base clause.
+			bool bEndsLine = (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor && !m_bOpaqueDirective[i]) || Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment;
+			if (!bEndsLine || m_TokenDepth[i] != nLevel)
 				continue;
 
 			auto iNext = fp_NextCode(i);
@@ -5260,6 +5263,10 @@ namespace
 					bCutAtOperator |= iOperator == iCut;
 			}
 
+			bool bCutAtMember = false;
+			for (auto iCut : Cuts)
+				bCutAtMember |= m_Tokens.f_IsText(Tokens[iCut], ".") || m_Tokens.f_IsText(Tokens[iCut], "->");
+
 			auto nContinuation = _bIndentContinuations ? _iIndent + nTab : _iIndent;
 			for (umint iCut = 0; iCut <= Cuts.f_GetLen(); ++iCut)
 			{
@@ -5275,9 +5282,17 @@ namespace
 					bSplitSegment |= bCutAtOperator && iOperator > iStart && iOperator <= iEnd;
 				}
 
+				// A chain written broken at one member access is broken at each of them.
+				bool bSplitMembers = false;
+				for (umint iMember = iStart + 1; bCutAtMember && iMember <= iEnd; ++iMember)
+					bSplitMembers |= m_TokenDepth[iMember] == nLevel && (m_Tokens.f_IsText(Tokens[iMember], ".") || m_Tokens.f_IsText(Tokens[iMember], "->"));
+
 				auto nSegmentIndent = iCut ? nContinuation : _iIndent;
 				if (iCut)
 					fp_BreakBefore(iStart, nSegmentIndent);
+
+				if (bSplitMembers && !bSplitSegment && fp_LayoutMembers(_iNode, iStart, iEnd, nSegmentIndent, nContinuation))
+					continue;
 
 				fp_LayoutRange(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iCut, _bIndentContinuations && !iCut, bSplitSegment);
 			}
