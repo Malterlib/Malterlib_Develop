@@ -88,6 +88,14 @@ unclassified construct keeps its layout, and `fg_GetCanonicalSpacing` returns
 `mc_Preserve` for a pair the standard does not settle, which is what makes a
 relayout refuse rather than guess.
 
+Malterlib's naming is evidence the standard leaves: a file opts in with
+`malterlib_format = malterlib`, so a name carrying a function prefix names a
+function wherever it stands. Read it only where C++ itself settles nothing and
+the convention answers on its own, as `fg_NamesCall` does for a parenthesis
+inside a template argument list, which spells a call, a construction and a
+function type alike. A type prefix is weaker evidence than it looks: the same
+name constructs a value as readily as it names a function type's return.
+
 Leaving a pair unsettled costs more than an unchanged gap. A line holding one
 has no single-line form to measure, so the layout cannot join it and, until the
 gap is settled, cannot break it up either: every statement split at its `=`

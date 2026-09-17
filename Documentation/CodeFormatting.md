@@ -313,10 +313,14 @@ header's, a lambda's, a catch clause's, a function's, or a function type's:
 directly inside a template argument list a parenthesis behind a type, which
 ends in a template argument list of its own or in a name, and is written apart
 from the parenthesis, as in `TCFunction<void (CFoo &&_Value)>`. A template
-argument is as often a value the same tokens yield, and nothing but that
-spelling tells the two apart, since a call written as an argument hugs its
-parentheses: `TCFoo<fg_GetHash<t_pMember>(t_Hash)>` passes what the call
-yields. Neither spelling is settled there, so both are kept. `decltype` and its
+argument is as often a value the same tokens yield, by a call or by a
+construction, and Malterlib's naming is what tells the call: a name carrying
+one of the function prefixes is a function's, so
+`TCFoo<::NMib::fg_GetHash<t_pMember>(t_Hash)>` passes what the call yields and
+hugs its parentheses however it was written. A type's name says nothing there,
+since `TCFoo<CBindActorOptions(_Type, _Call)>` constructs where
+`TCFunction<CFoo (int _A)>` declares, so those keep the spelling the source
+gave them. `decltype` and its
 operand name a type wherever one can stand, `decltype(auto) fg_Get(tf_C &&_A)`.
 A function's
 parenthesis is its parameter list when a specifier or a type stands in front of

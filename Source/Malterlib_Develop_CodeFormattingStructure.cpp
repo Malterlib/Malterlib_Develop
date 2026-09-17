@@ -1120,6 +1120,55 @@ namespace
 		return bSpelled;
 	}
 
+	// Malterlib's naming says a function's name, and the sources the engine formats opt in
+	// by naming that standard: a function carries one of the function prefixes, as in
+	// 'fg_GetHash', and nothing else does. A type name says less than it seems to, since
+	// 'TCFoo<CBindActorOptions(_Type, _Call)>' constructs a value where
+	// 'TCFunction<CFoo (int _A)>' spells a function type, so only a function's name is read
+	// here.
+	bool fg_NamesFunction(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
+	{
+		if (_Token.m_Kind != ECodeTokenKind::mc_Identifier)
+			return false;
+
+		auto Text = _Tokens.f_GetText(_Token);
+		static ch8 const *const gsc_pFunctions[] =
+			{
+				"f_", "fp_", "fs_", "fsp_", "fg_", "fsg_"
+			}
+		;
+		for (auto pPrefix : gsc_pFunctions)
+		{
+			if (Text.f_StartsWith(pPrefix))
+				return true;
+		}
+
+		return false;
+	}
+
+	// The name a parenthesis stands behind, read through the template argument list it may
+	// end in: '::NMib::fg_GetHash<t_pMember>' is named by 'fg_GetHash'.
+	bool fg_NamesCall(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iName)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto iName = aint(_iName);
+		if (_Structure.f_IsAngleBracket(_iName) && _Tokens.f_IsText(Tokens[_iName], ">"))
+		{
+			iName = -1;
+			for (auto const &Node : _Structure.f_GetNodes())
+			{
+				if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != _iName)
+					continue;
+
+				iName = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+
+				break;
+			}
+		}
+
+		return iName >= 0 && fg_NamesFunction(_Tokens, Tokens[umint(iName)]);
+	}
+
 	// Whether the group is a parameter list: a template header's, a lambda's, a catch
 	// clause's, or a function's. A function's is one when something is declared in front
 	// of the name, since C++ then reads the parenthesis as a parameter list even where an
@@ -1176,17 +1225,19 @@ namespace
 
 		// Directly inside a template argument list a parenthesis behind a type spells a
 		// function type, whose parameters it declares: 'TCFunction<void (CFoo &&_Value)>'.
-		// A type ends in a name or in a template argument list of its own, and either is
-		// spelled apart from the parenthesis, which a call in a value argument is not:
-		// 'TCFoo<fg_GetHash<t_pMember>(t_Hash)>' passes what the call yields.
+		// A template argument is as often a value the same tokens yield, by a call or a
+		// construction, so a name Malterlib spells as a function's is one, and every other
+		// is read by its spelling: a call hugs its parentheses where a type stands apart
+		// from them.
 		if (Group.m_iParent < Nodes.f_GetLen() && Nodes[Group.m_iParent].m_Kind == ECodeNodeKind::mc_Group && Nodes[Group.m_iParent].m_Bracket == ECodeBracket::mc_Angle)
 		{
 			auto const &Name = Tokens[umint(iName)];
 			bool bApart = Name.f_GetEnd() != Tokens[Group.m_iFirstToken].m_iOffset;
-			if (bApart && _Structure.f_IsAngleBracket(umint(iName)) && _Tokens.f_IsText(Name, ">"))
+			bool bType = bApart && !fg_NamesCall(_Tokens, _Structure, umint(iName));
+			if (bType && _Structure.f_IsAngleBracket(umint(iName)) && _Tokens.f_IsText(Name, ">"))
 				return true;
 
-			if (bApart && Name.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords))
+			if (bType && Name.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords))
 				return true;
 		}
 
@@ -1847,10 +1898,10 @@ namespace NMib::NDevelop
 
 			// A parameter list after a template argument's type spells a function type,
 			// which the standard separates: TCActorFunctor<TCFuture<void> (CStr _Host)>.
-			// A template argument is as often a value the same spelling yields, and only
-			// the spelling tells the two apart, since a call written as an argument hugs
-			// its parentheses: 'TCFoo<fg_GetHash<t_pMember>(t_Hash)>'. Anywhere else a
-			// parenthesis behind an argument list is a call or a construction.
+			// A template argument is as often a value the same tokens yield, so a name
+			// Malterlib spells as a function's is read as the call it is, and every other
+			// keeps its spelling. Anywhere else a parenthesis behind an argument list is a
+			// call or a construction.
 			if (fRight("("))
 			{
 				auto const &Nodes = _Structure.f_GetNodes();
@@ -1859,8 +1910,10 @@ namespace NMib::NDevelop
 					if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != _iLeft)
 						continue;
 
-					auto const &Parent = Nodes[Node.m_iParent];
-					bool bType = Parent.m_Bracket == ECodeBracket::mc_Angle && Left.f_GetEnd() != Right.m_iOffset;
+					if (Nodes[Node.m_iParent].m_Bracket != ECodeBracket::mc_Angle)
+						return ECodeSpacing::mc_None;
+
+					bool bType = Left.f_GetEnd() != Right.m_iOffset && !fg_NamesCall(_Tokens, _Structure, _iLeft);
 
 					return bType ? ECodeSpacing::mc_Space : ECodeSpacing::mc_None;
 				}
@@ -1991,9 +2044,10 @@ namespace NMib::NDevelop
 
 			// Directly inside a template argument list a name in front of a parameter list
 			// can spell a function type, 'TCFunction<FCallback (int)>', which is written
-			// with a space, as well as a call in a value argument, which is not. An alias
-			// spells function types the same way, 'using FCall = void (int)', and so does a
-			// pointer to function anywhere: 'void (*)(int)'.
+			// with a space, as well as a call in a value argument, which is not. A name
+			// Malterlib spells as a function's is that call; every other keeps its
+			// spelling. An alias spells function types the same way, 'using FCall = void
+			// (int)', and so does a pointer to function anywhere: 'void (*)(int)'.
 			if (Left.m_Kind == ECodeTokenKind::mc_Identifier)
 			{
 				auto const &Nodes = _Structure.f_GetNodes();
@@ -2003,7 +2057,7 @@ namespace NMib::NDevelop
 						continue;
 
 					if (Nodes[Node.m_iParent].m_Bracket == ECodeBracket::mc_Angle)
-						return ECodeSpacing::mc_Preserve;
+						return fg_NamesFunction(_Tokens, Left) ? ECodeSpacing::mc_None : ECodeSpacing::mc_Preserve;
 
 					// A pointer to function's declarator is followed by its parameter list and
 					// holds no separator, which is what tells 'void (*pCall)(int)' from a call

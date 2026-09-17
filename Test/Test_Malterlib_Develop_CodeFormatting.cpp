@@ -305,9 +305,18 @@ namespace
 						)
 					;
 					// A call's name ends in a template argument list as readily as a type does,
-					// and the spelling is all that tells them apart where both can stand.
-					CStr TemplatedCall = "constexpr auto gc_A = TCFoo<fg_GetHash<t_pMember>(t_Hash)>::mc_Value;\nTCFunctor<TCFuture<void> (int _A)> g_B;\n";
-					fg_ExpectFormat("TemplatedCall", TemplatedCall, TemplatedCall);
+					// and a type's own parentheses construct a value as readily as they declare
+					// a function type's parameters. Malterlib's naming settles the call; the
+					// rest keeps its spelling.
+					fg_ExpectFormat
+						(
+							"TemplatedCall"
+							, "constexpr auto gc_A = TCFoo<::NMib::fg_GetHash<t_pMember> (t_Hash)>::mc_Value;\nTCFunctor<TCFuture<void> (int _A)> g_B;\n"
+								"constexpr auto gc_C = TCFoo<CBindOptions(a, b)>::mc_Value;\n"
+							, "constexpr auto gc_A = TCFoo<::NMib::fg_GetHash<t_pMember>(t_Hash)>::mc_Value;\nTCFunctor<TCFuture<void> (int _A)> g_B;\n"
+								"constexpr auto gc_C = TCFoo<CBindOptions(a, b)>::mc_Value;\n"
+						)
+					;
 					// 'decltype' and its operand name a type: what a parenthesis behind the name
 					// holds is declared, and a declarator behind the operand is one too. As an
 					// expression's own the same keyword declares nothing.
