@@ -1891,14 +1891,23 @@ namespace NMib::NDevelop
 
 		// A declarator is separated from the type it modifies and hugs what it declares:
 		// 'CStr const &_Name', 'TCVector<int> *&_pList', 'ch8 const *const'. Another
-		// declarator hugs it, and a pack expansion behind it has no settled spelling.
+		// declarator hugs it.
 		if (fg_IsDeclaratorText(_Tokens, Right) && fg_IsDeclaratorToken(_Tokens, _Structure, _iRight))
 			return fg_IsDeclaratorText(_Tokens, Left) ? ECodeSpacing::mc_None : ECodeSpacing::mc_Space;
 
 		if (fg_IsDeclaratorText(_Tokens, Left) && fg_IsDeclaratorToken(_Tokens, _Structure, _iLeft))
 		{
+			// A pack's ellipsis stands apart from the declarator in front of it, as it does
+			// from a type: 'tfp_CParams && ...p_Params', and '&& ...' where the pack has no
+			// name. Only the one that expands into a template argument list is written
+			// tight, like any other expansion there: 'tp_CParams &&...>'.
 			if (fRight("..."))
-				return ECodeSpacing::mc_Preserve;
+			{
+				auto iBehind = fg_NextCode(_Tokens, _iRight);
+				bool bExpands = iBehind >= 0 && _Structure.f_IsAngleBracket(umint(iBehind)) && _Tokens.f_IsText(Tokens[umint(iBehind)], ">");
+
+				return bExpands ? ECodeSpacing::mc_None : ECodeSpacing::mc_Space;
+			}
 
 			if (Right.m_Kind == ECodeTokenKind::mc_Identifier)
 				return ECodeSpacing::mc_None;
@@ -1917,8 +1926,8 @@ namespace NMib::NDevelop
 		// introduces and stands apart from the type in front of it, as in
 		// 'NTraits::TCDecay<tp_CParams> ...p_Params' and 'typename ...tp_CParams'; an
 		// expansion has no name to hug and is written tight against what it expands, as in
-		// 'tp_CParams...>', 'fg_Forward<tp_CParams>(p_Params)...' and 'sizeof...(X)'. A
-		// declarator in front of one is the exception above, spelled both ways.
+		// 'tp_CParams...>', 'fg_Forward<tp_CParams>(p_Params)...' and 'sizeof...(X)'. One
+		// behind a declarator is settled above.
 		bool bPackOperand = Left.m_Kind == ECodeTokenKind::mc_Identifier || fLeft(">") || fLeft(")") || fLeft("]");
 		if (fRight("...") && bPackOperand)
 		{

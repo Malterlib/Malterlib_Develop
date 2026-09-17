@@ -346,11 +346,19 @@ namespace
 							, "template <typename ...tp_CParams>\nstruct C : TCBase<t_CResult, tp_CParams...>\n{\n};\n"
 						)
 					;
-					// A declarator in front of one is written both ways, and 'sizeof...' and a
-					// fold's ellipsis are spelled by rules of their own.
-					CStr Packs = "template <typename ...tp_CParams>\nvoid fg_A(tp_CParams &&...p_Params);\n\ntemplate <typename ...tp_CParams>\n"
-						"void fg_B(tp_CParams && ...p_Params);\n\ntemplate <typename ...tp_CParams>\nconstexpr umint gc_n = sizeof...(tp_CParams);\n"
+					// Behind a declarator the ellipsis stands apart as it does behind a type, named
+					// or not, and hugs only where it expands into a template argument list.
+					fg_ExpectFormat
+						(
+							"EllipsisDeclarator"
+							, "template <typename ...tp_CParams>\nvoid fg_A(tp_CParams &&...p_Params, tp_CParams &&  ...p_Other, tp_CParams &&...);\n"
+								"\nTCTuple<tp_CParams && ...> g_A;\n"
+							, "template <typename ...tp_CParams>\nvoid fg_A(tp_CParams && ...p_Params, tp_CParams && ...p_Other, tp_CParams && ...);\n"
+								"\nTCTuple<tp_CParams &&...> g_A;\n"
+						)
 					;
+					// 'sizeof...' and a fold's ellipsis are spelled by rules of their own.
+					CStr Packs = "template <typename ...tp_CParams>\nconstexpr umint gc_n = sizeof...(tp_CParams);\n";
 					fg_ExpectFormat("EllipsisKept", Packs, Packs);
 					// An operator with an operand on both sides is written apart from both of
 					// them, whatever they are spelled with.

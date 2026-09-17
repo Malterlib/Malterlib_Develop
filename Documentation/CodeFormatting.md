@@ -236,9 +236,10 @@ name it introduces and stands apart from the type in front of it, as in
 `typename ...tp_CParams` and `NTraits::TCDecay<tp_CParams> ...p_Params`; one
 that expands a pack has no name to hug and is written tight against what it
 expands, as in `tp_CParams...>` and `fg_Forward<tp_CParams>(p_Params)...`. The
-name behind the ellipsis is what tells the two apart. A declarator in front of
-one is the exception: `&&...p_Params` and `&& ...p_Params` are both written,
-so that pair keeps what it has, and `sizeof...` and a fold's ellipsis are
+name behind the ellipsis is what tells the two apart. Behind a declarator the
+ellipsis stands apart the same way, `tfp_CParams && ...p_Params`, and where the
+pack has no name, `tfp_CParams && ...`; only one that expands into a template
+argument list hugs, `tp_CParams &&...>`. `sizeof...` and a fold's ellipsis are
 spelled by the rules for the tokens around them.
 
 `indentation` normalizes indentation characters, not indentation depth. Depth
