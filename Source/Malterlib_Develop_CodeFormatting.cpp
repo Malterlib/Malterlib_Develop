@@ -139,26 +139,44 @@ namespace
 		return umint(aint(_iOffset) + nDelta);
 	}
 
-	// Maps an offset in the converted source back to the original. An offset inside a
-	// replacement lands where the converted span started.
-	// The code of a source with its qualifiers left out, which is what moving one leaves as
-	// it was. The tokens are joined since a '>' that a qualifier lands between two of is
-	// lexed as one token with its neighbour before the move and as two after it.
-	CStr fg_GetUnqualifiedTokenText(CStr const &_Source)
+	// What the conversions that reorder words leave as it was: the code with the words they
+	// move left out, and how many of each there are. The tokens are joined since a '>' that
+	// a qualifier lands between two of is lexed as one token with its neighbour before the
+	// move and as two after it.
+	CStr fg_GetReorderInvariant(CStr const &_Source)
 	{
+		static ch8 const *const gsc_pMoved[] =
+			{
+				"const", "volatile", "static", "constexpr"
+			}
+		;
 		CCodeTokenStream Tokens(_Source);
 		CStr Text;
+		umint nMoved[4] = {};
 		for (auto const &Token : Tokens.f_GetTokens())
 		{
-			if (!fg_IsCodeToken(Token) || Tokens.f_IsText(Token, "const") || Tokens.f_IsText(Token, "volatile"))
+			if (!fg_IsCodeToken(Token))
 				continue;
 
-			Text += Tokens.f_GetText(Token);
+			bool bMoved = false;
+			for (umint i = 0; i < 4 && !bMoved; ++i)
+			{
+				bMoved = Tokens.f_IsText(Token, gsc_pMoved[i]);
+				nMoved[i] += bMoved;
+			}
+
+			if (!bMoved)
+				Text += Tokens.f_GetText(Token);
 		}
+
+		for (auto nWords : nMoved)
+			Text += " {}"_f << nWords;
 
 		return Text;
 	}
 
+	// Maps an offset in the converted source back to the original. An offset inside a
+	// replacement lands where the converted span started.
 	umint fg_MapOffsetToOriginal(TCVector<CCodeFormattingEdit> const &_Conversions, umint _iOffset)
 	{
 		aint nDelta = 0;
@@ -589,6 +607,7 @@ namespace
 		void fp_PrepareTokenDepth();
 		bool fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent);
 		void fp_ConvertQualifiers();
+		void fp_ConvertSpecifiers();
 		bool fp_DropBraces(umint _iStatement, umint _iGuard);
 		bool fp_AddBraces(umint _iStatement, umint _iGuard);
 		bool fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const;
@@ -1532,7 +1551,10 @@ namespace
 		// all, so they are made on the source this one leaves, in a stage of their own.
 		m_Baseline = m_Request.m_Source;
 		if (m_bAllowQualifiers)
+		{
 			fp_ConvertQualifiers();
+			fp_ConvertSpecifiers();
+		}
 
 		bool bQualifierStage = !m_Structural.f_IsEmpty();
 		if (!bQualifierStage && m_bAllowConversions)
@@ -1555,8 +1577,8 @@ namespace
 			auto ConvertedSource = fg_ApplyCodeFormattingEdits(m_Request.m_Source, m_Structural);
 			// Moving a qualifier changes nothing but where it stands, which is checked here
 			// since the result is only ever compared against the converted source.
-			if (bQualifierStage && fg_GetUnqualifiedTokenText(m_Request.m_Source) != fg_GetUnqualifiedTokenText(ConvertedSource))
-				return fFailed("Moving a qualifier behind its type would change more than the qualifier's place; no edits were produced");
+			if (bQualifierStage && fg_GetReorderInvariant(m_Request.m_Source) != fg_GetReorderInvariant(ConvertedSource))
+				return fFailed("Reordering qualifiers and specifiers would change more than where they stand; no edits were produced");
 
 			CCodeFormattingRequest Nested = m_Request;
 			Nested.m_Source = ConvertedSource;
@@ -1585,6 +1607,8 @@ namespace
 					Explanation = "a guarded statement on one line stands without braces, one across lines within them";
 				else if (Edit.m_Rule == "east-qualifier")
 					Explanation = "a qualifier stands behind the type it qualifies";
+				else if (Edit.m_Rule == "specifier-order")
+					Explanation = "'static' stands in front of 'constexpr'";
 
 				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
 			}
@@ -2291,6 +2315,74 @@ namespace
 		}
 	}
 
+	// Writes a declaration's specifiers in one order where the sources have two: 'static'
+	// in front of 'constexpr'. Only what a run of specifiers is made of may stand between
+	// the two, with nothing but spaces and line breaks around it, so what moves is a
+	// specifier among its like and never a word of something else.
+	void CFormattingAnalyzer::fp_ConvertSpecifiers()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		static ch8 const *const gsc_pSpecifiers[] =
+			{
+				"inline", "constinit", "extern", "virtual", "friend", "thread_local", "mutable", "explicit", "inline_always", "inline_never"
+			}
+		;
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Identifier || !m_Tokens.f_IsText(Tokens[i], "constexpr"))
+				continue;
+
+			umint iStatic = TCLimitsInt<umint>::mc_Max;
+			for (auto iNext = fp_NextCode(i); iNext >= 0; iNext = fp_NextCode(umint(iNext)))
+			{
+				if (m_Tokens.f_IsText(Tokens[umint(iNext)], "static"))
+				{
+					iStatic = umint(iNext);
+
+					break;
+				}
+
+				bool bSpecifier = false;
+				for (auto pSpecifier : gsc_pSpecifiers)
+					bSpecifier |= m_Tokens.f_IsText(Tokens[umint(iNext)], pSpecifier);
+
+				if (!bSpecifier)
+					break;
+			}
+
+			if (iStatic == TCLimitsInt<umint>::mc_Max)
+				continue;
+
+			auto iBehind = fp_NextCode(iStatic);
+			if (iBehind < 0)
+				continue;
+
+			bool bPlain = true;
+			for (umint iGap = i; iGap < umint(iBehind) && bPlain; ++iGap)
+				bPlain = fg_IsCodeToken(Tokens[iGap]) || Tokens[iGap].m_Kind == ECodeTokenKind::mc_Whitespace || Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline;
+
+			if (!bPlain)
+				continue;
+
+			auto iRemove = Tokens[iStatic].m_iOffset;
+			auto nRemove = Tokens[umint(iBehind)].m_iOffset - iRemove;
+			auto iInsert = Tokens[i].m_iOffset;
+			auto nInsert = Tokens[i].m_nLength;
+			if (fp_IsDisabled(iInsert, nInsert) || !fp_IsSelected(iInsert, nInsert) || fp_IsDisabled(iRemove, nRemove) || !fp_IsSelected(iRemove, nRemove))
+				continue;
+
+			auto &Insert = m_Structural.f_Insert();
+			Insert.m_iOffset = iInsert;
+			Insert.m_nLength = nInsert;
+			Insert.m_Replacement = "static constexpr";
+			Insert.m_Rule = "specifier-order";
+			auto &Remove = m_Structural.f_Insert();
+			Remove.m_iOffset = iRemove;
+			Remove.m_nLength = nRemove;
+			Remove.m_Rule = "specifier-order";
+		}
+	}
+
 	// Moves a qualifier written in front of its type behind it: 'const int &_Value' becomes
 	// 'int const &_Value'. Where the qualifier stands is told by what is in front of it: a
 	// separator, an opening marker or a specifier has no type for it to follow, so the type
@@ -2298,7 +2390,8 @@ namespace
 	// as well be the qualifier of what it follows, 'CFoo const _Value' and 'f_Get() const',
 	// and is only moved where a type and then a declarator or a name follow it, which
 	// neither of those readings has. The type has to be spelled out by tokens this can
-	// follow to its end, and with nothing but spaces between them; anything else stays.
+	// follow to its end, and with nothing but spaces and line breaks between them, which
+	// the layout would take out before the next pass; anything else stays.
 	void CFormattingAnalyzer::fp_ConvertQualifiers()
 	{
 		if (!m_Structure.f_IsComplete())
@@ -2538,7 +2631,7 @@ namespace
 
 			bool bPlain = true;
 			for (umint iGap = i; iGap <= iEnd && bPlain; ++iGap)
-				bPlain = fg_IsCodeToken(Tokens[iGap]) || Tokens[iGap].m_Kind == ECodeTokenKind::mc_Whitespace;
+				bPlain = fg_IsCodeToken(Tokens[iGap]) || Tokens[iGap].m_Kind == ECodeTokenKind::mc_Whitespace || Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline;
 
 			if (!bPlain)
 				continue;

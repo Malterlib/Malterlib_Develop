@@ -78,8 +78,8 @@ is not handled, and `mc_Failed` when analysis could not produce a usable plan.
 
 ## Rules
 
-The implemented rule matrix is whitespace-only but for three conversions: the
-trailing return type, `braces`, and `east-qualifier`. Every plan is verified
+The implemented rule matrix is whitespace-only but for four conversions: the
+trailing return type, `braces`, `east-qualifier`, and `specifier-order`. Every plan is verified
 against `fg_HasEquivalentCodeTokens` on the converted source, and whole-file
 plans are re-analyzed to prove the result is stable; either check failing is a
 formatter failure, not an edit.
@@ -101,6 +101,7 @@ formatter failure, not an edit.
 | `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |
 | `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source. |
 | `east-qualifier` | A `const` or `volatile` written in front of its type moves behind it: `const int &_Value` becomes `int const &_Value`. |
+| `specifier-order` | `static` stands in front of `constexpr`: `constexpr static umint` becomes `static constexpr umint`. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
@@ -140,6 +141,18 @@ source it leaves is then analyzed like any other, and the edits of both stages
 are composed into one plan on the original. Beyond the checks every plan gets,
 the stage proves that the source reads the same with its qualifiers left out
 before and after, which is all that moving one may change.
+
+`specifier-order` writes a declaration's specifiers in one order where the
+sources have two, `static` in front of `constexpr`, which is the order two out
+of three declarations in the tree already have. Only what a run of specifiers
+is made of may stand between the two, `constexpr inline_always static` becoming
+`static constexpr inline_always`, with nothing but spaces and line breaks around
+it; a comment in the run, and a disabled or unselected region, leave it as it
+is. It is made in the same stage as `east-qualifier`, whose proof it shares: the
+source reads the same with the moved words left out, and has as many of each.
+The other specifiers have no order the sources agree on, `inline_always static`
+and `static constexpr` and `constexpr inline_always` each being the common
+spelling of its pair, so they stay where they are written.
 
 `braces` is decided on the original source, like the trailing return type
 conversion, and the layout is then made on the converted source. A statement

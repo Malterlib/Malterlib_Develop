@@ -1301,7 +1301,10 @@ namespace
 					fMoves("Parameter", "void f(const int &_A, const NStr::CStr &_B, const auto &_C);\n", "void f(int const &_A, NStr::CStr const &_B, auto const &_C);\n");
 					// Specifiers stay in front wherever the source had them, and a run of
 					// qualifiers moves as one.
-					fMoves("Specifier", "constexpr static const ch8 *gc_pA = \"\";\nconst static int gs_B;\n", "constexpr static ch8 const *gc_pA = \"\";\nstatic int const gs_B;\n");
+					fMoves("Specifier", "inline static const ch8 *gc_pA = \"\";\nconst static int gs_B;\n", "inline static ch8 const *gc_pA = \"\";\nstatic int const gs_B;\n");
+					// A line break inside the span is one the layout takes out, so it is no
+					// reason to wait for the next pass.
+					fMoves("Broken", "const\n\tint g_A = 0;\n", "int const g_A = 0;\n");
 					fMoves("Run", "const volatile int g_A = 0;\nvolatile uint32 g_B;\n", "int const volatile g_A = 0;\nuint32 volatile g_B;\n");
 					// The type is followed to its end: through its template arguments, where a
 					// qualifier of their own moves as well, a fundamental type's several words,
@@ -1346,6 +1349,27 @@ namespace
 							, "// malterlib-format off\nconst int g_A = 0;\n// malterlib-format on\nint const g_B = 0;\n"
 						)
 					;
+				};
+
+				DMibTestCategory("SpecifierOrder")
+				{
+					// 'static' stands in front of 'constexpr', whatever specifiers stand between
+					// the two, and a qualifier behind them moves in the same stage.
+					fg_ExpectFormat
+						(
+							"Static"
+							, "struct C\n{\n\tconstexpr static umint mc_A = 1;\n\tconstexpr inline_always static int fs_B();\n\tconstexpr static const ch8 *mc_pC = \"\";\n};\n"
+							, "struct C\n{\n\tstatic constexpr umint mc_A = 1;\n\tstatic constexpr inline_always int fs_B();\n\tstatic constexpr ch8 const *mc_pC = \"\";\n};\n"
+							, false
+						)
+					;
+					fg_ExpectFormat("Broken", "constexpr\nstatic umint gc_A = 1;\n", "static constexpr umint gc_A = 1;\n", false);
+					// The order the sources mostly have, a 'constexpr' with no 'static' behind it,
+					// a comment between the two, and a disabled region stay as they are.
+					CStr Kept = "struct C\n{\n\tstatic constexpr umint mc_A = 1;\n\tconstexpr umint f_B() const;\n\tconstexpr /* c */ static umint mc_C = 1;\n};\n"
+						"// malterlib-format off\nconstexpr static int g_Off = 0;\n// malterlib-format on\n"
+					;
+					fg_ExpectFormat("Kept", Kept, Kept);
 				};
 
 				DMibTestCategory("TrailingReturn")
