@@ -407,6 +407,14 @@ starts a statement of its own, since a name there declares a variable of the
 type just defined. A lambda's terminator stands on a line of its own at the
 statement's indentation, wherever the source left it, on that line already or
 behind the brace; a declaration's stays behind its closing brace.
+A statement split at the parenthesis it opens with is the exception to a split
+statement's terminator taking a line of its own. Its lines have no continuation
+level and stand where the statement does, so a terminator on a line of its own
+would stand among them as one more of them; it ends the last line instead, as
+in `.f_CallSync();` under the closing parenthesis, and as the `);` of a fold
+expression does. A statement that merely starts with a parenthesis, such as
+`(*fLocked)() > [&]` with its lambda below it, has a continuation level and
+keeps the terminator on its own line.
 
 A brace holds statements, rather than the elements of a braced initializer,
 when a statement terminator stands at its own level or an element of it starts

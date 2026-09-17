@@ -950,6 +950,18 @@ namespace
 							, "void f()\n{\n\tg\n\t\t(\n\t\t\t5 // why\n\t\t\t, 6\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A statement split at the parenthesis it opens with has no continuation
+					// level, so its terminator ends its last line rather than standing among its
+					// lines as one more of them. One that only starts with a parenthesis has.
+					fg_ExpectFormat
+						(
+							"LeadingParen"
+							, "void f()\n{\n\t(\n\t\tg_Dispatch / []() -> int\n\t\t{\n\t\t\treturn 0;\n\t\t}\n\t)\n\t.f_CallSync()\n\t;\n"
+								"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\t(\n\t\tg_Dispatch / []() -> int\n\t\t{\n\t\t\treturn 0;\n\t\t}\n\t)\n\t.f_CallSync();\n"
+								"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
+						)
+					;
 					// A line comment ends the line it stands on, so what stands behind it is a
 					// line of its own, measured as one: a base clause under a commented head
 					// stays closed where it fits, and comes back closed where it was opened.

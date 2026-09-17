@@ -3293,6 +3293,14 @@ namespace
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
 		auto const &Tokens = m_Tokens.f_GetTokens();
 
+		bool bOpenedAtParen = false;
+		// The parenthesis a statement opens with, where it has one: '(a + b).f_Call();'.
+		umint iLeadingClose = TCLimitsInt<umint>::mc_Max;
+		for (auto iChild : Node.m_Children)
+		{
+			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Group && Nodes[iChild].m_Bracket == ECodeBracket::mc_Paren && Nodes[iChild].m_iFirstToken == Node.m_iFirstToken)
+				iLeadingClose = Nodes[iChild].m_iLastToken;
+		}
 		// A block always occupies its own lines, so only the head decides the statement's shape.
 		umint iHeadLast = Node.m_iLastToken;
 		umint iHeadLastWithInitializers = Node.m_iLastToken;
@@ -3568,8 +3576,20 @@ namespace
 			// A split statement's terminator takes a line of its own, except behind a
 			// declaration's body, where it stays on the closing brace's line: '};'.
 			bool bBodyTerminator = iBlock != TCLimitsInt<umint>::mc_Max && !bLambdaBody;
-			if (bSplit && bHasTerminator && !bBodyTerminator)
+			bOpenedAtParen = iLeadingClose != TCLimitsInt<umint>::mc_Max && fp_IsFirstOnLine(iLeadingClose);
+			if (bSplit && bHasTerminator && !bBodyTerminator && !bOpenedAtParen)
 				fp_BreakBefore(Node.m_iLastToken, _iIndent);
+		}
+
+		bOpenedAtParen = iLeadingClose != TCLimitsInt<umint>::mc_Max && fp_IsFirstOnLine(iLeadingClose);
+		// A statement split at the parenthesis it opens with has no continuation level: its
+		// lines stand where it does, and a terminator on a line of its own would stand among
+		// them as one more of them. It ends the statement's last line instead.
+		if (bOpenedAtParen && m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";"))
+		{
+			auto iBeforeTerminator = fp_PreviousCode(Node.m_iLastToken);
+			if (iBeforeTerminator >= 0 && umint(iBeforeTerminator) > Node.m_iFirstToken)
+				fp_MarkInline(umint(iBeforeTerminator), Node.m_iLastToken);
 		}
 
 		if (!bJoinable)
