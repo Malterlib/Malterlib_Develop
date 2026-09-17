@@ -329,7 +329,11 @@ behind a template argument list in front of a name keeps its spelling. The
 line-break rule never splits at a declarator. A
 parenthesis in front of a `&` is only a parameter list where it closes one: one
 whose last word is a declarator or a qualifier spells a type, so it is a cast,
-and what it converts hugs it, `(ch8 const *)&Value`.
+and what it converts hugs it, `(ch8 const *)&Value`. The
+parenthesis of `if constexpr (...)` holds a condition like any other `if`, never
+parameters. A `new` hugs its placement arguments, which stand apart from the
+type behind them, `new(_pMemory) CFoo(1)`, and belong to the head: the layout
+opens the constructor's arguments, not them.
 
 `line-break` lays every statement out in two phases. The statement is first
 taken as if it were written on one line, with every gap at its inline spelling:

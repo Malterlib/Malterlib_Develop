@@ -1136,6 +1136,10 @@ namespace
 		if (_Tokens.f_IsText(Tokens[umint(iName)], "catch"))
 			return true;
 
+		// 'if constexpr (...)' holds a condition, whatever follows it.
+		if (_Tokens.f_IsText(Tokens[umint(iName)], "constexpr"))
+			return false;
+
 		// Directly inside a template argument list a parenthesis behind a type spells a
 		// function type, whose parameters it declares: 'TCFunction<void (CFoo &&_Value)>'.
 		// A type ends in a template argument list of its own, or in a name written apart
@@ -1506,6 +1510,9 @@ namespace
 		if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Paren)
 		{
 			auto iClause = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+			if (iClause >= 0 && _Tokens.f_IsText(Tokens[umint(iClause)], "constexpr"))
+				iClause = fg_PreviousCode(_Tokens, umint(iClause));
+
 			bCondition = iClause >= 0
 				&& (_Tokens.f_IsText(Tokens[umint(iClause)], "if")
 					|| _Tokens.f_IsText(Tokens[umint(iClause)], "while")
@@ -1874,7 +1881,7 @@ namespace NMib::NDevelop
 			static ch8 const *const gsc_pSpacedKeywords[] =
 				{
 					"if", "for", "while", "switch", "catch", "return", "co_return", "co_await", "co_yield"
-					, "throw", "new", "delete", "case", "requires", "constexpr"
+					, "throw", "delete", "case", "requires", "constexpr"
 				}
 			;
 			for (auto pKeyword : gsc_pSpacedKeywords)
@@ -2033,6 +2040,23 @@ namespace NMib::NDevelop
 				"const", "volatile", "noexcept", "override", "final", "mutable", "requires", "&", "&&"
 			}
 		;
+		// The placement arguments of a 'new' stand apart from the type it constructs:
+		// 'new (_pMemory) CFoo(1)'.
+		if (fLeft(")") && (Right.m_Kind == ECodeTokenKind::mc_Identifier || fRight("::")))
+		{
+			for (auto const &Node : _Structure.f_GetNodes())
+			{
+				if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_iLastToken != _iLeft)
+					continue;
+
+				auto iKeyword = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+				if (iKeyword >= 0 && _Tokens.f_IsText(Tokens[umint(iKeyword)], "new"))
+					return ECodeSpacing::mc_Space;
+
+				break;
+			}
+		}
+
 		// A parenthesis whose last word is a declarator or a qualifier spells a type and
 		// nothing else, so it is a cast, and what it converts hugs it like any operand of a
 		// unary operator: '(ch8 const *)&Value'.

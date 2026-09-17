@@ -324,6 +324,25 @@ namespace
 							, "struct C\n{\n\tvoid f_A() &;\n};\nvoid f()\n{\n\tauto a = (ch8 const *)&Data;\n\tauto b = (CFoo &&)*pFoo;\n\tauto c = (x) & y;\n}\n"
 						)
 					;
+					// 'if constexpr' holds a condition like any other 'if', whose operators are
+					// operators, and a 'new' hugs its placement arguments, which stand apart from
+					// the type and are never the scope a statement is opened at.
+					fg_ExpectFormat
+						(
+							"ConstexprCondition"
+							, "void f()\n{\n\tif constexpr (tf_Flags &EFlag_A)\n\t{\n\t\tg();\n\t\th();\n\t}\n\telse if constexpr (cA<t_C> &&cB<t_C>)\n\t\tg();\n}\n"
+							, "void f()\n{\n\tif constexpr (tf_Flags & EFlag_A)\n\t{\n\t\tg();\n\t\th();\n\t}\n\telse if constexpr (cA<t_C> && cB<t_C>)\n\t\tg();\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"PlacementNew"
+							, "void f()\n{\n\tauto *pA = new\n\t\t(\n\t\t\t_pMemory\n\t\t)\n\t\tNPrivate::TCData<t_C>\n\t\t(\n\t\t\t_A\n#if DSafe\n\t\t\t, _B\n#endif\n\t\t)\n\t;\n"
+								"\tauto *pB = new (_pMemory) CFoo(1);\n}\n"
+							, "void f()\n{\n\tauto *pA = new(_pMemory) NPrivate::TCData<t_C>\n\t\t(\n\t\t\t_A\n#if DSafe\n\t\t\t, _B\n#endif\n\t\t)\n\t;\n"
+								"\tauto *pB = new(_pMemory) CFoo(1);\n}\n"
+						)
+					;
 					// A ref-qualifier declares nothing, so what follows it is the rest of the
 					// declaration rather than a name, and stands apart from it.
 					fg_ExpectFormat

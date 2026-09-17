@@ -5046,8 +5046,14 @@ namespace
 					continue;
 
 				// A cast converts what follows it, so its parentheses belong to that operand
-				// rather than being a scope of their own.
-				if (fp_IsCastGroup(iChild))
+				// rather than being a scope of their own, and so do the placement arguments
+				// of a 'new', which stand in front of the type it constructs.
+				auto iBeforeScope = fp_PreviousCode(Child.m_iFirstToken);
+				bool bPlacement = Child.m_Bracket == ECodeBracket::mc_Paren && iBeforeScope >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBeforeScope)], "new");
+				if (bPlacement && fp_FitsInline(umint(iBeforeScope), Child.m_iLastToken, _iIndent))
+					fp_MarkInline(umint(iBeforeScope), Child.m_iLastToken);
+
+				if (fp_IsCastGroup(iChild) || bPlacement)
 					continue;
 
 				bool bBeforeName = bStatement && Child.m_iLastToken < m_iSplitFirstParen;
