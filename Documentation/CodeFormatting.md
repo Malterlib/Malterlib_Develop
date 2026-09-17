@@ -183,7 +183,12 @@ a literal's suffix, or the type a conversion yields, qualified and with template
 arguments where it has them. That name stands apart from the keyword and from
 the parameter list behind it, so the forms are `operator = (`, `operator () (`,
 `operator [] (`, `operator ""_f (`, and `operator NStr::CStr ()`. A name is not
-a call, so the parenthesis of an ordinary one stays where it is. What such a
+a call, so the parenthesis of an ordinary one stays where it is. The one
+parenthesis behind a name that keeps its spelling is a pointer to function's
+declarator, `void (*pCall)(int)`, which is told by the parameter list behind it
+and by holding no separator; a call whose first argument takes an address,
+`m_Actor(&CActor::f_Get, _Value)`, is a call like any other, and being settled
+is what lets the statement around it be laid out. What such a
 name stands in front of is a parameter list wherever the function is declared,
 which is also what tells the arrow behind it, a trailing return type's, from
 the member access that `->` otherwise is: neither `operator co_await`, named by

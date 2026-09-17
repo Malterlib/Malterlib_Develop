@@ -1833,8 +1833,18 @@ namespace NMib::NDevelop
 					if (Nodes[Node.m_iParent].m_Bracket == ECodeBracket::mc_Angle)
 						return ECodeSpacing::mc_Preserve;
 
+					// A pointer to function's declarator is followed by its parameter list and
+					// holds no separator, which is what tells 'void (*pCall)(int)' from a call
+					// whose first argument takes an address: 'f_Call(&CFoo::f_Get, _Value)'.
 					auto iInner = fg_NextCode(_Tokens, _iRight);
-					if (iInner >= 0 && (_Tokens.f_IsText(Tokens[umint(iInner)], "*") || _Tokens.f_IsText(Tokens[umint(iInner)], "&")))
+					auto iBehind = fg_NextCode(_Tokens, Node.m_iLastToken);
+					bool bDeclarator = iInner >= 0
+						&& (_Tokens.f_IsText(Tokens[umint(iInner)], "*") || _Tokens.f_IsText(Tokens[umint(iInner)], "&"))
+						&& iBehind >= 0
+						&& _Tokens.f_IsText(Tokens[umint(iBehind)], "(")
+						&& Node.m_SplitPoints.f_IsEmpty()
+					;
+					if (bDeclarator)
 						return ECodeSpacing::mc_Preserve;
 
 					umint iStatement = Node.m_iParent;

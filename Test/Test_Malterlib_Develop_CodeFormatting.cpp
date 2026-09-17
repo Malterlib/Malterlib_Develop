@@ -278,6 +278,18 @@ namespace
 								"\toperator NStr::CStr () const;\n\tusing CBase::operator =;\n};\n"
 						)
 					;
+					// A pointer to function's declarator is followed by its parameter list and
+					// holds no separator, so only that keeps its spelling. A call whose first
+					// argument takes an address is a call, and can be laid out as one.
+					fg_ExpectFormat
+						(
+							"AddressArgument"
+							, "void f()\n{\n\tm_Actor\n\t\t(\n\t\t\t&CActor::f_Get\n\t\t\t, _Value\n\t\t)\n\t;\n\tg (*pValue, 1);\n}\n"
+							, "void f()\n{\n\tm_Actor(&CActor::f_Get, _Value);\n\tg(*pValue, 1);\n}\n"
+						)
+					;
+					CStr Pointers = "void (*g_pCall)(int);\nvoid (&g_Call)(int) = fg_F;\nvoid f()\n{\n\tm_Actor.f_CallActor(&CActor::f_Get)(1);\n}\n";
+					fg_ExpectFormat("FunctionPointer", Pointers, Pointers);
 					// A call is not a name, whatever stands in front of it.
 					fg_ExpectFormat("CallKept", "void f()\n{\n\tauto A = g(1);\n\tauto B = h(a, i(b));\n}\n", "void f()\n{\n\tauto A = g(1);\n\tauto B = h(a, i(b));\n}\n");
 					// Declarators keep their Malterlib spelling; they are not expression operators.
