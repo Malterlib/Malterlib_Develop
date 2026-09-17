@@ -343,13 +343,14 @@ namespace
 						)
 					;
 					// A deduction guide is a declaration too, so its arrow is written apart
-					// like a trailing return type's. Without a header in front of it the name
-					// is spelled like a call, and the arrow keeps what it has.
+					// like a trailing return type's. Without a header in front of it, it is told
+					// by naming its template on both sides of the arrow, which a call followed
+					// by a member access does not.
 					fg_ExpectFormat
 						(
 							"DeductionGuide"
-							, "template <typename t_C>\nC(T<t_C>)->C<t_C>;\n\nC(CVoidTag)->C<void>;\n"
-							, "template <typename t_C>\nC(T<t_C>) -> C<t_C>;\n\nC(CVoidTag)->C<void>;\n"
+							, "template <typename t_C>\nC(T<t_C>)->C<t_C>;\n\nC(CVoidTag)->C<void>;\n\nvoid f()\n{\n\tfg_Get(1) -> f_Call();\n}\n"
+							, "template <typename t_C>\nC(T<t_C>) -> C<t_C>;\n\nC(CVoidTag) -> C<void>;\n\nvoid f()\n{\n\tfg_Get(1)->f_Call();\n}\n"
 						)
 					;
 					fg_ExpectFormat("Pointer", "void f()\n{\n\tauto *pA = &B;\n\tauto C = *pA * 2;\n}\n", "void f()\n{\n\tauto *pA = &B;\n\tauto C = *pA * 2;\n}\n");

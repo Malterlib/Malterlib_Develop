@@ -322,7 +322,8 @@ template header counts as standing in front of the name: it is what a
 constructor template, which has no return type, spells there, as in
 `template <typename tf_CP0>` above `C(tf_CP0 &&_P0)`, and it is what tells a
 deduction guide's arrow, written apart like a trailing return type's, from the
-member access that `C(x)->y` is without one.
+member access that `C(x)->y` is. A guide without a header is told by naming its
+template on both sides of the arrow, `TCFoo(CVoidTag) -> TCFoo<void>`.
 `cFoo<T> && cBar<T>` and `TCFoo<T> &&_Other` spell the same tokens, so a `&&`
 behind a template argument list in front of a name keeps its spelling. The
 line-break rule never splits at a declarator. A

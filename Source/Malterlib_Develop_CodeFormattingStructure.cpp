@@ -1269,6 +1269,16 @@ namespace
 			}
 		}
 
+		// A deduction guide names its template twice, in front of the parenthesis and behind
+		// the arrow, which no call followed by a member access does: 'TCFoo(int) -> TCFoo<int>'.
+		if (_Tokens.f_IsText(Tokens[umint(iAfter)], "->") && Tokens[umint(iName)].m_Kind == ECodeTokenKind::mc_Identifier)
+		{
+			auto iTarget = fg_NextCode(_Tokens, umint(iAfter));
+			bool bOpens = iBefore < 0 || _Tokens.f_IsText(Tokens[umint(iBefore)], "explicit");
+			if (bOpens && iTarget >= 0 && _Tokens.f_GetText(Tokens[umint(iTarget)]) == _Tokens.f_GetText(Tokens[umint(iName)]))
+				return true;
+		}
+
 		auto const &After = Tokens[umint(iAfter)];
 		static ch8 const *const gsc_pFunctionTails[] =
 			{
