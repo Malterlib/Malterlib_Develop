@@ -315,7 +315,10 @@ deduction guide's arrow, written apart like a trailing return type's, from the
 member access that `C(x)->y` is without one.
 `cFoo<T> && cBar<T>` and `TCFoo<T> &&_Other` spell the same tokens, so a `&&`
 behind a template argument list in front of a name keeps its spelling. The
-line-break rule never splits at a declarator.
+line-break rule never splits at a declarator. A
+parenthesis in front of a `&` is only a parameter list where it closes one: one
+whose last word is a declarator or a qualifier spells a type, so it is a cast,
+and what it converts hugs it, `(ch8 const *)&Value`.
 
 `line-break` lays every statement out in two phases. The statement is first
 taken as if it were written on one line, with every gap at its inline spelling:

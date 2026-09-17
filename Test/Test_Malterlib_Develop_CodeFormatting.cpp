@@ -314,6 +314,16 @@ namespace
 							, "decltype(auto) fg_A(tf_C &&_A);\ndecltype(g_A) &fg_B(int *_p);\nvoid f()\n{\n\tauto x = decltype(a)(b && c);\n}\n"
 						)
 					;
+					// A parenthesis that ends in a declarator or a qualifier spells a type, so it
+					// is a cast, and what it converts hugs it. Only a parameter list's closing
+					// parenthesis has a ref-qualifier behind it.
+					fg_ExpectFormat
+						(
+							"Cast"
+							, "struct C\n{\n\tvoid f_A() &;\n};\nvoid f()\n{\n\tauto a = (ch8 const *) &Data;\n\tauto b = (CFoo &&) *pFoo;\n\tauto c = (x) & y;\n}\n"
+							, "struct C\n{\n\tvoid f_A() &;\n};\nvoid f()\n{\n\tauto a = (ch8 const *)&Data;\n\tauto b = (CFoo &&)*pFoo;\n\tauto c = (x) & y;\n}\n"
+						)
+					;
 					// A ref-qualifier declares nothing, so what follows it is the rest of the
 					// declaration rather than a name, and stands apart from it.
 					fg_ExpectFormat

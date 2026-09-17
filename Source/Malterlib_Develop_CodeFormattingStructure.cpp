@@ -2023,7 +2023,31 @@ namespace NMib::NDevelop
 				"const", "volatile", "noexcept", "override", "final", "mutable", "requires", "&", "&&"
 			}
 		;
-		bool bAfterDeclarator = fLeft(")") || fg_IsRefQualifier(_Tokens, _iLeft);
+		// A parenthesis whose last word is a declarator or a qualifier spells a type and
+		// nothing else, so it is a cast, and what it converts hugs it like any operand of a
+		// unary operator: '(ch8 const *)&Value'.
+		if (fLeft(")"))
+		{
+			auto iInner = fg_PreviousCode(_Tokens, _iLeft);
+			bool bCast = iInner >= 0
+				&& (fg_IsDeclaratorText(_Tokens, Tokens[umint(iInner)]) || _Tokens.f_IsText(Tokens[umint(iInner)], "const") || _Tokens.f_IsText(Tokens[umint(iInner)], "volatile"))
+			;
+			bool bOperand = (Right.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Right, gsc_pQualifiers))
+				|| Right.m_Kind == ECodeTokenKind::mc_Number
+				|| fg_IsDeclaratorText(_Tokens, Right)
+				|| fRight("-")
+				|| fRight("+")
+				|| fRight("!")
+				|| fRight("~")
+			;
+			if (bCast && bOperand && !fg_ClosesParameterList(_Tokens, _Structure, _iLeft))
+				return ECodeSpacing::mc_None;
+		}
+
+		// A '&' or '&&' behind a parenthesis qualifies a function only where the parenthesis
+		// is its parameter list. Behind any other it takes an address or joins two operands.
+		bool bRefQualifies = !fLeft(")") || (!fRight("&") && !fRight("&&")) || fg_ClosesParameterList(_Tokens, _Structure, _iLeft);
+		bool bAfterDeclarator = (fLeft(")") && bRefQualifies) || fg_IsRefQualifier(_Tokens, _iLeft);
 		for (auto pQualifier : gsc_pQualifiers)
 			bAfterDeclarator |= fLeft(pQualifier) && !fLeft("&") && !fLeft("&&");
 
