@@ -460,6 +460,11 @@ behind a subscript initializes an array. A guarded statement that holds a body
 is laid out across lines whether or not the source wrote it on one, so `braces`
 puts it within them.
 
+The template arguments of a class that a name is qualified with stand in front
+of that name, and are the last to give for the same reason a return type is:
+`template auto TCActor<CManager>::f_InternalCallActor` keeps its qualification
+whole and opens the arguments of `f_InternalCallActor` below it.
+
 A named cast's parenthesis belongs to the head the way a C cast's does, since
 what it yields is what the rest of the expression is written on. It stays closed
 while everything up to the next scope fits on the line, so that the line gives

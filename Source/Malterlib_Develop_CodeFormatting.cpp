@@ -5115,6 +5115,14 @@ namespace
 				// What stands in front of a statement's '=' declares what the value is given
 				// to, and is no more a place to break than what stands in front of a name.
 				bool bBeforeName = bStatement && (Child.m_iLastToken < m_iSplitFirstParen || Child.m_iLastToken < iAssign);
+				// The template arguments of a class a name is qualified with stand in front of
+				// that name too: 'TCFoo<CBar>::f_Function'.
+				auto iQualifies = fp_NextCode(Child.m_iLastToken);
+				bBeforeName |= Child.m_Bracket == ECodeBracket::mc_Angle
+					&& iQualifies >= 0
+					&& umint(iQualifies) <= _iLast
+					&& m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iQualifies)], "::")
+				;
 				if (!iPass)
 				{
 					auto iInner = fp_NextCode(Child.m_iFirstToken);

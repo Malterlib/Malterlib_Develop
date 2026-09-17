@@ -1370,7 +1370,7 @@ namespace
 					CStr Pointer = "template TCCounter<TCOnScopeExit<TCFunction<void ()> >, false, 0> *\n"
 						"TCConstruct<TCCounter<@>, TCFunction<void ()> >::f_Create<TCCounter<@>, CAllocator &>(CAllocator &);\n"
 					;
-					CStr PointerResult = "template auto TCConstruct\n\t<\n\t\tTCCounter<@>\n\t\t, TCFunction<void ()>\n\t>\n\t::f_Create<TCCounter<@>, CAllocator &>(CAllocator &)\n"
+					CStr PointerResult = "template auto TCConstruct<TCCounter<@>, TCFunction<void ()>>::f_Create\n\t<\n\t\tTCCounter<@>\n\t\t, CAllocator &\n\t>\n\t(CAllocator &)\n"
 						"\t-> TCCounter<TCOnScopeExit<TCFunction<void ()>>, false, 0> *\n;\n"
 					;
 					fg_ExpectFormat("ExplicitInstantiation", Pointer.f_Replace("@", Wide), PointerResult.f_Replace("@", Wide), false);
