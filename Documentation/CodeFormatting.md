@@ -445,7 +445,9 @@ What stands in front of a statement's `=` is the last thing to give. The value
 behind it is opened first, a call's arguments and then its name's template
 arguments, so a declaration keeps its type whole on the head line. A value with
 nothing in it to open takes a line of its own behind the `=` where that makes
-the statement fit. Only then is the type in front of the name opened. Everywhere
+the statement fit. Where the type and the name do not fit on one line to begin
+with, the name goes down with its value and the type stays whole on the line
+above them. Only then is the type in front of the name opened. Everywhere
 else the `=` is never a place to break: a statement the source broke there is
 brought back onto its head.
 

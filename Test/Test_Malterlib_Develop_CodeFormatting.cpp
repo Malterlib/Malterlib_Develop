@@ -1197,6 +1197,16 @@ namespace
 								.f_Replace("@", Name)
 						)
 					;
+					// Where the type and the name do not fit on one line to begin with, the name goes
+					// down with its value and the type stays whole above them, and a type that was
+					// opened comes back closed.
+					fg_ExpectFormat
+						(
+							"AssignNameDown"
+							, CStr("constinit TCSubSystem\n\t<\n\t\tCSubSystem_@\n\t\t, ESubSystemDestruction_@\n\t>\n\tg_SubSystem_@ = {DAggregateInit}\n;\n").f_Replace("@", Name)
+							, CStr("constinit TCSubSystem<CSubSystem_@, ESubSystemDestruction_@>\n\tg_SubSystem_@ = {DAggregateInit}\n;\n").f_Replace("@", Name)
+						)
+					;
 					// Behind a parameter list the '=' makes a declaration pure, and the list is
 					// still what it is opened at.
 					fg_ExpectFormat

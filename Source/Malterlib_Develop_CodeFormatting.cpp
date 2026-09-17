@@ -5156,24 +5156,48 @@ namespace
 
 		// A value with nothing in it to open goes on a line of its own behind the '=' where
 		// that makes the statement fit, rather than the type in front of the name giving.
-		if (iAssign && !bNamedScope && !_bClause && _bIndent)
+		// Where the type and the name do not fit on one line to begin with, the name goes
+		// down with its value, and the type stays whole on the line above them.
+		if (iAssign && !_bClause && _bIndent && !fp_FitsInline(_iFirst, _iLast, _iIndent))
 		{
+			auto const &AllTokens = m_Tokens.f_GetTokens();
 			auto iHeadEnd = fp_PreviousCode(iAssign);
-			bool bBreaks = iHeadEnd >= 0
+			bool bSettled = iHeadEnd >= 0
 				&& umint(iHeadEnd) >= _iFirst
 				&& iAssign < _iLast
 				&& fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iHeadEnd), iAssign) == ECodeSpacing::mc_Space
-				&& fp_FitsInline(_iFirst, umint(iHeadEnd), _iIndent)
-				&& fp_FitsInline(iAssign, _iLast, nContinuation)
-				&& !fp_FitsInline(_iFirst, _iLast, _iIndent)
 			;
-			if (bBreaks)
+			bool bHeadFits = bSettled && fp_FitsInline(_iFirst, umint(iHeadEnd), _iIndent);
+			if (bHeadFits && !bNamedScope && fp_FitsInline(iAssign, _iLast, nContinuation))
 			{
 				fp_MarkInline(_iFirst, umint(iHeadEnd));
 				fp_BreakBefore(iAssign, nContinuation);
 				fp_MarkInline(iAssign, _iLast);
 
 				return true;
+			}
+
+			if (bSettled && !bHeadFits && AllTokens[umint(iHeadEnd)].m_Kind == ECodeTokenKind::mc_Identifier)
+			{
+				// A declarator hugs the name, and goes where the name goes.
+				auto iNameFirst = umint(iHeadEnd);
+				for (auto iBefore = fp_PreviousCode(iNameFirst); iBefore >= 0 && fg_IsDeclaratorToken(m_Tokens, m_Structure, umint(iBefore)); iBefore = fp_PreviousCode(iNameFirst))
+					iNameFirst = umint(iBefore);
+
+				auto iTypeEnd = fp_PreviousCode(iNameFirst);
+				bool bNameDown = iTypeEnd >= 0
+					&& umint(iTypeEnd) >= _iFirst
+					&& fp_FitsInline(_iFirst, umint(iTypeEnd), _iIndent)
+					&& fp_FitsInline(iNameFirst, _iLast, nContinuation)
+				;
+				if (bNameDown)
+				{
+					fp_MarkInline(_iFirst, umint(iTypeEnd));
+					fp_BreakBefore(iNameFirst, nContinuation);
+					fp_MarkInline(iNameFirst, _iLast);
+
+					return true;
+				}
 			}
 		}
 
