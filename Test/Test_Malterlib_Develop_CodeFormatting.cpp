@@ -1363,14 +1363,21 @@ namespace
 						)
 					;
 					// Opening the first call would put the member access on a line of its own,
-					// and that line was all the statement needed, so the call stays whole. A
-					// chain that still does not fit gives at every member, as one under a
-					// closing marker does.
+					// and that line was all the statement needed, so the call stays whole and
+					// the chain gives at every member, as one under a closing marker does,
+					// whether or not what is left of it would fit on one line.
 					fSplit
 						(
 							"ChainedRedundant"
 							, "void f()\n{\n\tg(@).f_Call(@).f_Wrap(@);\n}\n"
 							, "void f()\n{\n\tg(@)\n\t\t.f_Call(@)\n\t\t.f_Wrap(@)\n\t;\n}\n"
+						)
+					;
+					fSplit
+						(
+							"ChainedMembers"
+							, "void f()\n{\n\tg(@, @).f_Call(a).f_Wrap(b);\n}\n"
+							, "void f()\n{\n\tg(@, @)\n\t\t.f_Call(a)\n\t\t.f_Wrap(b)\n\t;\n}\n"
 						)
 					;
 					// The outermost level is split first: an operator chain breaks at its

@@ -364,11 +364,11 @@ further only while it is still too long:
    and its pure specifier stay behind the closing parenthesis where they fit.
    Where a member access follows that closing marker, opening the scope would
    put the access on a line of its own anyway, and that line was all the
-   statement needed: the scope stays whole and the access takes the line below
-   it, as in `m_Subscription(&CFoo::f_GetActor)` with
-   `.f_Timeout(30.0).f_CallSync(m_pRunLoop)` under it. A scope holding a lambda
-   body is not one of those, since its body takes lines whether the scope is
-   opened or not.
+   statement needed: the scope stays whole and the chain behind it takes the
+   lines below, as in `m_Subscription(&CFoo::f_GetActor)` with
+   `.f_Timeout(30.0)` and `.f_CallSync(m_pRunLoop)` under it. A scope holding a
+   lambda body is not one of those, since its body takes lines whether the
+   scope is opened or not.
 4. A name that is still too long with its parameter list opened breaks at its
    qualification, then opens its own template argument list, and after that
    breaks at its member accesses, all at once.
@@ -499,8 +499,9 @@ it than a name, and opens the arguments after all, which is what an explicit
 instantiation whose arguments fill a line of their own does.
 
 A member chain that gives at all gives at every member, whether it resumes
-under a closing marker or starts at the access that kept a scope whole. Filled
-a call at a time it would end in a line of as many calls as happened to fit.
+under a closing marker or starts at the access that kept a scope whole, and
+whether or not what is left of it would fit on one line. Filled a call at a
+time it would end in a line of as many calls as happened to fit.
 
 A named cast's parenthesis belongs to the head the way a C cast's does, since
 what it yields is what the rest of the expression is written on. It stays closed

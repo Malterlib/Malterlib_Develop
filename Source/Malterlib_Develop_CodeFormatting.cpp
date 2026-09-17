@@ -5490,10 +5490,10 @@ namespace
 					while (iScope < Scopes.f_GetLen() && Nodes[Scopes[iScope]].m_iFirstToken < iLineFirst)
 						++iScope;
 
-					// A chain that still does not fit is broken at every member, as one that
-					// resumes under a closing marker is: filled a call at a time it would end
-					// in a line of as many calls as happened to fit.
-					if (!fp_FitsInline(iLineFirst, _iLast, nLineIndent) && fp_LayoutMembers(_iNode, iLineFirst, _iLast, nLineIndent, nLineIndent))
+					// The chain is broken at every member, as one that resumes under a closing
+					// marker is: a statement that gives at its member accesses gives at all of
+					// them, rather than ending in a line of as many calls as happened to fit.
+					if (fp_LayoutMembers(_iNode, iLineFirst, _iLast, nLineIndent, nLineIndent))
 						break;
 
 					continue;
