@@ -1359,7 +1359,18 @@ namespace
 						(
 							"Chained"
 							, "void f()\n{\n\tg(@, @).f_Call(@, @);\n}\n"
-							, "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t\t.f_Call\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg(@, @)\n\t\t.f_Call\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// Opening the first call would put the member access on a line of its own,
+					// and that line was all the statement needed, so the call stays whole. A
+					// chain that still does not fit gives at every member, as one under a
+					// closing marker does.
+					fSplit
+						(
+							"ChainedRedundant"
+							, "void f()\n{\n\tg(@).f_Call(@).f_Wrap(@);\n}\n"
+							, "void f()\n{\n\tg(@)\n\t\t.f_Call(@)\n\t\t.f_Wrap(@)\n\t;\n}\n"
 						)
 					;
 					// The outermost level is split first: an operator chain breaks at its

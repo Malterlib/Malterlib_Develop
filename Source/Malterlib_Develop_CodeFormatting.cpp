@@ -5464,6 +5464,42 @@ namespace
 				}
 			}
 
+			// A member access behind the scope about to be opened ends up on a line of its
+			// own whatever the scope does, since what follows a closing marker resumes under
+			// it. That line was all the line needed, so the scope stays whole and the access
+			// takes the line below it: 'm_Subscription(&CFoo::f_GetActor)' with
+			// '.f_Timeout(30.0).f_CallSync(m_pRunLoop)' under it. A scope holding a lambda
+			// body is not one of these: its body takes lines whether or not it is opened.
+			{
+				auto const &Link = Nodes[Scopes[iScope]];
+				auto iInner = fp_NextCode(Link.m_iFirstToken);
+				auto iMember = fp_NextCode(Link.m_iLastToken);
+				bool bOpens = !Link.m_bHasBlock && iInner >= 0 && umint(iInner) != Link.m_iLastToken && Link.m_iFirstToken > iLineFirst;
+				bool bMember = iMember >= 0
+					&& umint(iMember) <= _iLast
+					&& (m_Tokens.f_IsText(Tokens[umint(iMember)], ".") || m_Tokens.f_IsText(Tokens[umint(iMember)], "->"))
+					&& !fp_IsTrailingReturnArrow(umint(iMember))
+				;
+				if (bOpens && bMember && fp_FitsInline(iLineFirst, Link.m_iLastToken, nLineIndent))
+				{
+					fp_MarkInline(iLineFirst, Link.m_iLastToken);
+					fp_BreakBefore(umint(iMember), nContinuation);
+					bSplit = true;
+					iLineFirst = umint(iMember);
+					nLineIndent = nContinuation;
+					while (iScope < Scopes.f_GetLen() && Nodes[Scopes[iScope]].m_iFirstToken < iLineFirst)
+						++iScope;
+
+					// A chain that still does not fit is broken at every member, as one that
+					// resumes under a closing marker is: filled a call at a time it would end
+					// in a line of as many calls as happened to fit.
+					if (!fp_FitsInline(iLineFirst, _iLast, nLineIndent) && fp_LayoutMembers(_iNode, iLineFirst, _iLast, nLineIndent, nLineIndent))
+						break;
+
+					continue;
+				}
+			}
+
 			auto const &Scope = Nodes[Scopes[iScope]];
 			bool bStartsLine = Scope.m_iFirstToken == iLineFirst;
 			auto iHead = fp_PreviousCode(Scope.m_iFirstToken);
