@@ -1132,12 +1132,12 @@ namespace
 			return false;
 
 		auto Text = _Tokens.f_GetText(_Token);
-		static ch8 const *const gsc_pFunctions[] =
+		constexpr ch8 const *c_pFunctions[] =
 			{
 				"f_", "fp_", "fs_", "fsp_", "fg_", "fsg_"
 			}
 		;
-		for (auto pPrefix : gsc_pFunctions)
+		for (auto pPrefix : c_pFunctions)
 		{
 			if (Text.f_StartsWith(pPrefix))
 				return true;
