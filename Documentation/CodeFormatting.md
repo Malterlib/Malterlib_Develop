@@ -439,8 +439,15 @@ every operand stands under the one in front of it:
 That holds where the first operand is a plain line. One that has to be opened,
 `auto Value = fg_Function` with its parenthesis below, or that takes a lambda's
 body, `auto Cleanup = g_OnScopeExit / [&]`, keeps the `=` on the head, and so
-does a DSL key, which hugs its `=`. Everywhere else the `=` is never a place to
-break: a statement the source broke there is brought back onto its head.
+does a DSL key, which hugs its `=`.
+
+What stands in front of a statement's `=` is the last thing to give. The value
+behind it is opened first, a call's arguments and then its name's template
+arguments, so a declaration keeps its type whole on the head line. A value with
+nothing in it to open takes a line of its own behind the `=` where that makes
+the statement fit. Only then is the type in front of the name opened. Everywhere
+else the `=` is never a place to break: a statement the source broke there is
+brought back onto its head.
 
 What an expression goes on with behind a lambda's body, an operator or a member
 access, resumes under the body's closing brace, is broken there at its operators

@@ -5026,6 +5026,18 @@ namespace
 		// explicit instantiation has neither, and then its argument list is the only scope
 		// it has, so that is where it breaks.
 		bool bNamedScope = false;
+		umint iAssign = 0;
+		for (umint i = _iFirst; bStatement && i <= _iLast && !iAssign; ++i)
+		{
+			if (m_TokenDepth[i] == m_TokenDepth[_iFirst] && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "="))
+				iAssign = i;
+		}
+
+		// Behind a declaration's parameter list the '=' makes it pure, defaulted or deleted,
+		// and gives nothing a value.
+		if (m_iSplitFirstParen && iAssign > m_iSplitFirstParen)
+			iAssign = 0;
+
 		TCVector<umint> Scopes;
 		for (umint iPass = 0; iPass < 2; ++iPass)
 		{
@@ -5056,7 +5068,9 @@ namespace
 				if (fp_IsCastGroup(iChild) || bPlacement)
 					continue;
 
-				bool bBeforeName = bStatement && Child.m_iLastToken < m_iSplitFirstParen;
+				// What stands in front of a statement's '=' declares what the value is given
+				// to, and is no more a place to break than what stands in front of a name.
+				bool bBeforeName = bStatement && (Child.m_iLastToken < m_iSplitFirstParen || Child.m_iLastToken < iAssign);
 				if (!iPass)
 				{
 					auto iInner = fp_NextCode(Child.m_iFirstToken);
@@ -5093,6 +5107,29 @@ namespace
 				}
 
 				Scopes.f_Insert(iChild);
+			}
+		}
+
+		// A value with nothing in it to open goes on a line of its own behind the '=' where
+		// that makes the statement fit, rather than the type in front of the name giving.
+		if (iAssign && !bNamedScope && !_bClause && _bIndent)
+		{
+			auto iHeadEnd = fp_PreviousCode(iAssign);
+			bool bBreaks = iHeadEnd >= 0
+				&& umint(iHeadEnd) >= _iFirst
+				&& iAssign < _iLast
+				&& fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iHeadEnd), iAssign) == ECodeSpacing::mc_Space
+				&& fp_FitsInline(_iFirst, umint(iHeadEnd), _iIndent)
+				&& fp_FitsInline(iAssign, _iLast, nContinuation)
+				&& !fp_FitsInline(_iFirst, _iLast, _iIndent)
+			;
+			if (bBreaks)
+			{
+				fp_MarkInline(_iFirst, umint(iHeadEnd));
+				fp_BreakBefore(iAssign, nContinuation);
+				fp_MarkInline(iAssign, _iLast);
+
+				return true;
 			}
 		}
 

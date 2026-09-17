@@ -1170,6 +1170,30 @@ namespace
 								.f_Replace("@", Name)
 						)
 					;
+					// What stands in front of the '=' is the last thing to give: the value behind it
+					// is opened first, and a value with nothing to open takes a line of its own.
+					fg_ExpectFormat
+						(
+							"AssignValueFirst"
+							, CStr("void f()\n{\n\tTCPointer<TCData<t_C>> pData = fg_Consume<t_C, a_@ | b_@ | c_Flag>(_A, _B);\n\tauto Value_@_@ = Other_@_@;\n}\n").f_Replace("@", Name)
+							, CStr
+								(
+									"void f()\n{\n\tTCPointer<TCData<t_C>> pData = fg_Consume<t_C, a_@ | b_@ | c_Flag>\n\t\t(\n\t\t\t_A\n\t\t\t, _B\n\t\t)\n\t;\n"
+									"\tauto Value_@_@\n\t\t= Other_@_@\n\t;\n}\n"
+								)
+								.f_Replace("@", Name)
+						)
+					;
+					// Behind a parameter list the '=' makes a declaration pure, and the list is
+					// still what it is opened at.
+					fg_ExpectFormat
+						(
+							"AssignPure"
+							, CStr("struct C\n{\n\tvirtual TCFuture<TCSubscription<>> f_Register(CFoo_@ _A, CBar_@ _B, CBaz_@ _C) = 0;\n};\n").f_Replace("@", Name)
+							, CStr("struct C\n{\n\tvirtual TCFuture<TCSubscription<>> f_Register\n\t\t(\n\t\t\tCFoo_@ _A\n\t\t\t, CBar_@ _B\n\t\t\t, CBaz_@ _C\n\t\t) = 0\n\t;\n};\n")
+								.f_Replace("@", Name)
+						)
+					;
 					// A value written broken at its operators by the comments behind them is one too.
 					fg_ExpectFormat("AssignComment", "void f()\n{\n\tValue = x // Why\n\t\t+ y\n\t;\n}\n", "void f()\n{\n\tValue\n\t\t= x // Why\n\t\t+ y\n\t;\n}\n");
 					// A line the layout has already broken is broken again while it is still too
