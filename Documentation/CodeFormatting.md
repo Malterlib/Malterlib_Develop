@@ -455,8 +455,11 @@ What an expression goes on with behind a lambda's body, an operator, a member
 access, or the arguments the lambda is called with at once, resumes under the
 body's closing brace, is broken there at its operators
 where it does not fit, and gives the statement's terminator a line of its own.
-A statement that is nothing but a lambda called at once has no head for
-the call to stand under and keeps it as written, `}();`. An attribute macro may
+A statement that opens with its lambda has no expression for the body to
+stand under and no continuation level, like one that opens with a parenthesis:
+its body stands where the statement does, and what it is called with under the
+brace, written as the source has it, `}();` or `(CParams());` on a line of its
+own. An attribute macro may
 stand between a capture list and the parameters, `[&] mark_nodebug (int _A)`,
 and the lambda is one all the same: its body opens one level in, and its
 parenthesis holds parameters. A brace behind a lambda's introducer is that lambda's body whatever it holds, an

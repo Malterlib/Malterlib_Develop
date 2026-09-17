@@ -832,10 +832,16 @@ namespace
 								"\t\t\t\t\treturn _A;\n\t\t\t\t}\n\t\t\t\t(5)\n\t\t\t;\n\t\t}\n\t;\n}\n"
 						)
 					;
-					// A statement that is nothing but a lambda called at once keeps the call where
-					// the source wrote it.
-					CStr Called = "void f()\n{\n\t[&]() inline_never\n\t\t{\n\t\t\tg();\n\t\t}();\n}\n";
-					fg_ExpectFormat("CalledAtOnce", Called, Called);
+					// A statement that opens with its lambda has no expression for the body to
+					// stand under, so the body stands where the statement does, and what it is
+					// called with under the brace, written as the source has it.
+					fg_ExpectFormat
+						(
+							"CalledAtOnce"
+							, "void f()\n{\n\t[&]() inline_never\n\t\t{\n\t\t\tg();\n\t\t}();\n\t[&]<typename ...tfp_C>(CList<tfp_C...> &&)\n\t\t{\n\t\t\tg();\n\t\t}\n\t\t(CParams());\n}\n"
+							, "void f()\n{\n\t[&]() inline_never\n\t{\n\t\tg();\n\t}();\n\t[&]<typename ...tfp_C>(CList<tfp_C...> &&)\n\t{\n\t\tg();\n\t}\n\t(CParams());\n}\n"
+						)
+					;
 					// A subscript operator's name ends in brackets of its own, which name a
 					// declaration and no lambda: its body opens at the statement's level.
 					CStr Subscript = "auto C::operator [] (int &&_Key) -> int\n{\n\treturn 0;\n}\n";

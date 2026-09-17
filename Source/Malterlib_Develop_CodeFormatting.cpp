@@ -3451,6 +3451,12 @@ namespace
 				bLambdaBody |= fp_ClosesLambdaIntroducer(Child.m_iLastToken);
 			}
 		}
+
+		// A lambda's body stands one level in, under the expression the lambda is written
+		// in. A statement that opens with the lambda itself has no such expression and no
+		// continuation level: its body stands where the statement does, like the lines of
+		// one that opens with a parenthesis, and what it is called with under the brace.
+		bool bBodyIn = bLambdaBody && !m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "[");
 		// A name can end in a template argument list, and nothing before it is ever broken.
 		// A lambda's own template parameter list ends the same way but names nothing.
 		bool bNamed = bDeclarator
@@ -3562,7 +3568,7 @@ namespace
 
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
 			{
-				fp_PlaceBody(_iNode, iBlock, _iIndent, !bLambdaBody);
+				fp_PlaceBody(_iNode, iBlock, _iIndent, !bBodyIn);
 				fp_LayoutNode(iBlock, _iIndent);
 			}
 
@@ -3582,6 +3588,21 @@ namespace
 					return;
 
 				auto iTail = fp_NextCode(Nodes[iBlock].m_iLastToken);
+				if (!bBodyIn)
+				{
+					// Under the brace of a statement that opens with its lambda, what it is
+					// called with stands where the statement does, as written otherwise.
+					bool bMoves = iTail >= 0
+						&& umint(iTail) < Node.m_iLastToken
+						&& fp_IsFirstOnLine(umint(iTail))
+						&& fp_GetStatementIndent(umint(iTail)) != _iIndent
+					;
+					if (bMoves)
+						fp_IndentBefore(umint(iTail), _iIndent);
+
+					return;
+				}
+
 				if (iTail < 0 || umint(iTail) >= Node.m_iLastToken || Tokens[umint(iTail)].m_Kind != ECodeTokenKind::mc_Punctuator)
 					return;
 
@@ -3589,10 +3610,6 @@ namespace
 				if (m_Tokens.f_IsText(Tail, ")") || m_Tokens.f_IsText(Tail, ",") || m_Tokens.f_IsText(Tail, ";") || m_Tokens.f_IsText(Tail, "]"))
 					return;
 
-				// A statement that is nothing but a lambda called at once has no head for the
-				// call to stand under, and keeps the call where the source wrote it: '}();'.
-				if (m_Tokens.f_IsText(Tail, "(") && m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "["))
-					return;
 
 				bool bTerminated = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";");
 				auto iTailLast = bTerminated ? fp_PreviousCode(Node.m_iLastToken) : aint(Node.m_iLastToken);
@@ -3614,7 +3631,7 @@ namespace
 
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
 			{
-				fp_PlaceBody(_iNode, iBlock, _iIndent, !bLambdaBody);
+				fp_PlaceBody(_iNode, iBlock, _iIndent, !bBodyIn);
 				fp_LayoutNode(iBlock, _iIndent);
 				fLayoutTail();
 
@@ -3622,7 +3639,7 @@ namespace
 				// indentation, where a declaration's stays behind its closing brace: '};'.
 				// A body that could not be placed keeps its terminator as written too.
 				auto iLast = Node.m_iLastToken;
-				bool bLambdaTerminator = bLambdaBody
+				bool bLambdaTerminator = bBodyIn
 					&& fp_IsFirstOnLine(Nodes[iBlock].m_iFirstToken)
 					&& m_Tokens.f_IsText(Tokens[iLast], ";")
 					&& fp_PreviousCode(iLast) == aint(Nodes[iBlock].m_iLastToken)
@@ -3693,7 +3710,7 @@ namespace
 			m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
 			// A split statement's terminator takes a line of its own, except behind a
 			// declaration's body, where it stays on the closing brace's line: '};'.
-			bool bBodyTerminator = iBlock != TCLimitsInt<umint>::mc_Max && !bLambdaBody;
+			bool bBodyTerminator = iBlock != TCLimitsInt<umint>::mc_Max && !bBodyIn;
 			bOpenedAtParen = iLeadingClose != TCLimitsInt<umint>::mc_Max && fp_IsFirstOnLine(iLeadingClose);
 			if (bSplit && bHasTerminator && !bBodyTerminator && !bOpenedAtParen)
 				fp_BreakBefore(Node.m_iLastToken, _iIndent);
@@ -3730,9 +3747,9 @@ namespace
 			// After an operator split the brace is already on a continuation line.
 			auto iBrace = Nodes[iBlock].m_iFirstToken;
 			if (!fp_IsFirstOnLine(iBrace))
-				fp_PlaceBody(_iNode, iBlock, _iIndent, !bLambdaBody);
+				fp_PlaceBody(_iNode, iBlock, _iIndent, !bBodyIn);
 			else if (bJoinable && !m_bOperatorSplit)
-				fp_BreakBefore(iBrace, bLambdaBody ? _iIndent + nTab : _iIndent);
+				fp_BreakBefore(iBrace, bBodyIn ? _iIndent + nTab : _iIndent);
 
 			fp_LayoutNode(iBlock, _iIndent);
 			fLayoutTail();
