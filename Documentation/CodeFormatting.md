@@ -407,6 +407,32 @@ starts a statement of its own, since a name there declares a variable of the
 type just defined. A lambda's terminator stands on a line of its own at the
 statement's indentation, wherever the source left it, on that line already or
 behind the brace; a declaration's stays behind its closing brace.
+A value broken at its operators starts a line of its own with the `=`, so that
+every operand stands under the one in front of it:
+
+```cpp
+	umint nExpectedActors
+		= m_ConcurrentActors[EPriority_Normal].f_GetLen()
+		+ m_ConcurrentActors[EPriority_Low].f_GetLen()
+		+ 1
+	;
+```
+
+That holds where the first operand is a plain line. One that has to be opened,
+`auto Value = fg_Function` with its parenthesis below, or that takes a lambda's
+body, `auto Cleanup = g_OnScopeExit / [&]`, keeps the `=` on the head, and so
+does a DSL key, which hugs its `=`. Everywhere else the `=` is never a place to
+break: a statement the source broke there is brought back onto its head.
+
+What an expression goes on with behind a lambda's body, an operator or a member
+access, resumes under the body's closing brace, is broken there at its operators
+where it does not fit, and gives the statement's terminator a line of its own.
+A brace behind a lambda's introducer is that lambda's body whatever it holds, an
+empty one included, which the source has nothing else to tell by; an empty brace
+behind a subscript initializes an array. A guarded statement that holds a body
+is laid out across lines whether or not the source wrote it on one, so `braces`
+puts it within them.
+
 A member chain that resumes under a call's closing marker and does not fit is
 broken at every member, each under that marker. Taken one scope at a time it
 would be broken only as far as it had to be, and end in a line of as many calls

@@ -592,6 +592,7 @@ namespace
 		bool fp_LayoutGroup(umint _iNode, umint _iIndent, bool _bBreakBefore = true);
 		void fp_LayoutElements(umint _iNode, umint _iIndent);
 		bool fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations, bool _bMustSplit = false);
+		bool fp_BreakAtAssign(umint _iFirst, umint _iOperator, umint _iIndent, umint _nContinuation);
 		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_FollowsScope(umint _iToken) const;
 		bool fp_IsFunctionQualifier(umint _iToken) const;
@@ -3489,6 +3490,35 @@ namespace
 			return;
 		}
 
+		// What an expression goes on with behind a lambda's body resumes under the body's
+		// closing brace: an operator or a member access and what it takes. It is laid out
+		// there like any other line, broken at its operators where it does not fit, and the
+		// terminator of a statement that has such a tail takes a line of its own.
+		auto fLayoutTail = [&]
+			{
+				if (!bLambdaBody || iBlock == TCLimitsInt<umint>::mc_Max || !fp_IsFirstOnLine(Nodes[iBlock].m_iFirstToken))
+					return;
+
+				auto iTail = fp_NextCode(Nodes[iBlock].m_iLastToken);
+				if (iTail < 0 || umint(iTail) >= Node.m_iLastToken || Tokens[umint(iTail)].m_Kind != ECodeTokenKind::mc_Punctuator)
+					return;
+
+				auto const &Tail = Tokens[umint(iTail)];
+				if (m_Tokens.f_IsText(Tail, "(") || m_Tokens.f_IsText(Tail, ")") || m_Tokens.f_IsText(Tail, ",") || m_Tokens.f_IsText(Tail, ";") || m_Tokens.f_IsText(Tail, "]"))
+					return;
+
+				bool bTerminated = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";");
+				auto iTailLast = bTerminated ? fp_PreviousCode(Node.m_iLastToken) : aint(Node.m_iLastToken);
+				if (iTailLast < iTail || !fp_IsRangeJoinable(_iNode, umint(iTail), umint(iTailLast)))
+					return;
+
+				fp_BreakBefore(umint(iTail), _iIndent + nTab);
+				fp_LayoutRange(_iNode, umint(iTail), umint(iTailLast), _iIndent + nTab, false, false);
+				if (bTerminated)
+					fp_BreakBefore(Node.m_iLastToken, _iIndent);
+			}
+		;
+
 		if (bFits)
 		{
 			fp_MarkInline(iDeclFirst, iHeadLast);
@@ -3499,6 +3529,7 @@ namespace
 			{
 				fp_PlaceBody(_iNode, iBlock, _iIndent, !bLambdaBody);
 				fp_LayoutNode(iBlock, _iIndent);
+				fLayoutTail();
 
 				// A lambda's terminator stands on a line of its own, at the statement's
 				// indentation, where a declaration's stays behind its closing brace: '};'.
@@ -3617,6 +3648,7 @@ namespace
 				fp_BreakBefore(iBrace, bLambdaBody ? _iIndent + nTab : _iIndent);
 
 			fp_LayoutNode(iBlock, _iIndent);
+			fLayoutTail();
 		}
 	}
 
@@ -3752,6 +3784,19 @@ namespace
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		if (fp_IsRangeJoinable(_iNode, _iFirst, _iLast))
 			return fp_FitsInline(_iFirst, _iLast, _iIndent);
+
+		// A block takes lines of its own wherever the source wrote it, so a range that
+		// holds one, a lambda's body above all, is laid out across lines whether or not
+		// the source has it on one.
+		for (auto iChild : m_Structure.f_GetNodes()[_iNode].m_Children)
+		{
+			auto const &Child = m_Structure.f_GetNodes()[iChild];
+			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken > _iLast)
+				continue;
+
+			if (Child.m_Kind == ECodeNodeKind::mc_Block || Child.m_bHasBlock)
+				return false;
+		}
 
 		for (auto i = _iFirst; i <= _iLast; ++i)
 		{
@@ -5210,6 +5255,45 @@ namespace
 		return bSplit;
 	}
 
+	// Starts the line of a statement's first operand with the '=' in front of it, where the
+	// value is broken at the operator at _iOperator, and says whether it did. The head and
+	// the operand then have their lines, and what is left is every operator behind them.
+	bool CFormattingAnalyzer::fp_BreakAtAssign(umint _iFirst, umint _iOperator, umint _iIndent, umint _nContinuation)
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		umint iAssign = TCLimitsInt<umint>::mc_Max;
+		for (umint i = _iOperator; i > _iFirst; --i)
+		{
+			if (m_TokenDepth[i] == m_TokenDepth[_iFirst] && m_Tokens.f_IsText(Tokens[i], "="))
+			{
+				iAssign = i;
+
+				break;
+			}
+		}
+
+		if (iAssign == TCLimitsInt<umint>::mc_Max)
+			return false;
+
+		auto iHeadEnd = fp_PreviousCode(iAssign);
+		auto iOperandEnd = fp_PreviousCode(_iOperator);
+		bool bMoves = iHeadEnd >= 0
+			&& umint(iHeadEnd) >= _iFirst
+			&& iOperandEnd > aint(iAssign)
+			&& fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iHeadEnd), iAssign) == ECodeSpacing::mc_Space
+			&& fp_FitsInline(_iFirst, umint(iHeadEnd), _iIndent)
+			&& fp_FitsInline(iAssign, umint(iOperandEnd), _nContinuation)
+		;
+		if (!bMoves)
+			return false;
+
+		fp_MarkInline(_iFirst, umint(iHeadEnd));
+		fp_BreakBefore(iAssign, _nContinuation);
+		fp_MarkInline(iAssign, umint(iOperandEnd));
+
+		return true;
+	}
+
 	// Lays a range out on as few levels as the column limit allows: the outermost breaks
 	// first, and a resulting line is only broken further when it is still too long.
 	bool CFormattingAnalyzer::fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations, bool _bMustSplit)
@@ -5321,6 +5405,10 @@ namespace
 				if (bSplitMembers && !bSplitSegment && fp_LayoutMembers(_iNode, iStart, iEnd, nSegmentIndent, nContinuation))
 					continue;
 
+				// The first stretch of a value cut at its operators ends its first operand.
+				if (!iCut && _bIndentContinuations && bCutAtOperator && !bSplitSegment && fp_BreakAtAssign(iStart, Cuts[0], _iIndent, nContinuation))
+					continue;
+
 				fp_LayoutRange(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iCut, _bIndentContinuations && !iCut, bSplitSegment);
 			}
 
@@ -5371,8 +5459,22 @@ namespace
 		for (umint i = bOperatorTrails ? 1 : 0; i < Operators.f_GetLen(); ++i)
 			fp_BreakBefore(Operators[i], nContinuation);
 
+		// A statement's value broken at its operators starts a line of its own with the
+		// '=', so that every operand stands under the one in front of it:
+		//   Value
+		//       = a
+		//       + b
+		// That holds where the first operand is a plain line. One that takes a lambda's body
+		// or has to be opened keeps the '=' on the head, 'auto Value = fg_Function' with its
+		// parenthesis below, and so does the key of a DSL spelling, which hugs its '='.
+		bool bAssignMoved = _bIndentContinuations && !bOperatorTrails && !bLeadsOpened && fp_BreakAtAssign(_iFirst, Operators[0], _iIndent, nContinuation);
+
 		for (umint iSegment = 0; iSegment <= Operators.f_GetLen(); ++iSegment)
 		{
+			// The head and the first operand have their lines already.
+			if (!iSegment && bAssignMoved)
+				continue;
+
 			auto iStart = iSegment ? Operators[iSegment - 1] : _iFirst;
 			auto iEnd = iSegment < Operators.f_GetLen() ? umint(fp_PreviousCode(Operators[iSegment])) : _iLast;
 			// An operator left on the previous line belongs to neither segment's own line.

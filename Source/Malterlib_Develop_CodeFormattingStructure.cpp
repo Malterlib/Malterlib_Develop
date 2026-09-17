@@ -397,6 +397,51 @@ namespace NMib::NDevelop
 			}
 		;
 		auto const &Tokens = mp_pTokens->f_GetTokens();
+
+		// A brace behind a lambda's introducer is its body whatever it holds, and an empty
+		// one holds nothing to tell it by. The introducer is a capture list, or that and a
+		// parameter list with 'mutable' or 'noexcept' behind it; a capture list is told
+		// from a subscript by standing where no operand is in front of it.
+		auto fOpens = [&](umint _iClose, ch8 const *_pOpen, ch8 const *_pClose) -> aint
+			{
+				umint nNested = 0;
+				for (auto i = aint(_iClose); i >= 0; --i)
+				{
+					auto const &Token = Tokens[mp_Significant[umint(i)]];
+					if (mp_pTokens->f_IsText(Token, _pClose))
+						++nNested;
+					else if (mp_pTokens->f_IsText(Token, _pOpen) && !--nNested)
+						return i;
+				}
+
+				return -1;
+			}
+		;
+		auto iBefore = aint(_iToken) - 1;
+		while (iBefore >= 0 && (mp_pTokens->f_IsText(Tokens[mp_Significant[umint(iBefore)]], "mutable") || mp_pTokens->f_IsText(Tokens[mp_Significant[umint(iBefore)]], "noexcept")))
+			--iBefore;
+
+		if (iBefore >= 0 && mp_pTokens->f_IsText(Tokens[mp_Significant[umint(iBefore)]], ")"))
+			iBefore = fOpens(umint(iBefore), "(", ")") - 1;
+
+		if (iBefore >= 0 && mp_pTokens->f_IsText(Tokens[mp_Significant[umint(iBefore)]], "]"))
+		{
+			auto iOpen = fOpens(umint(iBefore), "[", "]");
+			if (iOpen == 0)
+				return true;
+
+			if (iOpen > 0)
+			{
+				auto const &Front = Tokens[mp_Significant[umint(iOpen) - 1]];
+				bool bOperand = (Front.m_Kind == ECodeTokenKind::mc_Identifier && !mp_pTokens->f_IsText(Front, "return") && !mp_pTokens->f_IsText(Front, "co_return"))
+					|| mp_pTokens->f_IsText(Front, ")")
+					|| mp_pTokens->f_IsText(Front, "]")
+				;
+				if (!bOperand)
+					return true;
+			}
+		}
+
 		umint nDepth = 0;
 		for (auto i = _iToken; i < mp_Significant.f_GetLen(); ++i)
 		{

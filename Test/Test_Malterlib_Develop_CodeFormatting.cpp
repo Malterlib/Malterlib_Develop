@@ -255,7 +255,7 @@ namespace
 					// markers around it, and behind a DSL marker the same token is the tail of
 					// a spelling that hugs the key it follows.
 					fg_ExpectFormat("Assign", "void f()\n{\n\tint a=1;\n\tint b =2;\n}\n", "void f()\n{\n\tint a = 1;\n\tint b = 2;\n}\n");
-					fg_ExpectFormat("CaptureDefault", "void f()\n{\n\tauto g = [=]{};\n}\n", "void f()\n{\n\tauto g = [=]{};\n}\n");
+					fg_ExpectFormat("CaptureDefault", "void f()\n{\n\tauto g = [=]{};\n}\n", "void f()\n{\n\tauto g = [=]\n\t\t{\n\t\t}\n\t;\n}\n");
 					fg_ExpectFormat("FormattingDsl", "auto g_Option = \"Names\"_o= _o[\"--file\"];\n", "auto g_Option = \"Names\"_o= _o[\"--file\"];\n");
 					// A statement broken at its '=' is brought back together, and what then
 					// does not fit gives at its scopes, not in front of the name.
@@ -622,6 +622,18 @@ namespace
 				{
 					// A body opens on a line of its own, and its closing brace takes one too.
 					fg_ExpectFormat("EmptyBody", "void f(){}\n", "void f()\n{\n}\n");
+					// A brace behind a lambda's introducer is its body whatever it holds, where an
+					// empty one behind a subscript initializes an array. A guarded statement that
+					// holds a body is laid out across lines, and so stands within braces.
+					fg_ExpectFormat
+						(
+							"EmptyLambdaBody"
+							, "void f()\n{\n\tfg_X([]{});\n\tint a[3]{};\n\tauto p = new int[3]{};\n\tif (b)\n\t\ty = g_S / [] {};\n}\n"
+							, "void f()\n{\n\tfg_X\n\t\t(\n\t\t\t[]\n\t\t\t{\n\t\t\t}\n\t\t)\n\t;\n\tint a[3]{};\n\tauto p = new int[3]{};\n"
+								"\tif (b)\n\t{\n\t\ty = g_S / []\n\t\t\t{\n\t\t\t}\n\t\t;\n\t}\n}\n"
+							, false
+						)
+					;
 					fg_ExpectFormat("BodyAfterInitializer", "struct C\n{\n\tC(int _A)\n\t\t: m_A(_A){}\n};\n", "struct C\n{\n\tC(int _A)\n\t\t: m_A(_A)\n\t{\n\t}\n};\n");
 					fg_ExpectFormat("BraceOnHead", "void f() {\n\tg();\n}\n", "void f()\n{\n\tg();\n}\n");
 					fg_ExpectFormat("OneLine", "void f() { g(); }\n", "void f()\n{\n\tg();\n}\n");
@@ -1083,6 +1095,36 @@ namespace
 						}
 					;
 					fSplit("Call", "void f()\n{\n\tg(@, @, @);\n}\n", "void f()\n{\n\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t\t, @\n\t\t)\n\t;\n}\n");
+					// A value broken at its operators starts a line of its own with the '=', so
+					// that every operand stands under the one in front of it. One whose first
+					// operand has to be opened, or takes a lambda's body, keeps the '=' on the
+					// head, and what follows that body is laid out under its closing brace.
+					CStr Name;
+					for (umint i = 0; i < 60; ++i)
+						Name += "W";
+
+					fg_ExpectFormat
+						(
+							"Assign"
+							, CStr("void f()\n{\n\tauto Value = a_@ + b_@ + c_@ + d_@;\n\tauto Other = fg_Function(a_@, b_@, c_@) + d_@;\n}\n").f_Replace("@", Name)
+							, CStr
+								(
+									"void f()\n{\n\tauto Value\n\t\t= a_@\n\t\t+ b_@\n\t\t+ c_@\n\t\t+ d_@\n\t;\n"
+									"\tauto Other = fg_Function\n\t\t(\n\t\t\ta_@\n\t\t\t, b_@\n\t\t\t, c_@\n\t\t)\n\t\t+ d_@\n\t;\n}\n"
+								)
+								.f_Replace("@", Name)
+						)
+					;
+					fg_ExpectFormat
+						(
+							"AssignBody"
+							, CStr("void f()\n{\n\tauto Test = g_OnScopeExit / []\n\t\t{\n\t\t}\n\t\t% \"a_@\" % \"b_@\" % \"c_@\" % \"d_@\"\n\t;\n}\n").f_Replace("@", Name)
+							, CStr("void f()\n{\n\tauto Test = g_OnScopeExit / []\n\t\t{\n\t\t}\n\t\t% \"a_@\"\n\t\t% \"b_@\"\n\t\t% \"c_@\"\n\t\t% \"d_@\"\n\t;\n}\n")
+								.f_Replace("@", Name)
+						)
+					;
+					// A value written broken at its operators by the comments behind them is one too.
+					fg_ExpectFormat("AssignComment", "void f()\n{\n\tValue = x // Why\n\t\t+ y\n\t;\n}\n", "void f()\n{\n\tValue\n\t\t= x // Why\n\t\t+ y\n\t;\n}\n");
 					// A line the layout has already broken is broken again while it is still too
 					// long: the scopes inside it open in turn until every line of the result
 					// fits, whether the source wrote the construct on one line or split.
@@ -1205,7 +1247,8 @@ namespace
 						(
 							"OperatorAfterSharedCloser"
 							, "void f()\n{\n\tauto R = Left.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Start, Mid) + Right.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Mid, End);\n}\n"
-							, "void f()\n{\n\tauto R = Left.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Start, Mid)\n\t\t+ Right.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Mid, End)\n\t;\n}\n"
+							, "void f()\n{\n\tauto R\n\t\t= Left.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Start, Mid)\n"
+								"\t\t+ Right.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Mid, End)\n\t;\n}\n"
 						)
 					;
 					// An explicit instantiation moves its return type like any declaration: a
