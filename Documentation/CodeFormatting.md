@@ -302,7 +302,9 @@ noexcept`. A parameter list is a template
 header's, a lambda's, a catch clause's, a function's, or a function type's:
 directly inside a template argument list a parenthesis behind a type, which
 ends in a template argument list of its own or in a name written apart from the
-parenthesis, as in `TCFunction<void (CFoo &&_Value)>`. A function's
+parenthesis, as in `TCFunction<void (CFoo &&_Value)>`. `decltype` and its
+operand name a type wherever one can stand, `decltype(auto) fg_Get(tf_C &&_A)`.
+A function's
 parenthesis is its parameter list when a specifier or a type stands in front of
 the name, as C++ reads it, and behind a bare name only when a body, an
 initializer list, a qualifier, or a defaulted or deleted definition follows. A

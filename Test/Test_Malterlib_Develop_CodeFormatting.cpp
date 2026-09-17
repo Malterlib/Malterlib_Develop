@@ -304,6 +304,16 @@ namespace
 							, "TCFunction<void (CFoo &&_A)> g_A;\nTCFunctor<TCFuture<void> (CStr &&_B, int *_p)> g_B;\nconstexpr bool gc_C = TCFoo<fg_F(a && b)>::mc_Value;\n"
 						)
 					;
+					// 'decltype' and its operand name a type: what a parenthesis behind the name
+					// holds is declared, and a declarator behind the operand is one too. As an
+					// expression's own the same keyword declares nothing.
+					fg_ExpectFormat
+						(
+							"Decltype"
+							, "decltype(auto) fg_A(tf_C && _A);\ndecltype(g_A) & fg_B(int * _p);\nvoid f()\n{\n\tauto x = decltype(a)(b && c);\n}\n"
+							, "decltype(auto) fg_A(tf_C &&_A);\ndecltype(g_A) &fg_B(int *_p);\nvoid f()\n{\n\tauto x = decltype(a)(b && c);\n}\n"
+						)
+					;
 					// A ref-qualifier declares nothing, so what follows it is the rest of the
 					// declaration rather than a name, and stands apart from it.
 					fg_ExpectFormat

@@ -1006,13 +1006,17 @@ namespace
 				auto const &Child = Nodes[iChild];
 				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
 				{
-					// A requires clause stands between a template header and the declaration.
+					// A requires clause stands between a template header and the declaration,
+					// and 'decltype' with its operand names a type: 'decltype(auto) fg_Get()'.
 					auto iBeforeChild = fg_PreviousCode(_Tokens, Child.m_iFirstToken);
-					bool bRequires = Child.m_Bracket == ECodeBracket::mc_Paren && iBeforeChild >= 0 && _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "requires");
-					if (Child.m_Kind != ECodeNodeKind::mc_Group || (Child.m_Bracket != ECodeBracket::mc_Angle && Child.m_Bracket != ECodeBracket::mc_Square && !bRequires))
+					bool bParen = Child.m_Bracket == ECodeBracket::mc_Paren && iBeforeChild >= 0;
+					bool bRequires = bParen && _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "requires");
+					bool bDecltype = bParen && _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "decltype");
+					bool bTypePart = Child.m_Bracket == ECodeBracket::mc_Angle || Child.m_Bracket == ECodeBracket::mc_Square || bRequires || bDecltype;
+					if (Child.m_Kind != ECodeNodeKind::mc_Group || !bTypePart)
 						return false;
 
-					bSpelled |= Child.m_Bracket == ECodeBracket::mc_Angle;
+					bSpelled |= Child.m_Bracket == ECodeBracket::mc_Angle || bDecltype;
 					bNested = true;
 					i = Child.m_iLastToken;
 
@@ -1025,7 +1029,7 @@ namespace
 
 			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
 			{
-				if (fg_IsAnyText(_Tokens, Token, gc_pExpressionKeywords))
+				if (fg_IsAnyText(_Tokens, Token, gc_pExpressionKeywords) && !_Tokens.f_IsText(Token, "decltype"))
 					return false;
 			}
 			else if (!fg_IsDeclaratorText(_Tokens, Token) && !_Tokens.f_IsText(Token, "::") && !_Tokens.f_IsText(Token, "~"))
@@ -1573,6 +1577,21 @@ namespace NMib::NDevelop
 			return !_Tokens.f_IsText(Previous, "&&") && fg_IsDeclaratorToken(_Tokens, _Structure, umint(iPrevious));
 
 		bool bBehindTemplate = _Structure.f_IsAngleBracket(umint(iPrevious)) && _Tokens.f_IsText(Previous, ">");
+		// 'decltype' and its operand name a type the way a template argument list ends one.
+		if (_Tokens.f_IsText(Previous, ")"))
+		{
+			for (auto const &Node : _Structure.f_GetNodes())
+			{
+				if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_iLastToken != umint(iPrevious))
+					continue;
+
+				auto iKeyword = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+				bBehindTemplate = iKeyword >= 0 && _Tokens.f_IsText(Tokens[umint(iKeyword)], "decltype");
+
+				break;
+			}
+		}
+
 		if (!bBehindTemplate && Previous.m_Kind != ECodeTokenKind::mc_Identifier)
 			return false;
 
