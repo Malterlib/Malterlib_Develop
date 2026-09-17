@@ -1159,6 +1159,23 @@ namespace
 		if (_Tokens.f_IsText(Tokens[umint(iName)], "]") && fg_NameSubscriptOperator(_Tokens, umint(iName)) < 0)
 			return fg_IsCaptureList(_Tokens, _Structure, umint(iName));
 
+		// A lambda's own template parameter list stands between its capture list and its
+		// parameters: '[&]<typename ...tfp_C>(tfp_C ...p_Params)'.
+		if (_Structure.f_IsAngleBracket(umint(iName)) && _Tokens.f_IsText(Tokens[umint(iName)], ">"))
+		{
+			for (auto const &Node : Nodes)
+			{
+				if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != umint(iName))
+					continue;
+
+				auto iCapture = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+				if (iCapture >= 0 && _Tokens.f_IsText(Tokens[umint(iCapture)], "]") && fg_NameSubscriptOperator(_Tokens, umint(iCapture)) < 0)
+					return fg_IsCaptureList(_Tokens, _Structure, umint(iCapture));
+
+				break;
+			}
+		}
+
 		// A function's parameter list is the first parenthesis of its statement; the ones
 		// after it belong to a constructor's initializers or to expressions.
 		auto const &Parent = Nodes[Group.m_iParent];

@@ -480,6 +480,15 @@ namespace
 					// macro hugs the separators around it.
 					fg_ExpectFormat("Header", "template < typename t_C >\nvoid fg_F();\n", "template <typename t_C>\nvoid fg_F();\n");
 					fg_ExpectFormat("TrailingArrow", "auto fg_F(int _A)->int\n{\n}\n", "auto fg_F(int _A) -> int\n{\n}\n");
+					// So is a lambda's, wherever the lambda stands and whether or not a template
+					// parameter list of its own stands between its capture list and its parameters.
+					fg_ExpectFormat
+						(
+							"LambdaArrow"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[&]<typename ...tfp_C>(tfp_C ...p_P) mutable->int\n\t\t\t{\n\t\t\t\treturn 0;\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[&]<typename ...tfp_C>(tfp_C ...p_P) mutable -> int\n\t\t\t{\n\t\t\t\treturn 0;\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// An operator function's arrow is one too, whatever names it: a keyword an
 					// expression uses, or a literal's suffix. Its parameter list is one wherever
 					// the function is declared, which is what the arrow behind it follows.
