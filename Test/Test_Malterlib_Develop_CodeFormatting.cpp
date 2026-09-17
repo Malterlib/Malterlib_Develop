@@ -1424,10 +1424,19 @@ namespace
 					CStr Pointer = "template TCCounter<TCOnScopeExit<TCFunction<void ()> >, false, 0> *\n"
 						"TCConstruct<TCCounter<@>, TCFunction<void ()> >::f_Create<TCCounter<@>, CAllocator &>(CAllocator &);\n"
 					;
-					CStr PointerResult = "template auto TCConstruct<TCCounter<@>, TCFunction<void ()>>::f_Create\n\t<\n\t\tTCCounter<@>\n\t\t, CAllocator &\n\t>\n\t(CAllocator &)\n"
+					// The qualification gives before the name's own argument list does, so the
+					// class it names stays whole and '::f_Create' takes the line below it.
+					CStr PointerResult = "template auto TCConstruct<TCCounter<@>, TCFunction<void ()>>\n\t::f_Create<TCCounter<@>, CAllocator &>(CAllocator &)\n"
 						"\t-> TCCounter<TCOnScopeExit<TCFunction<void ()>>, false, 0> *\n;\n"
 					;
 					fg_ExpectFormat("ExplicitInstantiation", Pointer.f_Replace("@", Wide), PointerResult.f_Replace("@", Wide), false);
+					// Where one qualification is not enough to settle the head, the class's
+					// arguments are opened after all, and the qualification follows them.
+					CStr Deep = "template auto NMib::TCConstruct<TCCounter<@>, TCFunction<@>>::f_Create<TCCounter<@>, CAllocator &>(CAllocator &) -> TCCounter<@> *;\n";
+					CStr DeepResult = "template auto NMib::TCConstruct\n\t<\n\t\tTCCounter<@>\n\t\t, TCFunction<@>\n\t>\n"
+						"\t::f_Create<TCCounter<@>, CAllocator &>(CAllocator &)\n\t-> TCCounter<@> *\n;\n"
+					;
+					fg_ExpectFormat("QualifiedInstantiation", Deep.f_Replace("@", Wide), DeepResult.f_Replace("@", Wide));
 					fg_ExpectFormat("SpacedClosers", "TCMap<CStr, TCVector<CStr> > g_Map;\n", "TCMap<CStr, TCVector<CStr>> g_Map;\n");
 					// A macro written on a line of its own inside a list stands next to a name,
 					// which the standard does not settle, so the list keeps its lines.

@@ -362,9 +362,9 @@ further only while it is still too long:
    lines of their own and every element stands on one, laid out the same way.
    What follows the closing marker resumes under it. A function's qualifiers
    and its pure specifier stay behind the closing parenthesis where they fit.
-4. A name that is still too long with its parameter list opened opens its own
-   template argument list, and after that breaks at its member accesses, all
-   at once.
+4. A name that is still too long with its parameter list opened breaks at its
+   qualification, then opens its own template argument list, and after that
+   breaks at its member accesses, all at once.
 
 A declaration whose name does not fit in front of its parameter list first has
 its return type moved behind that list, as `auto ... -> Type`, when the
@@ -481,6 +481,15 @@ The template arguments of a class that a name is qualified with stand in front
 of that name, and are the last to give for the same reason a return type is:
 `template auto TCActor<CManager>::f_InternalCallActor` keeps its qualification
 whole and opens the arguments of `f_InternalCallActor` below it.
+
+A name that does not fit even with its parameter list opened gives at its
+qualification before it gives those arguments, which keeps the class whole and
+puts what it qualifies on the line below it, as in
+`TCSection<TCCommandLineSpecification<CFoo>>` with `::CSection::f_Register`
+under it. The break taken is the last `::` that leaves what stands in front of
+it on the line, and only one is taken: a head that needs a second has more in
+it than a name, and opens the arguments after all, which is what an explicit
+instantiation whose arguments fill a line of their own does.
 
 A named cast's parenthesis belongs to the head the way a C cast's does, since
 what it yields is what the rest of the expression is written on. It stays closed

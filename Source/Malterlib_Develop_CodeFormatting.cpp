@@ -604,6 +604,7 @@ namespace
 		bool fp_IsNamedCast(umint _iOpen) const;
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent, bool _bMustSplit = false);
 		bool fp_LayoutMembers(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
+		bool fp_BreakAtQualification(umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
 		bool fp_LayoutHead(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
 		void fp_FindLooseOperators(umint _iFirst, umint _iLast, NContainer::TCVector<umint> &o_Operators) const;
 		void fp_PrepareTokenDepth();
@@ -5064,10 +5065,55 @@ namespace
 		return true;
 	}
 
+	// A qualified name is written across lines at its qualification: the scope it names
+	// stays whole and the line breaks in front of the '::' that follows it, which is where
+	// the sources break one, 'TCFoo<CBar>' with '::f_Function' below it. One break is all
+	// this is: a head that needs more of them has more in it than a name, and gives at its
+	// scopes instead, as an explicit instantiation does whose arguments fill a line by
+	// themselves. The break taken is the last one that leaves what stands in front of it on
+	// the line, since the lines are filled from the range's start.
+	bool CFormattingAnalyzer::fp_BreakAtQualification(umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation)
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto nLevel = m_TokenDepth[_iFirst];
+		umint iBreak = 0;
+		for (umint i = _iFirst + 1; i <= _iLast; ++i)
+		{
+			if (m_TokenDepth[i] != nLevel || !m_Tokens.f_IsText(Tokens[i], "::"))
+				continue;
+
+			// What the qualification names has to stand in front of it: a leading '::' names
+			// the global scope and carries nothing to leave on the line.
+			auto iBefore = fp_PreviousCode(i);
+			if (iBefore < 0 || umint(iBefore) < _iFirst)
+				continue;
+
+			auto const &Before = Tokens[umint(iBefore)];
+			bool bScope = Before.m_Kind == ECodeTokenKind::mc_Identifier
+				|| (m_Structure.f_IsAngleBracket(umint(iBefore)) && m_Tokens.f_IsText(Before, ">"))
+			;
+			if (bScope && fp_FitsInline(_iFirst, umint(iBefore), _iIndent) && fp_FitsInline(i, _iLast, _nContinuation))
+				iBreak = i;
+		}
+
+		if (!iBreak)
+			return false;
+
+		fp_MarkInline(_iFirst, umint(fp_PreviousCode(iBreak)));
+		fp_BreakBefore(iBreak, _nContinuation);
+		fp_MarkInline(iBreak, _iLast);
+
+		return true;
+	}
+
 	// A name too long for its line even with its parameter list opened can only give at its
 	// own scopes: the template argument list it carries, and after that its member accesses.
+	// Its qualification gives first, since the scope it names stays whole that way.
 	bool CFormattingAnalyzer::fp_LayoutHead(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation)
 	{
+		if (fp_BreakAtQualification(_iFirst, _iLast, _iIndent, _nContinuation))
+			return true;
+
 		auto iFirstParen = m_iSplitFirstParen;
 		m_iSplitFirstParen = 0;
 		bool bSplit = fp_LayoutScopes(_iNode, _iFirst, _iLast, _iIndent, false, _nContinuation != _iIndent);
