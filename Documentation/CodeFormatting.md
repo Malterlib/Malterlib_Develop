@@ -460,7 +460,8 @@ stand under and no continuation level, like one that opens with a parenthesis:
 its body stands where the statement does, and what it is called with under the
 brace, written as the source has it, `}();` or `(CParams());` on a line of its
 own. An attribute macro may
-stand between a capture list and the parameters, `[&] mark_nodebug (int _A)`,
+stand between a capture list and the parameters, apart from both,
+`[&] mark_nodebug (int _A)`,
 and the lambda is one all the same: its body opens one level in, and its
 parenthesis holds parameters. A brace behind a lambda's introducer is that lambda's body whatever it holds, an
 empty one included, which the source has nothing else to tell by; an empty brace

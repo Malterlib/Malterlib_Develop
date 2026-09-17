@@ -1927,8 +1927,8 @@ namespace NMib::NDevelop
 					return ECodeSpacing::mc_Space;
 			}
 
-			// A bare name behind a capture list, such as an attribute macro, is written both
-			// ways in front of the parameter list.
+			// A bare name behind a capture list, such as an attribute macro, stands apart from
+			// the parameter list behind it: '[&] mark_nodebug (int _Value)'.
 			if (Left.m_Kind == ECodeTokenKind::mc_Identifier)
 			{
 				auto iBeforeName = fg_PreviousCode(_Tokens, _iLeft);
@@ -1946,7 +1946,7 @@ namespace NMib::NDevelop
 				}
 
 				if (iBeforeName >= 0 && _Tokens.f_IsText(Tokens[umint(iBeforeName)], "]") && fg_IsCaptureList(_Tokens, _Structure, umint(iBeforeName)))
-					return ECodeSpacing::mc_Preserve;
+					return ECodeSpacing::mc_Space;
 			}
 
 			// Directly inside a template argument list a name in front of a parameter list

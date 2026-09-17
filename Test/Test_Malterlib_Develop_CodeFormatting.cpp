@@ -820,7 +820,8 @@ namespace
 						)
 					;
 					// An attribute macro may stand between a lambda's capture list and its
-					// parameters, and the body is still a lambda's: one level in. The arguments an
+					// parameters, apart from both, and the introducer comes back onto one line where
+					// it fits. The body is still a lambda's: one level in. The arguments an
 					// inner lambda is called with at once stand under its closing brace, and they
 					// and the terminator follow the body wherever it moves.
 					fg_ExpectFormat
@@ -828,7 +829,7 @@ namespace
 							"AttributeMacro"
 							, "void f()\n{\n\tx =\n\t\t[\n\t\t\tpA\n\t\t] mark_nodebug\n\t\t() mutable -> int\n\t{\n\t\treturn [&] mark_nodebug (int _A) -> int\n\t\t\t{\n"
 								"\t\t\t\treturn _A;\n\t\t\t}\n\t\t\t\t(5)\n\t\t\t;\n\t}\n\t;\n}\n"
-							, "void f()\n{\n\tx =\n\t\t[\n\t\t\tpA\n\t\t] mark_nodebug\n\t\t() mutable -> int\n\t\t{\n\t\t\treturn [&] mark_nodebug (int _A) -> int\n\t\t\t\t{\n"
+							, "void f()\n{\n\tx = [pA] mark_nodebug () mutable -> int\n\t\t{\n\t\t\treturn [&] mark_nodebug (int _A) -> int\n\t\t\t\t{\n"
 								"\t\t\t\t\treturn _A;\n\t\t\t\t}\n\t\t\t\t(5)\n\t\t\t;\n\t\t}\n\t;\n}\n"
 						)
 					;
