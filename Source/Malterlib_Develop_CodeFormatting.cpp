@@ -3572,7 +3572,8 @@ namespace
 		}
 
 		// What an expression goes on with behind a lambda's body resumes under the body's
-		// closing brace: an operator or a member access and what it takes. It is laid out
+		// closing brace: an operator or a member access and what it takes, or the arguments
+		// the lambda is called with at once. It is laid out
 		// there like any other line, broken at its operators where it does not fit, and the
 		// terminator of a statement that has such a tail takes a line of its own.
 		auto fLayoutTail = [&]
@@ -3585,7 +3586,12 @@ namespace
 					return;
 
 				auto const &Tail = Tokens[umint(iTail)];
-				if (m_Tokens.f_IsText(Tail, "(") || m_Tokens.f_IsText(Tail, ")") || m_Tokens.f_IsText(Tail, ",") || m_Tokens.f_IsText(Tail, ";") || m_Tokens.f_IsText(Tail, "]"))
+				if (m_Tokens.f_IsText(Tail, ")") || m_Tokens.f_IsText(Tail, ",") || m_Tokens.f_IsText(Tail, ";") || m_Tokens.f_IsText(Tail, "]"))
+					return;
+
+				// A statement that is nothing but a lambda called at once has no head for the
+				// call to stand under, and keeps the call where the source wrote it: '}();'.
+				if (m_Tokens.f_IsText(Tail, "(") && m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "["))
 					return;
 
 				bool bTerminated = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";");
@@ -4865,7 +4871,11 @@ namespace
 		if (!fg_IsCaptureList(m_Tokens, m_Structure, _iToken))
 			return false;
 
+		// A bare name behind the list, such as an attribute macro, stands between it and
+		// the parameter list or the body: '[&] mark_no_coroutine_debug () mutable'.
 		auto iAfter = fp_NextCode(_iToken);
+		if (iAfter >= 0 && Tokens[umint(iAfter)].m_Kind == ECodeTokenKind::mc_Identifier && !m_Tokens.f_IsText(Tokens[umint(iAfter)], "mutable"))
+			iAfter = fp_NextCode(umint(iAfter));
 
 		return iAfter >= 0
 			&& (m_Tokens.f_IsText(Tokens[umint(iAfter)], "(") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "{") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "<"))

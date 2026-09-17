@@ -1159,18 +1159,38 @@ namespace
 		if (_Tokens.f_IsText(Tokens[umint(iName)], "]") && fg_NameSubscriptOperator(_Tokens, umint(iName)) < 0)
 			return fg_IsCaptureList(_Tokens, _Structure, umint(iName));
 
+		// A bare name behind a lambda's capture list or template parameter list, such as an
+		// attribute macro, stands in front of its parameters: '[&] mark_nodebug (int _A)'.
+		auto iIntroducer = iName;
+		if (Tokens[umint(iName)].m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Tokens[umint(iName)], gc_pExpressionKeywords))
+		{
+			auto iBehind = fg_PreviousCode(_Tokens, umint(iName));
+			bool bBehindList = iBehind >= 0
+				&& (_Tokens.f_IsText(Tokens[umint(iBehind)], "]") || (_Structure.f_IsAngleBracket(umint(iBehind)) && _Tokens.f_IsText(Tokens[umint(iBehind)], ">")))
+			;
+			if (bBehindList)
+				iIntroducer = iBehind;
+		}
+
+		if (iIntroducer != iName && _Tokens.f_IsText(Tokens[umint(iIntroducer)], "]") && fg_NameSubscriptOperator(_Tokens, umint(iIntroducer)) < 0)
+		{
+			if (fg_IsCaptureList(_Tokens, _Structure, umint(iIntroducer)))
+				return true;
+		}
+
 		// A lambda's own template parameter list stands between its capture list and its
 		// parameters: '[&]<typename ...tfp_C>(tfp_C ...p_Params)'.
-		if (_Structure.f_IsAngleBracket(umint(iName)) && _Tokens.f_IsText(Tokens[umint(iName)], ">"))
+		if (_Structure.f_IsAngleBracket(umint(iIntroducer)) && _Tokens.f_IsText(Tokens[umint(iIntroducer)], ">"))
 		{
 			for (auto const &Node : Nodes)
 			{
-				if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != umint(iName))
+				if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != umint(iIntroducer))
 					continue;
 
 				auto iCapture = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
-				if (iCapture >= 0 && _Tokens.f_IsText(Tokens[umint(iCapture)], "]") && fg_NameSubscriptOperator(_Tokens, umint(iCapture)) < 0)
-					return fg_IsCaptureList(_Tokens, _Structure, umint(iCapture));
+				bool bCaptures = iCapture >= 0 && _Tokens.f_IsText(Tokens[umint(iCapture)], "]") && fg_NameSubscriptOperator(_Tokens, umint(iCapture)) < 0;
+				if (bCaptures && fg_IsCaptureList(_Tokens, _Structure, umint(iCapture)))
+					return true;
 
 				break;
 			}

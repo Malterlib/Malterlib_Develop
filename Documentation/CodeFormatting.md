@@ -451,10 +451,15 @@ above them. Only then is the type in front of the name opened. Everywhere
 else the `=` is never a place to break: a statement the source broke there is
 brought back onto its head.
 
-What an expression goes on with behind a lambda's body, an operator or a member
-access, resumes under the body's closing brace, is broken there at its operators
+What an expression goes on with behind a lambda's body, an operator, a member
+access, or the arguments the lambda is called with at once, resumes under the
+body's closing brace, is broken there at its operators
 where it does not fit, and gives the statement's terminator a line of its own.
-A brace behind a lambda's introducer is that lambda's body whatever it holds, an
+A statement that is nothing but a lambda called at once has no head for
+the call to stand under and keeps it as written, `}();`. An attribute macro may
+stand between a capture list and the parameters, `[&] mark_nodebug (int _A)`,
+and the lambda is one all the same: its body opens one level in, and its
+parenthesis holds parameters. A brace behind a lambda's introducer is that lambda's body whatever it holds, an
 empty one included, which the source has nothing else to tell by; an empty brace
 behind a subscript initializes an array. A guarded statement that holds a body
 is laid out across lines whether or not the source wrote it on one, so `braces`

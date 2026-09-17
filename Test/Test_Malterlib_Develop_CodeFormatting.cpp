@@ -819,6 +819,23 @@ namespace
 							, "void f()\n{\n\tm_Promise.f_Future() > [P](CResult &&_R)\n\t\t{\n\t\t\tP.f_Set(fg_Move(_R));\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// An attribute macro may stand between a lambda's capture list and its
+					// parameters, and the body is still a lambda's: one level in. The arguments an
+					// inner lambda is called with at once stand under its closing brace, and they
+					// and the terminator follow the body wherever it moves.
+					fg_ExpectFormat
+						(
+							"AttributeMacro"
+							, "void f()\n{\n\tx =\n\t\t[\n\t\t\tpA\n\t\t] mark_nodebug\n\t\t() mutable -> int\n\t{\n\t\treturn [&] mark_nodebug (int _A) -> int\n\t\t\t{\n"
+								"\t\t\t\treturn _A;\n\t\t\t}\n\t\t\t\t(5)\n\t\t\t;\n\t}\n\t;\n}\n"
+							, "void f()\n{\n\tx =\n\t\t[\n\t\t\tpA\n\t\t] mark_nodebug\n\t\t() mutable -> int\n\t\t{\n\t\t\treturn [&] mark_nodebug (int _A) -> int\n\t\t\t\t{\n"
+								"\t\t\t\t\treturn _A;\n\t\t\t\t}\n\t\t\t\t(5)\n\t\t\t;\n\t\t}\n\t;\n}\n"
+						)
+					;
+					// A statement that is nothing but a lambda called at once keeps the call where
+					// the source wrote it.
+					CStr Called = "void f()\n{\n\t[&]() inline_never\n\t\t{\n\t\t\tg();\n\t\t}();\n}\n";
+					fg_ExpectFormat("CalledAtOnce", Called, Called);
 					// A subscript operator's name ends in brackets of its own, which name a
 					// declaration and no lambda: its body opens at the statement's level.
 					CStr Subscript = "auto C::operator [] (int &&_Key) -> int\n{\n\treturn 0;\n}\n";
