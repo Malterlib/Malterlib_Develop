@@ -5343,7 +5343,23 @@ namespace
 
 		// A statement's continuation is indented past its own start; an element of a group
 		// already sits at the group's content indentation and its continuation aligns there.
-		auto nContinuation = _bIndentContinuations ? _iIndent + nTab : _iIndent;
+		// So does what follows a parenthesis the range opens with, once that parenthesis is
+		// opened: its closing marker stands at the range's own level, and the operator
+		// behind it under that marker.
+		bool bLeadsOpened = false;
+		if (_bIndentContinuations && m_Tokens.f_IsText(Tokens[_iFirst], "("))
+		{
+			for (auto iChild : Nodes[_iNode].m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_iFirstToken != _iFirst || Child.m_iLastToken >= Operators[0])
+					continue;
+
+				bLeadsOpened = Child.m_bHasBlock || !fp_FitsInline(_iFirst, Child.m_iLastToken, _iIndent);
+			}
+		}
+
+		auto nContinuation = _bIndentContinuations && !bLeadsOpened ? _iIndent + nTab : _iIndent;
 		m_bOperatorSplit |= _bIndentContinuations;
 		// A lambda is written behind the operator that takes it, so that operator stays on
 		// the line its left hand side ends: 'g_Dispatch /' with the lambda below it. Only

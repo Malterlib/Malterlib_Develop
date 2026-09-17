@@ -969,6 +969,18 @@ namespace
 								.f_Replace("@", Broken.f_Left(Broken.f_GetLen() - 1) + ";\n")
 						)
 					;
+					// An operator behind an opened leading parenthesis stands under its closing
+					// marker, since the statement has no continuation level; behind a named
+					// call's it stands under that marker too, which is one level in.
+					fg_ExpectFormat
+						(
+							"LeadingParenOperator"
+							, "void f()\n{\n\t(\n\t\tg_D / [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t)\n\t\t> g_Discard;\n"
+								"\tfg_X\n\t\t(\n\t\t\tg_D / [&]\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t)\n\t\t\t> g_Discard;\n}\n"
+							, "void f()\n{\n\t(\n\t\tg_D / [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t)\n\t> g_Discard;\n"
+								"\tfg_X\n\t\t(\n\t\t\tg_D / [&]\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t)\n\t\t> g_Discard\n\t;\n}\n"
+						)
+					;
 					// A statement split at the parenthesis it opens with has no continuation
 					// level, so its terminator ends its last line rather than standing among its
 					// lines as one more of them. One that only starts with a parenthesis has.

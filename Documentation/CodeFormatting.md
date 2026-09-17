@@ -417,7 +417,8 @@ statement's terminator taking a line of its own. Its lines have no continuation
 level and stand where the statement does, so a terminator on a line of its own
 would stand among them as one more of them; it ends the last line instead, as
 in `.f_CallSync();` under the closing parenthesis, and as the `);` of a fold
-expression does. A statement that merely starts with a parenthesis, such as
+expression does. An operator behind the opened parenthesis stands under its closing
+marker for the same reason, `> g_DiscardResult;`. A statement that merely starts with a parenthesis, such as
 `(*fLocked)() > [&]` with its lambda below it, has a continuation level and
 keeps the terminator on its own line.
 
