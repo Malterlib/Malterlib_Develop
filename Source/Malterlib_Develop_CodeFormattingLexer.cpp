@@ -285,14 +285,14 @@ namespace
 
 	bool fg_LexPunctuator(CLexerCursor &_Cursor)
 	{
-		static ch8 const *const gsc_pPunctuators[] =
+		constexpr ch8 const *c_pPunctuators[] =
 			{
 				"<<=", ">>=", "...", "<=>", "->*"
 				, "::", "->", "++", "--", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||"
 				, "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "##", ".*"
 			}
 		;
-		for (auto pPunctuator : gsc_pPunctuators)
+		for (auto pPunctuator : c_pPunctuators)
 		{
 			umint nLength = 0;
 			while (pPunctuator[nLength])
@@ -310,8 +310,8 @@ namespace
 			}
 		}
 
-		static ch8 const gsc_Single[] = "{}[]()<>:;.?*+-/%^&|~!=,#\\@`";
-		for (auto pSingle = gsc_Single; *pSingle; ++pSingle)
+		constexpr ch8 c_Single[] = "{}[]()<>:;.?*+-/%^&|~!=,#\\@`";
+		for (auto pSingle = c_Single; *pSingle; ++pSingle)
 		{
 			if (_Cursor.f_Peek() == *pSingle)
 			{

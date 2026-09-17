@@ -390,7 +390,7 @@ namespace NMib::NDevelop
 	// instead of a terminator: 'mutable { for (auto &Entry : Entries) { ... } }'.
 	bool CCodeStructure::fp_IsBlockBrace(umint _iToken) const
 	{
-		static ch8 const *const gsc_pStatementKeywords[] =
+		constexpr ch8 const *c_pStatementKeywords[] =
 			{
 				"if", "else", "for", "while", "do", "switch", "try", "catch"
 				, "return", "co_return", "break", "continue", "goto", "case", "default"
@@ -451,7 +451,7 @@ namespace NMib::NDevelop
 				if (nDepth != 1)
 					continue;
 
-				for (auto pKeyword : gsc_pStatementKeywords)
+				for (auto pKeyword : c_pStatementKeywords)
 				{
 					if (mp_pTokens->f_IsText(Token, pKeyword))
 						return true;
@@ -1408,12 +1408,12 @@ namespace
 		}
 
 		auto const &After = Tokens[umint(iAfter)];
-		static ch8 const *const gsc_pFunctionTails[] =
+		constexpr ch8 const *c_pFunctionTails[] =
 			{
 				"{", "const", "volatile", "noexcept", "override", "final", "mutable", "requires"
 			}
 		;
-		if (fg_IsAnyText(_Tokens, After, gsc_pFunctionTails))
+		if (fg_IsAnyText(_Tokens, After, c_pFunctionTails))
 			return true;
 
 		if (_Tokens.f_IsText(After, ":"))
@@ -1447,13 +1447,13 @@ namespace
 
 		auto const &Statement = Nodes[iNode];
 		auto const &First = Tokens[Statement.m_iFirstToken];
-		static ch8 const *const gsc_pOther[] =
+		constexpr ch8 const *c_pOther[] =
 			{
 				"case", "default", "public", "private", "protected", "struct", "class", "union", "enum"
 				, "namespace", "template", "using", "friend", "operator"
 			}
 		;
-		if (fg_IsAnyText(_Tokens, First, gsc_pOther) || fg_IsAnyText(_Tokens, First, gc_pExpressionKeywords))
+		if (fg_IsAnyText(_Tokens, First, c_pOther) || fg_IsAnyText(_Tokens, First, gc_pExpressionKeywords))
 			return false;
 
 		auto iName = fg_PreviousCode(_Tokens, _iColon);
@@ -1529,12 +1529,12 @@ namespace
 		if (Token.m_Kind != ECodeTokenKind::mc_Punctuator || _Structure.f_IsAngleBracket(_iToken))
 			return false;
 
-		static ch8 const *const gsc_pOperators[] =
+		constexpr ch8 const *c_pOperators[] =
 			{
 				"*", "/", "%", "+", "-", "<<", ">>", "<", ">", "<=", ">=", "<=>", "==", "!=", "&", "^", "|", "&&", "||"
 			}
 		;
-		if (!fg_IsAnyText(_Tokens, Token, gsc_pOperators))
+		if (!fg_IsAnyText(_Tokens, Token, c_pOperators))
 			return false;
 
 		auto iBefore = fg_PreviousCode(_Tokens, _iToken);
@@ -1559,12 +1559,12 @@ namespace
 			return false;
 
 		auto const &After = Tokens[umint(iAfter)];
-		static ch8 const *const gsc_pCloses[] =
+		constexpr ch8 const *c_pCloses[] =
 			{
 				")", "]", "}", ",", ";", "..."
 			}
 		;
-		if (fg_IsAnyText(_Tokens, After, gsc_pCloses))
+		if (fg_IsAnyText(_Tokens, After, c_pCloses))
 			return false;
 
 		if (!fg_IsDeclaratorText(_Tokens, Token))
@@ -1575,12 +1575,12 @@ namespace
 
 		// What follows a ref-qualifier is the rest of the declaration: the trailing return
 		// type, the body, a pure specifier, a requires clause or another qualifier.
-		static ch8 const *const gsc_pTails[] =
+		constexpr ch8 const *c_pTails[] =
 			{
 				"->", "{", "=", "requires", "const", "volatile", "noexcept", "override", "final", "&", "&&"
 			}
 		;
-		if (fg_IsAnyText(_Tokens, After, gsc_pTails))
+		if (fg_IsAnyText(_Tokens, After, c_pTails))
 			return false;
 
 		// What is left is the spelling C++ itself cannot tell apart, 'C(CStr &_A)' against
@@ -1598,7 +1598,7 @@ namespace
 		// which names a type: 'decltype(m_Value) *pValue'.
 		if (_Tokens.f_IsText(Before, ")") || _Tokens.f_IsText(Before, "]"))
 		{
-			static ch8 const *const gsc_pValueOperators[] =
+			constexpr ch8 const *c_pValueOperators[] =
 				{
 					"sizeof", "alignof", "typeid", "noexcept"
 				}
@@ -1614,7 +1614,7 @@ namespace
 
 				auto const &Name = Tokens[umint(iName)];
 				if (Name.m_Kind == ECodeTokenKind::mc_Identifier)
-					return !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords) || fg_IsAnyText(_Tokens, Name, gsc_pValueOperators);
+					return !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords) || fg_IsAnyText(_Tokens, Name, c_pValueOperators);
 
 				return _Tokens.f_IsText(Name, ")") || _Tokens.f_IsText(Name, "]");
 			}
@@ -1711,13 +1711,13 @@ namespace NMib::NDevelop
 		if (!_Tokens.f_IsText(Tokens[_iArrow], "->"))
 			return false;
 
-		static ch8 const *const gsc_pQualifiers[] =
+		constexpr ch8 const *c_pQualifiers[] =
 			{
 				"const", "volatile", "noexcept", "override", "final", "mutable", "&", "&&"
 			}
 		;
 		auto iBefore = fg_PreviousCode(_Tokens, _iArrow);
-		while (iBefore >= 0 && fg_IsAnyText(_Tokens, Tokens[umint(iBefore)], gsc_pQualifiers))
+		while (iBefore >= 0 && fg_IsAnyText(_Tokens, Tokens[umint(iBefore)], c_pQualifiers))
 			iBefore = fg_PreviousCode(_Tokens, umint(iBefore));
 
 		if (iBefore < 0 || !_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
@@ -2008,13 +2008,13 @@ namespace NMib::NDevelop
 		// Operators spelled like a call, such as sizeof and decltype, stay tight.
 		if (fRight("("))
 		{
-			static ch8 const *const gsc_pSpacedKeywords[] =
+			constexpr ch8 const *c_pSpacedKeywords[] =
 				{
 					"if", "for", "while", "switch", "catch", "return", "co_return", "co_await", "co_yield"
 					, "throw", "delete", "case", "requires", "constexpr"
 				}
 			;
-			for (auto pKeyword : gsc_pSpacedKeywords)
+			for (auto pKeyword : c_pSpacedKeywords)
 			{
 				if (_Tokens.f_IsText(Left, pKeyword))
 					return ECodeSpacing::mc_Space;
@@ -2166,7 +2166,7 @@ namespace NMib::NDevelop
 		// What follows a parameter list is the function's qualifiers and specifiers, and
 		// they are separated from it and from each other. Without a spelling for these the
 		// declaration cannot be measured as one line, and so could never be joined.
-		static ch8 const *const gsc_pQualifiers[] =
+		constexpr ch8 const *c_pQualifiers[] =
 			{
 				"const", "volatile", "noexcept", "override", "final", "mutable", "requires", "&", "&&"
 			}
@@ -2197,7 +2197,7 @@ namespace NMib::NDevelop
 			bool bCast = iInner >= 0
 				&& (fg_IsDeclaratorText(_Tokens, Tokens[umint(iInner)]) || _Tokens.f_IsText(Tokens[umint(iInner)], "const") || _Tokens.f_IsText(Tokens[umint(iInner)], "volatile"))
 			;
-			bool bOperand = (Right.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Right, gsc_pQualifiers))
+			bool bOperand = (Right.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))
 				|| Right.m_Kind == ECodeTokenKind::mc_Number
 				|| fg_IsDeclaratorText(_Tokens, Right)
 				|| fRight("-")
@@ -2213,12 +2213,12 @@ namespace NMib::NDevelop
 		// is its parameter list. Behind any other it takes an address or joins two operands.
 		bool bRefQualifies = !fLeft(")") || (!fRight("&") && !fRight("&&")) || fg_ClosesParameterList(_Tokens, _Structure, _iLeft);
 		bool bAfterDeclarator = (fLeft(")") && bRefQualifies) || fg_IsRefQualifier(_Tokens, _iLeft);
-		for (auto pQualifier : gsc_pQualifiers)
+		for (auto pQualifier : c_pQualifiers)
 			bAfterDeclarator |= fLeft(pQualifier) && !fLeft("&") && !fLeft("&&");
 
 		if (bAfterDeclarator)
 		{
-			for (auto pQualifier : gsc_pQualifiers)
+			for (auto pQualifier : c_pQualifiers)
 			{
 				if (fRight(pQualifier))
 					return ECodeSpacing::mc_Space;
@@ -2231,7 +2231,7 @@ namespace NMib::NDevelop
 		// stands next to a name too, and keeps that line.
 		if (Left.m_Kind == ECodeTokenKind::mc_Identifier && Right.m_Kind == ECodeTokenKind::mc_Identifier)
 		{
-			static ch8 const *const gsc_pKeywords[] =
+			constexpr ch8 const *c_pKeywords[] =
 				{
 					"auto", "template", "extern", "static", "inline", "constexpr", "consteval", "constinit", "virtual", "explicit"
 					, "friend", "typename", "const", "volatile", "mutable", "struct", "class", "union", "enum", "namespace", "using"
@@ -2239,7 +2239,7 @@ namespace NMib::NDevelop
 					, "void", "bool", "int", "char", "short", "long", "unsigned", "signed", "float", "double", "operator", "requires"
 				}
 			;
-			for (auto pKeyword : gsc_pKeywords)
+			for (auto pKeyword : c_pKeywords)
 			{
 				if (_Tokens.f_IsText(Left, pKeyword) || _Tokens.f_IsText(Right, pKeyword))
 					return ECodeSpacing::mc_Space;
@@ -2296,13 +2296,13 @@ namespace NMib::NDevelop
 				return ECodeSpacing::mc_None;
 		}
 
-		static ch8 const *const gsc_pBinaryOperators[] =
+		constexpr ch8 const *c_pBinaryOperators[] =
 			{
 				"==", "!=", "<=", ">=", "<=>", "||", "&&", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
 				, "+", "-", "/", "%", "|", "^", "?", ":"
 			}
 		;
-		for (auto pOperator : gsc_pBinaryOperators)
+		for (auto pOperator : c_pBinaryOperators)
 		{
 			if (_Tokens.f_IsText(Left, pOperator) || _Tokens.f_IsText(Right, pOperator))
 				return ECodeSpacing::mc_Space;

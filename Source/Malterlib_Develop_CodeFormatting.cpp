@@ -145,7 +145,7 @@ namespace
 	// move and as two after it.
 	CStr fg_GetReorderInvariant(CStr const &_Source)
 	{
-		static ch8 const *const gsc_pMoved[] =
+		constexpr ch8 const *c_pMoved[] =
 			{
 				"const", "volatile", "static", "constexpr"
 			}
@@ -161,7 +161,7 @@ namespace
 			bool bMoved = false;
 			for (umint i = 0; i < 4 && !bMoved; ++i)
 			{
-				bMoved = Tokens.f_IsText(Token, gsc_pMoved[i]);
+				bMoved = Tokens.f_IsText(Token, c_pMoved[i]);
 				nMoved[i] += bMoved;
 			}
 
@@ -1239,7 +1239,7 @@ namespace
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		// Plain assignment is deliberately absent: a lone '=' is also a lambda capture
 		// default and the trailing token of Malterlib's '_o=' and '_j=' DSL spellings.
-		static ch8 const *const gsc_pSpacedOperators[] =
+		constexpr ch8 const *c_pSpacedOperators[] =
 			{
 				"==", "!=", "<=", ">=", "<=>", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
 			}
@@ -1297,7 +1297,7 @@ namespace
 			}
 
 			bool bSpaced = false;
-			for (auto pOperator : gsc_pSpacedOperators)
+			for (auto pOperator : c_pSpacedOperators)
 				bSpaced |= m_Tokens.f_IsText(Token, pOperator);
 
 			if (!bSpaced)
@@ -2519,7 +2519,7 @@ namespace
 	void CFormattingAnalyzer::fp_ConvertSpecifiers()
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
-		static ch8 const *const gsc_pSpecifiers[] =
+		constexpr ch8 const *c_pSpecifiers[] =
 			{
 				"inline", "constinit", "extern", "virtual", "friend", "thread_local", "mutable", "explicit", "inline_always", "inline_never"
 			}
@@ -2540,7 +2540,7 @@ namespace
 				}
 
 				bool bSpecifier = false;
-				for (auto pSpecifier : gsc_pSpecifiers)
+				for (auto pSpecifier : c_pSpecifiers)
 					bSpecifier |= m_Tokens.f_IsText(Tokens[umint(iNext)], pSpecifier);
 
 				if (!bSpecifier)
@@ -2607,30 +2607,30 @@ namespace
 				GroupEnd[Node.m_iFirstToken] = Node.m_iLastToken;
 		}
 
-		static ch8 const *const gsc_pSpecifiers[] =
+		constexpr ch8 const *c_pSpecifiers[] =
 			{
 				"static", "inline", "constexpr", "consteval", "constinit", "extern", "virtual", "friend", "thread_local", "typedef"
 				, "mutable", "explicit", "register"
 			}
 		;
-		static ch8 const *const gsc_pOpeners[] =
+		constexpr ch8 const *c_pOpeners[] =
 			{
 				"(", ",", "<", ";", "{", "}", "->", "=", "]", ":", "operator", "new"
 			}
 		;
-		static ch8 const *const gsc_pFundamental[] =
+		constexpr ch8 const *c_pFundamental[] =
 			{
 				"signed", "unsigned", "short", "long", "int", "char", "char8_t", "char16_t", "char32_t", "wchar_t", "bool", "float", "double", "void"
 			}
 		;
-		static ch8 const *const gsc_pElaborated[] =
+		constexpr ch8 const *c_pElaborated[] =
 			{
 				"struct", "class", "union", "enum"
 			}
 		;
 		// What a function's qualifier is followed by, and what an expression starts with:
 		// names a type is never spelled with.
-		static ch8 const *const gsc_pNoType[] =
+		constexpr ch8 const *c_pNoType[] =
 			{
 				"override", "final", "noexcept", "requires", "try", "throw", "operator", "new", "delete", "return", "co_return", "co_await"
 				, "co_yield", "sizeof", "alignof", "template", "using", "namespace", "if", "for", "while", "switch", "do", "else", "case"
@@ -2662,7 +2662,7 @@ namespace
 			{
 				umint iEnd = c_NoType;
 				auto j = _iFirst;
-				if (m_Tokens.f_IsText(Tokens[j], "typename") || fIsAny(j, gsc_pElaborated))
+				if (m_Tokens.f_IsText(Tokens[j], "typename") || fIsAny(j, c_pElaborated))
 				{
 					auto iNext = fp_NextCode(j);
 					if (iNext < 0)
@@ -2681,10 +2681,10 @@ namespace
 
 					iEnd = GroupEnd[umint(iOpen)];
 				}
-				else if (fIsAny(j, gsc_pFundamental))
+				else if (fIsAny(j, c_pFundamental))
 				{
 					iEnd = j;
-					for (auto iNext = fp_NextCode(iEnd); iNext >= 0 && fIsAny(umint(iNext), gsc_pFundamental); iNext = fp_NextCode(iEnd))
+					for (auto iNext = fp_NextCode(iEnd); iNext >= 0 && fIsAny(umint(iNext), c_pFundamental); iNext = fp_NextCode(iEnd))
 						iEnd = umint(iNext);
 				}
 				else
@@ -2702,7 +2702,7 @@ namespace
 					bool bNamed = false;
 					while (true)
 					{
-						bool bName = Tokens[j].m_Kind == ECodeTokenKind::mc_Identifier && !fIsQualifier(j) && !fIsAny(j, gsc_pNoType) && !fIsAny(j, gsc_pSpecifiers);
+						bool bName = Tokens[j].m_Kind == ECodeTokenKind::mc_Identifier && !fIsQualifier(j) && !fIsAny(j, c_pNoType) && !fIsAny(j, c_pSpecifiers);
 						if (!bName)
 						{
 							bNamed = false;
@@ -2763,7 +2763,7 @@ namespace
 				return m_Tokens.f_IsText(Token, "*")
 					|| m_Tokens.f_IsText(Token, "&")
 					|| m_Tokens.f_IsText(Token, "&&")
-					|| (Token.m_Kind == ECodeTokenKind::mc_Identifier && !fIsAny(umint(_iToken), gsc_pNoType))
+					|| (Token.m_Kind == ECodeTokenKind::mc_Identifier && !fIsAny(umint(_iToken), c_pNoType))
 				;
 			}
 		;
@@ -2782,7 +2782,7 @@ namespace
 			for (auto iNext = fp_NextCode(iRunLast); iNext >= 0 && fIsQualifier(umint(iNext)); iNext = fp_NextCode(iRunLast))
 				iRunLast = umint(iNext);
 
-			bool bLeads = iBefore < 0 || fIsAny(umint(iBefore), gsc_pOpeners) || fIsAny(umint(iBefore), gsc_pSpecifiers);
+			bool bLeads = iBefore < 0 || fIsAny(umint(iBefore), c_pOpeners) || fIsAny(umint(iBefore), c_pSpecifiers);
 			if (!bLeads)
 			{
 				auto const &Before = Tokens[umint(iBefore)];
@@ -2796,7 +2796,7 @@ namespace
 
 			// Specifiers written behind the qualifier stay where they are.
 			auto iType = fp_NextCode(iRunLast);
-			while (iType >= 0 && fIsAny(umint(iType), gsc_pSpecifiers))
+			while (iType >= 0 && fIsAny(umint(iType), c_pSpecifiers))
 				iType = fp_NextCode(umint(iType));
 
 			if (iType < 0)
@@ -2969,7 +2969,7 @@ namespace
 		}
 
 		// Skip a template header and the declaration specifiers before the return type.
-		static ch8 const *const gsc_pSpecifiers[] =
+		constexpr ch8 const *c_pSpecifiers[] =
 			{
 				"static", "virtual", "inline", "constexpr", "consteval", "constinit", "explicit", "friend", "extern"
 				, "mutable", "thread_local", "inline_always", "inline_never", "inline_small", "inline_medium"
@@ -2981,7 +2981,7 @@ namespace
 		{
 			auto const &Token = Tokens[iReturn];
 			bool bSkip = false;
-			for (auto pSpecifier : gsc_pSpecifiers)
+			for (auto pSpecifier : c_pSpecifiers)
 				bSkip |= m_Tokens.f_IsText(Token, pSpecifier);
 
 			if (m_Tokens.f_IsText(Token, "template"))
@@ -3069,7 +3069,7 @@ namespace
 		// A keyword is spelled like an identifier, so a statement that opens with one reads
 		// as a type unless it is named here. 'return g_Dispatch(x) / [] {}' is an expression
 		// whose first word would otherwise pass for its return type.
-		static ch8 const *const gsc_pStatementKeywords[] =
+		constexpr ch8 const *c_pStatementKeywords[] =
 			{
 				"return", "co_return", "co_await", "co_yield", "throw", "new", "delete", "this", "sizeof", "alignof"
 				, "if", "else", "for", "while", "do", "switch", "case", "default", "break", "continue", "goto"
@@ -3080,7 +3080,7 @@ namespace
 		// A name that follows a complete type at the type's own level is not part of it:
 		// an attribute macro stands there, and moving it along would misplace it. Only the
 		// words a type is spelled with may follow another name.
-		static ch8 const *const gsc_pTypeWords[] =
+		constexpr ch8 const *c_pTypeWords[] =
 			{
 				"const", "volatile", "typename", "struct", "class", "union", "enum", "unsigned", "signed"
 				, "short", "long", "int", "char", "double", "float", "bool", "void"
@@ -3107,14 +3107,14 @@ namespace
 
 			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
 			{
-				for (auto pKeyword : gsc_pStatementKeywords)
+				for (auto pKeyword : c_pStatementKeywords)
 				{
 					if (m_Tokens.f_IsText(Token, pKeyword))
 						return false;
 				}
 
 				bool bTypeWord = false;
-				for (auto pWord : gsc_pTypeWords)
+				for (auto pWord : c_pTypeWords)
 					bTypeWord |= m_Tokens.f_IsText(Token, pWord);
 
 				if (bAfterName && !bTypeWord)
@@ -3470,7 +3470,7 @@ namespace
 		umint iTrailingReturn = TCLimitsInt<umint>::mc_Max;
 		if (bDeclarator && iFirstParenGroupStart && fg_ClosesParameterList(m_Tokens, m_Structure, iFirstParenGroup))
 		{
-			static ch8 const *const gsc_pQualifiers[] =
+			constexpr ch8 const *c_pQualifiers[] =
 				{
 					"const", "volatile", "noexcept", "override", "final", "&", "&&"
 				}
@@ -3510,7 +3510,7 @@ namespace
 				}
 
 				bAfterQualifier = false;
-				for (auto pQualifier : gsc_pQualifiers)
+				for (auto pQualifier : c_pQualifiers)
 					bAfterQualifier |= m_Tokens.f_IsText(Tokens[umint(i)], pQualifier);
 
 				if (!bAfterQualifier)
@@ -4209,7 +4209,7 @@ namespace
 				fp_IndentBefore(Node.m_iLastToken, _iIndent);
 		}
 
-		static ch8 const *const gsc_pStatementKeywords[] =
+		constexpr ch8 const *c_pStatementKeywords[] =
 			{
 				"else", "while", "catch", "if", "for", "do", "switch", "try", "return", "co_return", "break", "continue", "goto", "case", "default", "{"
 			}
@@ -4270,7 +4270,7 @@ namespace
 			if (!bStays && !bFirstOnLine && bAfterBlock)
 			{
 				bool bKeyword = false;
-				for (auto pKeyword : gsc_pStatementKeywords)
+				for (auto pKeyword : c_pStatementKeywords)
 					bKeyword |= m_Tokens.f_IsText(First, pKeyword);
 
 				bStays = !bKeyword;
@@ -4663,7 +4663,7 @@ namespace
 			umint m_Level;
 		};
 		// Assignment keeps its right hand side, and a comma is a separator a group owns.
-		static CPrecedence const gsc_Operators[] =
+		constexpr CPrecedence c_Operators[] =
 			{
 				{"*", 5}, {"/", 5}, {"%", 5}, {"+", 6}, {"-", 6}, {"<<", 7}, {">>", 7}, {"<=>", 8}
 				, {"<", 9}, {">", 9}, {"<=", 9}, {">=", 9}, {"==", 10}, {"!=", 10}
@@ -4693,7 +4693,7 @@ namespace
 					continue;
 
 				umint nPrecedence = 0;
-				for (auto const &Operator : gsc_Operators)
+				for (auto const &Operator : c_Operators)
 				{
 					if (m_Tokens.f_IsText(Tokens[i], Operator.m_pText))
 						nPrecedence = Operator.m_Level;
@@ -4902,13 +4902,13 @@ namespace
 	// The words that may stand between a parameter list and a trailing return type.
 	bool CFormattingAnalyzer::fp_IsFunctionQualifier(umint _iToken) const
 	{
-		static ch8 const *const gsc_pQualifiers[] =
+		constexpr ch8 const *c_pQualifiers[] =
 			{
 				"const", "volatile", "noexcept", "mutable", "override", "final", "&", "&&"
 			}
 		;
 		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
-		for (auto pQualifier : gsc_pQualifiers)
+		for (auto pQualifier : c_pQualifiers)
 		{
 			if (m_Tokens.f_IsText(Token, pQualifier))
 				return true;
