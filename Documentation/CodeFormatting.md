@@ -95,7 +95,7 @@ formatter failure, not an edit.
 | `operator-space` | One space around unambiguous binary operators. |
 | `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
 | `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon, a bit-field's width, and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. |
-| `block-blank-line` | Removes blank lines directly after an opening brace. |
+| `block-blank-line` | Removes blank lines directly after an opening brace and directly in front of a closing one. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `blank-line` | Collapses a run of blank lines into one. |
 | `access-blank-line` | One blank line in front of `public:`, `private:`, or `protected:`, and none after it. The first specifier in a class stands directly under the opening brace. |

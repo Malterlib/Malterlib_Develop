@@ -1426,6 +1426,33 @@ namespace
 				continue;
 			}
 
+			// Nor does one stand in front of the closing brace, whatever ends the line above it.
+			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && m_Tokens.f_IsText(Token, "}"))
+			{
+				umint iFirstNewline = TCLimitsInt<umint>::mc_Max;
+				umint iLastNewline = TCLimitsInt<umint>::mc_Max;
+				for (umint iGap = i; iGap; --iGap)
+				{
+					auto const &Gap = Tokens[iGap - 1];
+					if (Gap.m_Kind == ECodeTokenKind::mc_Newline)
+					{
+						iFirstNewline = iGap - 1;
+						if (iLastNewline == TCLimitsInt<umint>::mc_Max)
+							iLastNewline = iGap - 1;
+					}
+					else if (Gap.m_Kind != ECodeTokenKind::mc_Whitespace)
+						break;
+				}
+
+				if (iFirstNewline != iLastNewline)
+				{
+					auto iBlankStart = Tokens[iFirstNewline].f_GetEnd();
+					fp_AddEdit("block-blank-line", iBlankStart, Tokens[iLastNewline].f_GetEnd() - iBlankStart, {}, "no blank line stands in front of a closing brace");
+				}
+
+				continue;
+			}
+
 			if (Token.m_Kind != ECodeTokenKind::mc_Identifier)
 				continue;
 

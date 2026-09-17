@@ -450,6 +450,15 @@ namespace
 				DMibTestCategory("BlankLines")
 				{
 					fg_ExpectFormat("AfterBrace", "void f()\n{\n\n\tint a;\n}\n", "void f()\n{\n\tint a;\n}\n");
+					// None stands in front of the closing brace either, whatever ends the line
+					// above it: a statement, a nested block, or a comment.
+					fg_ExpectFormat
+						(
+							"BeforeBrace"
+							, "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t\th();\n\n\t}\n\n}\n\nstruct C\n{\n\tint m_A; // Comment\n\n\n};\n"
+							, "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t\th();\n\t}\n}\n\nstruct C\n{\n\tint m_A; // Comment\n};\n"
+						)
+					;
 					// One blank line separates what it separates, wherever it stands.
 					fg_ExpectFormat("Double", "int g_A;\n\n\n\nvoid f()\n{\n\tg();\n\n \n\th();\n}\n", "int g_A;\n\nvoid f()\n{\n\tg();\n\n\th();\n}\n");
 					// An access specifier opens a section of its class: a blank line sets it off
