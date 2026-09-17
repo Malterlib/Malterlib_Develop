@@ -141,6 +141,24 @@ namespace
 
 	// Maps an offset in the converted source back to the original. An offset inside a
 	// replacement lands where the converted span started.
+	// The code of a source with its qualifiers left out, which is what moving one leaves as
+	// it was. The tokens are joined since a '>' that a qualifier lands between two of is
+	// lexed as one token with its neighbour before the move and as two after it.
+	CStr fg_GetUnqualifiedTokenText(CStr const &_Source)
+	{
+		CCodeTokenStream Tokens(_Source);
+		CStr Text;
+		for (auto const &Token : Tokens.f_GetTokens())
+		{
+			if (!fg_IsCodeToken(Token) || Tokens.f_IsText(Token, "const") || Tokens.f_IsText(Token, "volatile"))
+				continue;
+
+			Text += Tokens.f_GetText(Token);
+		}
+
+		return Text;
+	}
+
 	umint fg_MapOffsetToOriginal(TCVector<CCodeFormattingEdit> const &_Conversions, umint _iOffset)
 	{
 		aint nDelta = 0;
@@ -159,56 +177,122 @@ namespace
 		return umint(aint(_iOffset) - nDelta);
 	}
 
-	// Expresses edits made on the converted source as edits on the original. An edit inside
-	// a conversion's replacement text rewrites that text; every other edit is shifted back.
+	// Expresses edits made on the converted source as edits on the original. An edit that
+	// touches no conversion is shifted back to where it stood. One that reaches into the
+	// text a conversion wrote is merged with that conversion, and with every other one it
+	// reaches, into a single edit over everything they cover in the original, whose text
+	// is what the converted source has there with the edits made.
 	bool fg_ComposeEdits
 		(
 			TCVector<CCodeFormattingEdit> const &_Conversions
+			, CStr const &_Converted
 			, TCVector<CCodeFormattingEdit> const &_Edits
 			, TCVector<CCodeFormattingEdit> &o_Edits
 			, CStr &o_Explanation
 		)
 	{
-		umint iEdit = 0;
-		aint nDelta = 0;
-		for (auto Conversion : _Conversions)
+		// Where each conversion's text stands in the converted source.
+		TCVector<umint> Starts;
+		aint nShift = 0;
+		for (auto const &Conversion : _Conversions)
 		{
-			auto iStart = umint(aint(Conversion.m_iOffset) + nDelta);
-			auto nReplacement = Conversion.m_Replacement.f_GetLen();
-			auto iEnd = iStart + nReplacement;
-			while (iEdit < _Edits.f_GetLen() && _Edits[iEdit].f_GetEnd() <= iStart)
-			{
-				auto Edit = _Edits[iEdit++];
-				Edit.m_iOffset = umint(aint(Edit.m_iOffset) - nDelta);
-				o_Edits.f_Insert(Edit);
-			}
-
-			aint nLocal = 0;
-			while (iEdit < _Edits.f_GetLen() && _Edits[iEdit].m_iOffset < iEnd)
-			{
-				auto const &Edit = _Edits[iEdit++];
-				if (Edit.f_GetEnd() > iEnd)
-				{
-					o_Explanation = "{} crosses the boundary of a moved return type"_f << Edit.m_Rule;
-
-					return false;
-				}
-
-				auto const &Text = Conversion.m_Replacement;
-				auto iLocal = umint(aint(Edit.m_iOffset - iStart) + nLocal);
-				Conversion.m_Replacement = CStr(Text.f_GetStr(), iLocal) + Edit.m_Replacement + CStr(Text.f_GetStr() + iLocal + Edit.m_nLength, Text.f_GetLen() - iLocal - Edit.m_nLength);
-				nLocal += aint(Edit.m_Replacement.f_GetLen()) - aint(Edit.m_nLength);
-			}
-
-			o_Edits.f_Insert(Conversion);
-			nDelta += aint(nReplacement) - aint(Conversion.m_nLength);
+			Starts.f_Insert(umint(aint(Conversion.m_iOffset) + nShift));
+			nShift += aint(Conversion.m_Replacement.f_GetLen()) - aint(Conversion.m_nLength);
 		}
 
-		while (iEdit < _Edits.f_GetLen())
+		auto fTouches = [](umint _iStart, umint _iEnd, umint _iOtherStart, umint _iOtherEnd)
+			{
+				// An empty range is touched by whatever stands at it; two that hold text
+				// have to share some of it.
+				if (_iStart == _iEnd || _iOtherStart == _iOtherEnd)
+					return _iStart <= _iOtherEnd && _iOtherStart <= _iEnd;
+
+				return _iStart < _iOtherEnd && _iOtherStart < _iEnd;
+			}
+		;
+
+		umint iConversion = 0;
+		umint iEdit = 0;
+		aint nDelta = 0;
+		while (iConversion < _Conversions.f_GetLen() || iEdit < _Edits.f_GetLen())
 		{
-			auto Edit = _Edits[iEdit++];
-			Edit.m_iOffset = umint(aint(Edit.m_iOffset) - nDelta);
-			o_Edits.f_Insert(Edit);
+			// What stands first opens a cluster, which then takes in whatever touches it.
+			bool bConversionFirst = iConversion < _Conversions.f_GetLen() && (iEdit >= _Edits.f_GetLen() || Starts[iConversion] <= _Edits[iEdit].m_iOffset);
+			umint iStart = bConversionFirst ? Starts[iConversion] : _Edits[iEdit].m_iOffset;
+			umint iEnd = bConversionFirst ? iStart : _Edits[iEdit].f_GetEnd();
+			umint iSourceStart = bConversionFirst ? _Conversions[iConversion].m_iOffset : umint(aint(iStart) - nDelta);
+			umint iFirstEdit = iEdit;
+			umint nConversions = 0;
+			umint iConvertedEnd = 0;
+			umint iConvertedSourceEnd = 0;
+			CStr Rule;
+			if (!bConversionFirst)
+				++iEdit;
+
+			while (true)
+			{
+				if (iConversion < _Conversions.f_GetLen())
+				{
+					auto const &Conversion = _Conversions[iConversion];
+					auto iConversionEnd = Starts[iConversion] + Conversion.m_Replacement.f_GetLen();
+					if ((!nConversions && bConversionFirst) || fTouches(Starts[iConversion], iConversionEnd, iStart, iEnd))
+					{
+						iEnd = fg_Max(iEnd, iConversionEnd);
+						iConvertedEnd = iConversionEnd;
+						iConvertedSourceEnd = Conversion.f_GetEnd();
+						nDelta += aint(Conversion.m_Replacement.f_GetLen()) - aint(Conversion.m_nLength);
+						if (!Rule)
+							Rule = Conversion.m_Rule;
+
+						++iConversion;
+						++nConversions;
+
+						continue;
+					}
+				}
+
+				if (iEdit >= _Edits.f_GetLen() || !fTouches(_Edits[iEdit].m_iOffset, _Edits[iEdit].f_GetEnd(), iStart, iEnd))
+					break;
+
+				iEnd = fg_Max(iEnd, _Edits[iEdit].f_GetEnd());
+				++iEdit;
+			}
+
+			// An end inside what the last conversion wrote is that conversion's end in the
+			// original; one behind it stands in text the original has too.
+			umint iSourceEnd = nConversions && iEnd <= iConvertedEnd ? iConvertedSourceEnd : umint(aint(iEnd) - nDelta);
+
+			if (!nConversions)
+			{
+				auto Edit = _Edits[iFirstEdit];
+				Edit.m_iOffset = iSourceStart;
+				o_Edits.f_Insert(Edit);
+
+				continue;
+			}
+
+			if (iEnd > _Converted.f_GetLen() || iSourceEnd < iSourceStart)
+			{
+				o_Explanation = "{} could not be expressed as an edit of the original source"_f << Rule;
+
+				return false;
+			}
+
+			CStr Text;
+			umint iCopied = iStart;
+			for (umint i = iFirstEdit; i < iEdit; ++i)
+			{
+				Text += CStr(_Converted.f_GetStr() + iCopied, _Edits[i].m_iOffset - iCopied);
+				Text += _Edits[i].m_Replacement;
+				iCopied = _Edits[i].f_GetEnd();
+			}
+
+			Text += CStr(_Converted.f_GetStr() + iCopied, iEnd - iCopied);
+			auto &Merged = o_Edits.f_Insert();
+			Merged.m_iOffset = iSourceStart;
+			Merged.m_nLength = iSourceEnd - iSourceStart;
+			Merged.m_Replacement = Text;
+			Merged.m_Rule = Rule;
 		}
 
 		return true;
@@ -431,12 +515,13 @@ namespace
 	// depend on an edit already made, or on where the source happened to break its lines.
 	struct CFormattingAnalyzer
 	{
-		explicit CFormattingAnalyzer(CCodeFormattingRequest const &_Request, bool _bAllowConversions = true)
+		explicit CFormattingAnalyzer(CCodeFormattingRequest const &_Request, bool _bAllowConversions = true, bool _bAllowQualifiers = true)
 			: m_Request(_Request)
 			, m_Tokens(_Request.m_Source)
 			, m_Structure(m_Tokens)
 			, m_Lines(_Request.m_Source)
 			, m_bAllowConversions(_bAllowConversions)
+			, m_bAllowQualifiers(_bAllowQualifiers)
 		{
 		}
 
@@ -503,6 +588,7 @@ namespace
 		void fp_FindLooseOperators(umint _iFirst, umint _iLast, NContainer::TCVector<umint> &o_Operators) const;
 		void fp_PrepareTokenDepth();
 		bool fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent);
+		void fp_ConvertQualifiers();
 		bool fp_DropBraces(umint _iStatement, umint _iGuard);
 		bool fp_AddBraces(umint _iStatement, umint _iGuard);
 		bool fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const;
@@ -547,6 +633,8 @@ namespace
 		CCodeStructure m_Structure;
 		CTextLineMap m_Lines;
 		bool m_bAllowConversions = true;						// Only the analysis of the original source converts return types.
+		bool m_bAllowQualifiers = true;							// Qualifiers move first, in a stage of their own, so no other conversion has to know of them.
+		CStr m_Baseline;										// The source with every conversion made, which the result matches token for token.
 		bool m_bProbing = false;								// The statement walk only decides conversions, and lays nothing out.
 		bool m_bOperatorSplit = false;							// The statement broke at operators, so a block belongs to a continuation.
 		umint m_iSplitFirstParen = 0;							// A declaration is never split before its name.
@@ -1439,8 +1527,15 @@ namespace
 		// single guarded statement, change tokens, which no other rule does. Those
 		// conversions are decided first, and the layout is then made on the converted
 		// source, so the lines it settles on are the lines a later pass sees.
-		CStr Baseline = m_Request.m_Source;
-		if (m_bAllowConversions)
+		// A qualifier in front of its type moves behind it before anything else is decided.
+		// The other conversions rewrite text a qualifier can stand in, a return type above
+		// all, so they are made on the source this one leaves, in a stage of their own.
+		m_Baseline = m_Request.m_Source;
+		if (m_bAllowQualifiers)
+			fp_ConvertQualifiers();
+
+		bool bQualifierStage = !m_Structural.f_IsEmpty();
+		if (!bQualifierStage && m_bAllowConversions)
 		{
 			m_bProbing = true;
 			fp_RuleLineBreaks();
@@ -1457,9 +1552,14 @@ namespace
 					}
 				)
 			;
-			Baseline = fg_ApplyCodeFormattingEdits(m_Request.m_Source, m_Structural);
+			auto ConvertedSource = fg_ApplyCodeFormattingEdits(m_Request.m_Source, m_Structural);
+			// Moving a qualifier changes nothing but where it stands, which is checked here
+			// since the result is only ever compared against the converted source.
+			if (bQualifierStage && fg_GetUnqualifiedTokenText(m_Request.m_Source) != fg_GetUnqualifiedTokenText(ConvertedSource))
+				return fFailed("Moving a qualifier behind its type would change more than the qualifier's place; no edits were produced");
+
 			CCodeFormattingRequest Nested = m_Request;
-			Nested.m_Source = Baseline;
+			Nested.m_Source = ConvertedSource;
 			for (auto &Range : Nested.m_Ranges)
 			{
 				auto iStart = fg_MapOffsetToConverted(m_Structural, Range.m_iOffset, false);
@@ -1468,20 +1568,24 @@ namespace
 				Range.m_nLength = iEnd - iStart;
 			}
 
-			CFormattingAnalyzer Inner(Nested, false);
+			CFormattingAnalyzer Inner(Nested, bQualifierStage && m_bAllowConversions, false);
 			auto Converted = Inner.f_Analyze(false);
 			if (Converted.m_Status != ECodeFormattingStatus::mc_Complete)
 				return fFailed("Laying out the converted source failed: {}"_f << Converted.m_Explanation);
 
-			if (!fg_ComposeEdits(m_Structural, Converted.m_Edits, Result.m_Edits, Explanation))
+			m_Baseline = Inner.m_Baseline;
+
+			if (!fg_ComposeEdits(m_Structural, ConvertedSource, Converted.m_Edits, Result.m_Edits, Explanation))
 				return fFailed(Explanation);
 
 			for (auto const &Edit : m_Structural)
 			{
-				CStr Explanation = Edit.m_Rule == "braces"
-					? "a guarded statement on one line stands without braces, one across lines within them"
-					: "the return type moves behind the parameter list"
-				;
+				CStr Explanation = "the return type moves behind the parameter list";
+				if (Edit.m_Rule == "braces")
+					Explanation = "a guarded statement on one line stands without braces, one across lines within them";
+				else if (Edit.m_Rule == "east-qualifier")
+					Explanation = "a qualifier stands behind the type it qualifies";
+
 				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
 			}
 
@@ -1550,8 +1654,8 @@ namespace
 		// Every rule but the conversion leaves the token stream alone, so the result has to
 		// match the converted source token for token.
 		auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, Result.m_Edits);
-		if (!fg_HasEquivalentCodeTokens(Baseline, Formatted))
-			return fFailed("Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(Baseline, Formatted));
+		if (!fg_HasEquivalentCodeTokens(m_Baseline, Formatted))
+			return fFailed("Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(m_Baseline, Formatted));
 
 		if (m_bWholeFile)
 		{
@@ -2187,6 +2291,284 @@ namespace
 		}
 	}
 
+	// Moves a qualifier written in front of its type behind it: 'const int &_Value' becomes
+	// 'int const &_Value'. Where the qualifier stands is told by what is in front of it: a
+	// separator, an opening marker or a specifier has no type for it to follow, so the type
+	// is what comes next. Behind a name, a template argument list or a parenthesis it can
+	// as well be the qualifier of what it follows, 'CFoo const _Value' and 'f_Get() const',
+	// and is only moved where a type and then a declarator or a name follow it, which
+	// neither of those readings has. The type has to be spelled out by tokens this can
+	// follow to its end, and with nothing but spaces between them; anything else stays.
+	void CFormattingAnalyzer::fp_ConvertQualifiers()
+	{
+		if (!m_Structure.f_IsComplete())
+			return;
+
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Nodes = m_Structure.f_GetNodes();
+		TCVector<umint> GroupEnd;
+		GroupEnd.f_SetLen(Tokens.f_GetLen());
+		for (auto &iEnd : GroupEnd)
+			iEnd = TCLimitsInt<umint>::mc_Max;
+
+		for (auto const &Node : Nodes)
+		{
+			if (Node.m_Kind == ECodeNodeKind::mc_Group)
+				GroupEnd[Node.m_iFirstToken] = Node.m_iLastToken;
+		}
+
+		static ch8 const *const gsc_pSpecifiers[] =
+			{
+				"static", "inline", "constexpr", "consteval", "constinit", "extern", "virtual", "friend", "thread_local", "typedef"
+				, "mutable", "explicit", "register"
+			}
+		;
+		static ch8 const *const gsc_pOpeners[] =
+			{
+				"(", ",", "<", ";", "{", "}", "->", "=", "]", ":", "operator", "new"
+			}
+		;
+		static ch8 const *const gsc_pFundamental[] =
+			{
+				"signed", "unsigned", "short", "long", "int", "char", "char8_t", "char16_t", "char32_t", "wchar_t", "bool", "float", "double", "void"
+			}
+		;
+		static ch8 const *const gsc_pElaborated[] =
+			{
+				"struct", "class", "union", "enum"
+			}
+		;
+		// What a function's qualifier is followed by, and what an expression starts with:
+		// names a type is never spelled with.
+		static ch8 const *const gsc_pNoType[] =
+			{
+				"override", "final", "noexcept", "requires", "try", "throw", "operator", "new", "delete", "return", "co_return", "co_await"
+				, "co_yield", "sizeof", "alignof", "template", "using", "namespace", "if", "for", "while", "switch", "do", "else", "case"
+				, "default", "this", "nullptr", "true", "false"
+			}
+		;
+		auto fIsAny = [&](umint _iToken, auto const &_pTexts)
+			{
+				for (auto pText : _pTexts)
+				{
+					if (m_Tokens.f_IsText(Tokens[_iToken], pText))
+						return true;
+				}
+
+				return false;
+			}
+		;
+		auto fIsQualifier = [&](umint _iToken)
+			{
+				return m_Tokens.f_IsText(Tokens[_iToken], "const") || m_Tokens.f_IsText(Tokens[_iToken], "volatile");
+			}
+		;
+
+		// Follows a type to its last token: a name, qualified and with template arguments
+		// where it has them, a fundamental type's words, 'auto', or 'decltype' and its operand,
+		// behind 'typename' or the keyword of an elaborated name where one stands.
+		constexpr umint c_NoType = TCLimitsInt<umint>::mc_Max;
+		auto fFollowType = [&](umint _iFirst) -> umint
+			{
+				umint iEnd = c_NoType;
+				auto j = _iFirst;
+				if (m_Tokens.f_IsText(Tokens[j], "typename") || fIsAny(j, gsc_pElaborated))
+				{
+					auto iNext = fp_NextCode(j);
+					if (iNext < 0)
+						return c_NoType;
+
+					j = umint(iNext);
+				}
+
+				if (m_Tokens.f_IsText(Tokens[j], "auto"))
+					iEnd = j;
+				else if (m_Tokens.f_IsText(Tokens[j], "decltype"))
+				{
+					auto iOpen = fp_NextCode(j);
+					if (iOpen < 0 || !m_Tokens.f_IsText(Tokens[umint(iOpen)], "(") || GroupEnd[umint(iOpen)] == TCLimitsInt<umint>::mc_Max)
+						return c_NoType;
+
+					iEnd = GroupEnd[umint(iOpen)];
+				}
+				else if (fIsAny(j, gsc_pFundamental))
+				{
+					iEnd = j;
+					for (auto iNext = fp_NextCode(iEnd); iNext >= 0 && fIsAny(umint(iNext), gsc_pFundamental); iNext = fp_NextCode(iEnd))
+						iEnd = umint(iNext);
+				}
+				else
+				{
+					// A name, qualified and with template arguments where it has them.
+					if (m_Tokens.f_IsText(Tokens[j], "::"))
+					{
+						auto iNext = fp_NextCode(j);
+						if (iNext < 0)
+							return c_NoType;
+
+						j = umint(iNext);
+					}
+
+					bool bNamed = false;
+					while (true)
+					{
+						bool bName = Tokens[j].m_Kind == ECodeTokenKind::mc_Identifier && !fIsQualifier(j) && !fIsAny(j, gsc_pNoType) && !fIsAny(j, gsc_pSpecifiers);
+						if (!bName)
+						{
+							bNamed = false;
+
+							break;
+						}
+
+						bNamed = true;
+						iEnd = j;
+						auto iNext = fp_NextCode(iEnd);
+						if (iNext >= 0 && m_Tokens.f_IsText(Tokens[umint(iNext)], "<"))
+						{
+							// A '<' the structure did not resolve is as much a comparison.
+							if (!m_Structure.f_IsAngleBracket(umint(iNext)) || GroupEnd[umint(iNext)] == TCLimitsInt<umint>::mc_Max)
+							{
+								bNamed = false;
+
+								break;
+							}
+
+							iEnd = GroupEnd[umint(iNext)];
+							iNext = fp_NextCode(iEnd);
+						}
+
+						if (iNext < 0 || !m_Tokens.f_IsText(Tokens[umint(iNext)], "::"))
+							break;
+
+						iNext = fp_NextCode(umint(iNext));
+						if (iNext >= 0 && m_Tokens.f_IsText(Tokens[umint(iNext)], "template"))
+							iNext = fp_NextCode(umint(iNext));
+
+						if (iNext < 0)
+						{
+							bNamed = false;
+
+							break;
+						}
+
+						j = umint(iNext);
+					}
+
+					if (!bNamed)
+						return c_NoType;
+				}
+
+				return iEnd;
+			}
+		;
+
+		// What a type is followed by where it declares something: a declarator, or a name.
+		auto fDeclares = [&](aint _iToken)
+			{
+				if (_iToken < 0)
+					return false;
+
+				auto const &Token = Tokens[umint(_iToken)];
+
+				return m_Tokens.f_IsText(Token, "*")
+					|| m_Tokens.f_IsText(Token, "&")
+					|| m_Tokens.f_IsText(Token, "&&")
+					|| (Token.m_Kind == ECodeTokenKind::mc_Identifier && !fIsAny(umint(_iToken), gsc_pNoType))
+				;
+			}
+		;
+
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Identifier || !fIsQualifier(i))
+				continue;
+
+			// A run of qualifiers moves as one, from its first.
+			auto iBefore = fp_PreviousCode(i);
+			if (iBefore >= 0 && fIsQualifier(umint(iBefore)))
+				continue;
+
+			umint iRunLast = i;
+			for (auto iNext = fp_NextCode(iRunLast); iNext >= 0 && fIsQualifier(umint(iNext)); iNext = fp_NextCode(iRunLast))
+				iRunLast = umint(iNext);
+
+			bool bLeads = iBefore < 0 || fIsAny(umint(iBefore), gsc_pOpeners) || fIsAny(umint(iBefore), gsc_pSpecifiers);
+			if (!bLeads)
+			{
+				auto const &Before = Tokens[umint(iBefore)];
+				bool bAmbiguous = Before.m_Kind == ECodeTokenKind::mc_Identifier
+					|| m_Tokens.f_IsText(Before, ")")
+					|| (m_Structure.f_IsAngleBracket(umint(iBefore)) && m_Tokens.f_IsText(Before, ">"))
+				;
+				if (!bAmbiguous)
+					continue;
+			}
+
+			// Specifiers written behind the qualifier stay where they are.
+			auto iType = fp_NextCode(iRunLast);
+			while (iType >= 0 && fIsAny(umint(iType), gsc_pSpecifiers))
+				iType = fp_NextCode(umint(iType));
+
+			if (iType < 0)
+				continue;
+
+			auto iFirstBehind = umint(fp_NextCode(iRunLast));
+			auto iEnd = fFollowType(umint(iType));
+			if (iEnd == c_NoType)
+				continue;
+
+			auto iAfter = fp_NextCode(iEnd);
+			if (iAfter >= 0 && fIsQualifier(umint(iAfter)))
+				continue;
+
+			// Only a declarator or a name behind the type says the qualifier led it.
+			if (!bLeads && !fDeclares(iAfter))
+				continue;
+
+			// Behind its type the qualifier has a name in front of it, which is the place it
+			// is least sure to have led from. Where what then follows would read as a type
+			// led by it once more, a macro between the type and its declarator as in
+			// 'const CFoo DFar *', the next pass would move it again, so it stays.
+			if (iAfter >= 0)
+			{
+				auto iAgain = fFollowType(umint(iAfter));
+				if (iAgain != c_NoType && fDeclares(fp_NextCode(iAgain)))
+					continue;
+			}
+
+			bool bPlain = true;
+			for (umint iGap = i; iGap <= iEnd && bPlain; ++iGap)
+				bPlain = fg_IsCodeToken(Tokens[iGap]) || Tokens[iGap].m_Kind == ECodeTokenKind::mc_Whitespace;
+
+			if (!bPlain)
+				continue;
+
+			auto iRunStart = Tokens[i].m_iOffset;
+			auto nRun = Tokens[iFirstBehind].m_iOffset - iRunStart;
+			auto iLastStart = Tokens[iEnd].m_iOffset;
+			auto nLast = Tokens[iEnd].m_nLength;
+			if (fp_IsDisabled(iRunStart, nRun) || !fp_IsSelected(iRunStart, nRun) || fp_IsDisabled(iLastStart, nLast) || !fp_IsSelected(iLastStart, nLast))
+				continue;
+
+			CStr Moved = m_Tokens.f_GetText(Tokens[iEnd]);
+			for (auto iRun = aint(i); iRun >= 0 && umint(iRun) <= iRunLast; iRun = fp_NextCode(umint(iRun)))
+			{
+				Moved += " ";
+				Moved += m_Tokens.f_GetText(Tokens[umint(iRun)]);
+			}
+
+			auto &Remove = m_Structural.f_Insert();
+			Remove.m_iOffset = iRunStart;
+			Remove.m_nLength = nRun;
+			Remove.m_Rule = "east-qualifier";
+			auto &Insert = m_Structural.f_Insert();
+			Insert.m_iOffset = iLastStart;
+			Insert.m_nLength = nLast;
+			Insert.m_Replacement = Moved;
+			Insert.m_Rule = "east-qualifier";
+		}
+	}
+
 	// Moves a declaration's return type behind its parameter list when the name would not
 	// otherwise fit. Converting alone is always eight columns longer, so it is only ever
 	// worth doing together with putting the trailing type on its own line. The conversion is
@@ -2543,7 +2925,9 @@ namespace
 		auto &First = m_Structural.f_Insert();
 		First.m_iOffset = iReturnStart;
 		First.m_nLength = nReturn;
-		First.m_Replacement = "auto";
+		// A declarator hugs the name, so nothing stands between a type that ends in one and
+		// the name: 'CFoo &f_Get()'. The keyword that takes its place would run into it.
+		First.m_Replacement = iReturnStart + nReturn == Tokens[iDeclarator].m_iOffset ? "auto " : "auto";
 		First.m_Rule = "trailing-return";
 		auto &Second = m_Structural.f_Insert();
 		Second.m_iOffset = iGap;

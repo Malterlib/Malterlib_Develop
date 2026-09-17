@@ -78,11 +78,11 @@ is not handled, and `mc_Failed` when analysis could not produce a usable plan.
 
 ## Rules
 
-The implemented rule matrix is whitespace-only but for two conversions, the
-trailing return type and `braces`. Every plan is verified against
-`fg_HasEquivalentCodeTokens` on the converted source, and whole-file plans are
-re-analyzed to prove the result is stable; either check failing is a formatter
-failure, not an edit.
+The implemented rule matrix is whitespace-only but for three conversions: the
+trailing return type, `braces`, and `east-qualifier`. Every plan is verified
+against `fg_HasEquivalentCodeTokens` on the converted source, and whole-file
+plans are re-analyzed to prove the result is stable; either check failing is a
+formatter failure, not an edit.
 
 | Rule | Behavior |
 | --- | --- |
@@ -100,6 +100,7 @@ failure, not an edit.
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
 | `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |
 | `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source. |
+| `east-qualifier` | A `const` or `volatile` written in front of its type moves behind it: `const int &_Value` becomes `int const &_Value`. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
@@ -108,6 +109,37 @@ assignments. Plain `=` is excluded here; `token-space` spells it, below. `&`,
 member access; `token-space` spells those of them that are operators, below. A
 symbol immediately following the `operator` keyword is part of a name rather
 than an operation, and is spelled by `token-space` as well.
+
+`east-qualifier` moves a qualifier that leads its type behind it, a run of them
+as one: `const volatile int` becomes `int const volatile`. Whether a qualifier
+leads is told by what stands in front of it. A separator, an opening marker, an
+arrow, or a specifier has no type for it to follow, so the type is what comes
+next: parameters, template arguments, `static const`, a trailing return type,
+a conversion operator's type. Behind a name, a template argument list, or a
+parenthesis the qualifier can as well belong to what it follows, as in
+`CFoo const m_Value` and `f_Get() const override`, and is only moved where a
+type and then a declarator or a name follow it, which neither reading has:
+`mark_nodebug const CFoo &f_Get()`.
+
+The type is followed to its last token: a name, qualified, with a leading `::`
+and template arguments where it has them, a fundamental type's several words,
+`auto`, `decltype` and its operand, behind `typename` or the keyword of an
+elaborated name. Specifiers written behind the qualifier stay in front of the
+type, so `const static int` becomes `static int const`. What follows the type
+is no part of it: the class of a member pointer, `int const CFoo::*`, and of a
+member defined outside its class, `NStr::CStr const CFoo::ms_Name`.
+
+It refuses rather than guesses. A comment or a line break inside the span, a
+`<` the structure did not resolve as a template argument list, a macro's bare
+`const` argument, and a disabled or unselected region all leave the qualifier
+where it is. So does a move the next pass would repeat: with a macro between
+the type and its declarator, `const CFoo DFar *`, the moved qualifier would
+lead `DFar` in turn. The conversion is made in a stage of its own, before the
+other two, since a return type that moves takes its qualifier along; the
+source it leaves is then analyzed like any other, and the edits of both stages
+are composed into one plan on the original. Beyond the checks every plan gets,
+the stage proves that the source reads the same with its qualifiers left out
+before and after, which is all that moving one may change.
 
 `braces` is decided on the original source, like the trailing return type
 conversion, and the layout is then made on the converted source. A statement

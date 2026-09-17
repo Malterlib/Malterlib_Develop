@@ -1289,6 +1289,65 @@ namespace
 					fg_ExpectFormat("Guard", Guard, Guard);
 				};
 
+				DMibTestCategory("EastQualifier")
+				{
+					// A qualifier in front of its type moves behind it, which changes where a
+					// token stands and nothing else.
+					auto fMoves = [&](CStr const &_Case, CStr const &_Source, CStr const &_Expected)
+						{
+							fg_ExpectFormat(_Case, _Source, _Expected, false);
+						}
+					;
+					fMoves("Parameter", "void f(const int &_A, const NStr::CStr &_B, const auto &_C);\n", "void f(int const &_A, NStr::CStr const &_B, auto const &_C);\n");
+					// Specifiers stay in front wherever the source had them, and a run of
+					// qualifiers moves as one.
+					fMoves("Specifier", "constexpr static const ch8 *gc_pA = \"\";\nconst static int gs_B;\n", "constexpr static ch8 const *gc_pA = \"\";\nstatic int const gs_B;\n");
+					fMoves("Run", "const volatile int g_A = 0;\nvolatile uint32 g_B;\n", "int const volatile g_A = 0;\nuint32 volatile g_B;\n");
+					// The type is followed to its end: through its template arguments, where a
+					// qualifier of their own moves as well, a fundamental type's several words,
+					// 'typename', an elaborated name, 'decltype', and a leading '::'.
+					fMoves("Nested", "const TCVector<TCVector<const int *>> &fg_F();\n", "TCVector<TCVector<int const *>> const &fg_F();\n");
+					fMoves("Fundamental", "const unsigned long long g_A = 0;\n", "unsigned long long const g_A = 0;\n");
+					fMoves
+						(
+							"Spelled"
+							, "template <typename t_C>\nconst typename t_C::CType *fg_F(const struct CFoo *_p, const decltype(g_A) &_A, const ::NMib::CStr &_B);\n"
+							, "template <typename t_C>\ntypename t_C::CType const *fg_F(struct CFoo const *_p, decltype(g_A) const &_A, ::NMib::CStr const &_B);\n"
+						)
+					;
+					// What follows the type is no part of it: a member pointer's class, and the
+					// class of a member defined outside it.
+					fMoves("Member", "const int CFoo::*g_pA;\nconst NStr::CStr CFoo::ms_Name;\n", "int const CFoo::*g_pA;\nNStr::CStr const CFoo::ms_Name;\n");
+					fMoves
+						(
+							"Places"
+							, "struct C\n{\n\toperator const ch8 * () const;\n\tauto f_A() const -> const int &;\n};\n"
+							, "struct C\n{\n\toperator ch8 const * () const;\n\tauto f_A() const -> int const &;\n};\n"
+						)
+					;
+					// Behind a name the qualifier can as well belong to it, so only a type and
+					// then a declarator or a name behind the qualifier say that it led.
+					fMoves("BehindName", "mark_nodebug const CFoo &fg_F();\nmark_nodebug const CFoo fg_G();\n", "mark_nodebug CFoo const &fg_F();\nmark_nodebug CFoo const fg_G();\n");
+					// A qualifier already behind its type, a pointer's own, a function's, a macro's
+					// bare argument, and one with a comment or an unresolved '<' behind it stay.
+					CStr Kept = "struct C\n{\n\tCFoo const m_A;\n\tint *const m_pB = nullptr;\n\tCFoo const &f_C() const override;\n"
+						"\tvoid f_D() const requires cFoo<C>;\n\tconst /* why */ int m_E;\n\tDMacro(const, x);\n};\n"
+					;
+					fg_ExpectFormat("Kept", Kept, Kept);
+					// A macro between the type and its declarator would read as a type the moved
+					// qualifier leads in turn, and the next pass would move it again.
+					CStr Macro = "DExtern const CFoo DFar *fg_F();\nstatic const CFoo DFar *gs_pA;\n";
+					fg_ExpectFormat("Macro", Macro, Macro);
+					// A disabled region keeps the qualifier where it is.
+					fMoves
+						(
+							"Disabled"
+							, "// malterlib-format off\nconst int g_A = 0;\n// malterlib-format on\nconst int g_B = 0;\n"
+							, "// malterlib-format off\nconst int g_A = 0;\n// malterlib-format on\nint const g_B = 0;\n"
+						)
+					;
+				};
+
 				DMibTestCategory("TrailingReturn")
 				{
 					// The name before the parameter list must itself exceed the limit.
@@ -1305,6 +1364,12 @@ namespace
 					// With the trailing type on its own line the signature fits, and the
 					// parameter list is left whole: splitting it is the step after this one.
 					fSplit("Declaration", "TCLongTemplate<@> fg_F(int _A, int _B);\n", "auto fg_F(int _A, int _B)\n\t-> TCLongTemplate<@>\n;\n");
+					// A return type that ends in a declarator stands against the name, and the
+					// keyword that takes its place does not.
+					fSplit("Declarator", "TCLongTemplate<@> &fg_F(int _A);\n", "auto fg_F(int _A)\n\t-> TCLongTemplate<@> &\n;\n");
+					// A qualifier in front of the return type has moved behind it before the type
+					// moves, each in a stage of its own.
+					fSplit("Qualified", "const TCLongTemplate<@> &fg_F(const int _A);\n", "auto fg_F(int const _A)\n\t-> TCLongTemplate<@> const &\n;\n");
 					fSplit
 						(
 							"PureSpecifier"
