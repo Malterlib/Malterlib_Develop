@@ -868,6 +868,10 @@ namespace
 
 				DMibTestCategory("Braces")
 				{
+					// A block behind an attribute on the clause's line is braced already, and the
+					// 'else' behind it belongs to the clause, not inside another pair.
+					CStr AttributeBlock = "void f()\n{\n\tif (a) [[unlikely]]\n\t{\n\t\tg();\n\n\t\treturn h();\n\t}\n\telse\n\t\treturn i();\n}\n";
+					fg_ExpectFormat("AttributeBlock", AttributeBlock, AttributeBlock);
 					// A single guarded statement stands without braces, whatever lines the
 					// source wrote them on.
 					fg_ExpectFormat("Dropped", "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t}\n\telse\n\t{\n\t\th();\n\t}\n}\n", "void f()\n{\n\tif (a)\n\t\tg();\n\telse\n\t\th();\n}\n", false);

@@ -4048,6 +4048,19 @@ namespace
 				return false;
 		}
 
+		// Behind the attribute the statement can be a block already: 'if (a) [[unlikely]] {'.
+		// The builder then reads the 'else' behind that block as more of the statement, and
+		// braces around the two would take the 'else' away from its clause. No statement
+		// that holds one at its own level is ever wrapped.
+		if (m_Tokens.f_IsText(Tokens[iFirst], "{"))
+			return false;
+
+		for (auto i = iFirst; i <= Statement.m_iLastToken; ++i)
+		{
+			if (m_TokenDepth[i] == m_TokenDepth[iFirst] && m_Tokens.f_IsText(Tokens[i], "else"))
+				return false;
+		}
+
 		if (bClauseFits && fp_IsRangeOneLine(_iStatement, iFirst, Statement.m_iLastToken, nGuardIndent + nTab))
 			return false;
 
