@@ -1433,6 +1433,37 @@ namespace
 		return false;
 	}
 
+	// A colon answers a conditional's '?' when one stands in front of it at the level of
+	// what encloses both; every other colon ends a label or introduces something.
+	bool fg_IsConditionalColon(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iColon)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto iNode = fg_FindEnclosingNode(_Structure, _iColon);
+		if (iNode == Nodes.f_GetLen())
+			return false;
+
+		auto const &Node = Nodes[iNode];
+		for (auto i = Node.m_iFirstToken; i < _iColon; ++i)
+		{
+			for (auto iChild : Node.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				{
+					i = Child.m_iLastToken;
+
+					break;
+				}
+			}
+
+			if (i < _iColon && _Tokens.f_IsText(Tokens[i], "?"))
+				return true;
+		}
+
+		return false;
+	}
+
 	// A ':' at a declaration's own level gives the width of a bit-field, 'uint8 m_Flags:2'.
 	// What stands in front of it is the name a type declares, which no other ':' has: a
 	// label ends its statement at the ':', a base clause follows a definition's keyword, an
@@ -2029,6 +2060,14 @@ namespace NMib::NDevelop
 		// rules below read a parenthesis, a name or a declarator beside the operator as
 		// part of some other construct, so this stands in front of them.
 		if (fg_IsInfixOperator(_Tokens, _Structure, _iLeft) || fg_IsInfixOperator(_Tokens, _Structure, _iRight))
+			return ECodeSpacing::mc_Space;
+
+		// A conditional's '?' and ':' stand apart from both of their operands, a
+		// parenthesised one included: 'bFlag ? (a + b) : (c + d)'.
+		if (fLeft("?") || fRight("?"))
+			return ECodeSpacing::mc_Space;
+
+		if ((fLeft(":") && fg_IsConditionalColon(_Tokens, _Structure, _iLeft)) || (fRight(":") && fg_IsConditionalColon(_Tokens, _Structure, _iRight)))
 			return ECodeSpacing::mc_Space;
 
 		// A keyword is separated from a parenthesis that follows it; a call name is not.

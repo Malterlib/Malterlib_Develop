@@ -4668,7 +4668,7 @@ namespace
 			{
 				{"*", 5}, {"/", 5}, {"%", 5}, {"+", 6}, {"-", 6}, {"<<", 7}, {">>", 7}, {"<=>", 8}
 				, {"<", 9}, {">", 9}, {"<=", 9}, {">=", 9}, {"==", 10}, {"!=", 10}
-				, {"&", 11}, {"^", 12}, {"|", 13}, {"&&", 14}, {"||", 15}
+				, {"&", 11}, {"^", 12}, {"|", 13}, {"&&", 14}, {"||", 15}, {"?", 16}, {":", 16}
 			}
 		;
 		auto const &Tokens = m_Tokens.f_GetTokens();
@@ -4703,6 +4703,18 @@ namespace
 				// Without operands on both sides the token is a declarator or a unary form.
 				if (!nPrecedence || i == _iFirst || !fp_HasOperand(i, true) || !fp_HasOperand(i, false))
 					continue;
+
+				// A colon is the conditional's only behind the '?' it answers; any other one
+				// ends a label, or introduces a base clause, an initializer list or a range.
+				if (m_Tokens.f_IsText(Tokens[i], ":"))
+				{
+					bool bAnswers = false;
+					for (umint iQuestion = _iFirst; iQuestion < i && !bAnswers; ++iQuestion)
+						bAnswers = m_TokenDepth[iQuestion] == nLevel && m_Tokens.f_IsText(Tokens[iQuestion], "?");
+
+					if (!bAnswers)
+						continue;
+				}
 
 				// Behind 'operator' the token spells the function's name, not an operation.
 				auto iName = fp_PreviousCode(i);
@@ -5806,6 +5818,13 @@ namespace
 		fp_FindLooseOperators(_iFirst, _iLast, Operators);
 		if (Operators.f_IsEmpty())
 			return fp_LayoutScopes(_iNode, _iFirst, _iLast, _iIndent, _bClause, _bIndentContinuations, _bMustSplit);
+
+		// A range with a gap the standard does not settle has no single-line form to be
+		// measured against, so it is left as it stands rather than taken for one that is
+		// too wide, the way its scopes are.
+		umint nJoined = 0;
+		if (!_bMustSplit && !fp_MeasureJoinedWidth(_iFirst, _iLast, nJoined))
+			return false;
 
 		// A statement's continuation is indented past its own start; an element of a group
 		// already sits at the group's content indentation and its continuation aligns there.

@@ -220,6 +220,10 @@ macro that follows the list, `[pState] mutable -> TCFuture<void>`; such a
 lambda owns its body like any other. The brackets of `delete []` capture
 nothing, so `delete [] pArray->m_pData` keeps its member access.
 
+A conditional's `?` and `:` stand apart from both of their operands, a
+parenthesised one included, `bFlag ? (a + b) : (c + d)`; the colon is the
+conditional's when a `?` stands in front of it at the same level.
+
 An operator with an operand on both sides of it is written apart from both,
 whatever they are spelled with: `5 * 5`, `nFlags & mc_Mask`, `a + (b | c)`.
 Without an operand in front, the same token is the unary form, `-1` and
@@ -360,7 +364,12 @@ that does not is split, outermost break first, and each resulting line is split
 further only while it is still too long:
 
 1. The loosest binary operators at the line's own bracket level each start a
-   line. The first operator stays on the line before a lambda it takes.
+   line. The first operator stays on the line before a lambda it takes. A
+   conditional's `?` and `:` bind loosest of all, so a conditional gives at
+   them before either of its operands is opened: the condition, `? a` and
+   `: b` each take a line. A range holding a gap the standard does not settle
+   has no single-line form to measure, and is left as it stands rather than
+   broken at its operators.
 2. A scope standing behind another scope's closing marker, such as a lambda's
    parameter list behind its capture list, and a trailing return type behind a
    parameter list, each move down whole. A lambda's capture list, template

@@ -1426,6 +1426,23 @@ namespace
 					// The outermost level is split first: an operator chain breaks at its
 					// loosest operators, and a call on a line that then fits is left alone.
 					fSplit("OperatorChain", "void f()\n{\n\to_Str += g(\"@\") << @ << @;\n}\n", "void f()\n{\n\to_Str += g(\"@\")\n\t\t<< @\n\t\t<< @\n\t;\n}\n");
+					// A conditional's '?' and ':' bind loosest of all, so it gives at them before
+					// an operand of it is opened, as a statement's value and as an element.
+					fSplit
+						(
+							"Conditional"
+							, "void f()\n{\n\tauto Value = bFlag ? (@).f_Get() : (@).f_Get();\n\tg(a, bFlag ? (@).f_Get() : (@).f_Get());\n}\n"
+							, "void f()\n{\n\tauto Value\n\t\t= bFlag\n\t\t? (@).f_Get()\n\t\t: (@).f_Get()\n\t;\n"
+								"\tg\n\t\t(\n\t\t\ta\n\t\t\t, bFlag\n\t\t\t? (@).f_Get()\n\t\t\t: (@).f_Get()\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// A parenthesised operand stands apart from the '?' and ':' like any other,
+					// which is what lets a conditional written across lines be joined. A range
+					// with an unsettled gap cannot be measured, and is not broken at its
+					// operators either.
+					fg_ExpectFormat("ConditionalJoined", "void f()\n{\n\tx = a ?\n\t\t(b) :\n\t\t(c);\n}\n", "void f()\n{\n\tx = a ? (b) : (c);\n}\n");
+					CStr Unsettled = "void f()\n{\n\ty = a + g(b &\n\t\tc) + d;\n}\n";
+					fg_ExpectFormat("UnsettledOperators", Unsettled, Unsettled);
 					// The loosest operator wins, so a tighter one stays on its line.
 					fSplit("Precedence", "void f()\n{\n\treturn g(\"@\") && h(\"@\") == nullptr;\n}\n", "void f()\n{\n\treturn g(\"@\")\n\t\t&& h(\"@\") == nullptr\n\t;\n}\n");
 					// An element that still does not fit splits its own scope markers.
