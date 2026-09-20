@@ -4892,12 +4892,22 @@ namespace
 		// A bare name behind the list, such as an attribute macro, stands between it and
 		// the parameter list or the body: '[&] mark_no_coroutine_debug () mutable'.
 		auto iAfter = fp_NextCode(_iToken);
-		if (iAfter >= 0 && Tokens[umint(iAfter)].m_Kind == ECodeTokenKind::mc_Identifier && !m_Tokens.f_IsText(Tokens[umint(iAfter)], "mutable"))
+		if (iAfter >= 0 && Tokens[umint(iAfter)].m_Kind == ECodeTokenKind::mc_Identifier && !fp_IsFunctionQualifier(umint(iAfter)))
 			iAfter = fp_NextCode(umint(iAfter));
 
-		return iAfter >= 0
-			&& (m_Tokens.f_IsText(Tokens[umint(iAfter)], "(") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "{") || m_Tokens.f_IsText(Tokens[umint(iAfter)], "<"))
-		;
+		// A lambda that takes nothing may leave its parameter list out, and then its
+		// qualifiers and its return type stand behind the list: '[pState] mutable -> int'.
+		while (iAfter >= 0 && fp_IsFunctionQualifier(umint(iAfter)))
+			iAfter = fp_NextCode(umint(iAfter));
+
+		if (iAfter < 0)
+			return false;
+
+		auto const &After = Tokens[umint(iAfter)];
+		if (m_Tokens.f_IsText(After, "->"))
+			return fp_IsTrailingReturnArrow(umint(iAfter));
+
+		return m_Tokens.f_IsText(After, "(") || m_Tokens.f_IsText(After, "{") || m_Tokens.f_IsText(After, "<");
 	}
 
 	// The words that may stand between a parameter list and a trailing return type.

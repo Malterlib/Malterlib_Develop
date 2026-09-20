@@ -214,7 +214,11 @@ which is also what tells the arrow behind it, a trailing return type's, from
 the member access that `->` otherwise is: neither `operator co_await`, named by
 a keyword an expression uses, nor `operator ""_f`, named by a suffix behind a
 literal, spells a type in front of the list the way an ordinary declaration
-does.
+does. A lambda that takes nothing may leave its parameter list out, and its
+arrow then stands behind the capture list, its qualifiers, or the attribute
+macro that follows the list, `[pState] mutable -> TCFuture<void>`; such a
+lambda owns its body like any other. The brackets of `delete []` capture
+nothing, so `delete [] pArray->m_pData` keeps its member access.
 
 An operator with an operand on both sides of it is written apart from both,
 whatever they are spelled with: `5 * 5`, `nFlags & mc_Mask`, `a + (b | c)`.

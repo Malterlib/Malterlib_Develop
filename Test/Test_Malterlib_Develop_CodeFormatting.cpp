@@ -502,6 +502,18 @@ namespace
 							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[&]<typename ...tfp_C>(tfp_C ...p_P) mutable -> int\n\t\t\t{\n\t\t\t\treturn 0;\n\t\t\t}\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A lambda that takes nothing may leave its parameter list out, and its arrow
+					// then stands behind the capture list, its qualifiers, or an attribute macro.
+					// It owns its body all the same. The brackets of 'delete []' capture nothing.
+					fg_ExpectFormat
+						(
+							"LambdaArrowNoParameters"
+							, "void f()\n{\n\tauto fA = [pA]->TCFuture<void>\n\t\t{\n\t\t\tco_return {};\n\t\t}\n\t;\n\tauto fB = [pA] mutable->int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t;\n"
+								"\tauto fC = [pA] mark_nodebug->int { return 1; };\n\tdelete [] pArray -> m_pData;\n\tx = a[0] -> m_p;\n}\n"
+							, "void f()\n{\n\tauto fA = [pA] -> TCFuture<void>\n\t\t{\n\t\t\tco_return {};\n\t\t}\n\t;\n\tauto fB = [pA] mutable -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t;\n"
+								"\tauto fC = [pA] mark_nodebug -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t;\n\tdelete [] pArray->m_pData;\n\tx = a[0]->m_p;\n}\n"
+						)
+					;
 					// An operator function's arrow is one too, whatever names it: a keyword an
 					// expression uses, or a literal's suffix. Its parameter list is one wherever
 					// the function is declared, which is what the arrow behind it follows.

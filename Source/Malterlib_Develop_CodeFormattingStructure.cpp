@@ -1689,9 +1689,10 @@ namespace NMib::NDevelop
 			if (iBefore < 0)
 				return true;
 
+			// The brackets of 'delete []' say what is deleted and capture nothing.
 			auto const &Before = Tokens[umint(iBefore)];
 			if (Before.m_Kind == ECodeTokenKind::mc_Identifier)
-				return fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords);
+				return fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords) && !_Tokens.f_IsText(Before, "delete");
 
 			if (Before.m_Kind != ECodeTokenKind::mc_Punctuator)
 				return false;
@@ -1720,7 +1721,20 @@ namespace NMib::NDevelop
 		while (iBefore >= 0 && fg_IsAnyText(_Tokens, Tokens[umint(iBefore)], c_pQualifiers))
 			iBefore = fg_PreviousCode(_Tokens, umint(iBefore));
 
-		if (iBefore < 0 || !_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
+		if (iBefore < 0)
+			return false;
+
+		// A lambda that takes nothing may leave its parameter list out, and then the arrow
+		// stands behind the capture list, or behind the attribute macro that follows one:
+		// '[pState] -> TCFuture<void>'.
+		auto iCapture = iBefore;
+		if (Tokens[umint(iCapture)].m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Tokens[umint(iCapture)], gc_pExpressionKeywords))
+			iCapture = fg_PreviousCode(_Tokens, umint(iCapture));
+
+		if (iCapture >= 0 && _Tokens.f_IsText(Tokens[umint(iCapture)], "]"))
+			return fg_NameSubscriptOperator(_Tokens, umint(iCapture)) < 0 && fg_IsCaptureList(_Tokens, _Structure, umint(iCapture));
+
+		if (!_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
 			return false;
 
 		return fg_ClosesParameterList(_Tokens, _Structure, umint(iBefore));
