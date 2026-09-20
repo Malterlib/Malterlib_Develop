@@ -257,6 +257,15 @@ namespace
 					fg_ExpectFormat("Assign", "void f()\n{\n\tint a=1;\n\tint b =2;\n}\n", "void f()\n{\n\tint a = 1;\n\tint b = 2;\n}\n");
 					fg_ExpectFormat("CaptureDefault", "void f()\n{\n\tauto g = [=]{};\n}\n", "void f()\n{\n\tauto g = [=]\n\t\t{\n\t\t}\n\t;\n}\n");
 					fg_ExpectFormat("FormattingDsl", "auto g_Option = \"Names\"_o= _o[\"--file\"];\n", "auto g_Option = \"Names\"_o= _o[\"--file\"];\n");
+					// A marker hugs the '=' that makes a key and the brackets of an array, and
+					// one with no key in front of it spells an object whose '=' hugs the brace.
+					fg_ExpectFormat
+						(
+							"FormattingDslSpaced"
+							, "auto g_A = {\"Names\"_o = _o [\"--file\"], \"Type\"_o= _o = {}, \"Array\"_ = _ [1, _ = {\"Key\"_ = 5}], \"Object\"_j = {\"A\"_j= 1}};\n"
+							, "auto g_A = {\"Names\"_o= _o[\"--file\"], \"Type\"_o= _o={}, \"Array\"_= _[1, _={\"Key\"_= 5}], \"Object\"_j= {\"A\"_j= 1}};\n"
+						)
+					;
 					// A statement broken at its '=' is brought back together, and what then
 					// does not fit gives at its scopes, not in front of the name.
 					fg_ExpectFormat

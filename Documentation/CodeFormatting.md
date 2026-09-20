@@ -247,7 +247,11 @@ and is none; the width behind the colon is what tells the two apart.
 Plain `=` assigns and initializes, and stands apart from both sides. Two
 spellings in the sources are not that: a capture default, which the markers
 around it settle as `[=]` and `[=, &m_Value]`, and the tail of Malterlib's
-`_o=` and `_j=` command-line DSL, which hugs the key in front of it. A DSL
+`_o=` and `_j=` DSL. A marker hugs what it marks: the `=` that makes a key of
+the literal in front of it, `"Names"_o= 5`, and the brackets of an array,
+`_o["--file"]`. A marker with no key in front of it spells an object, and its
+`=` hugs the brace as well, `_o={"Key"_o= 5}`. The sources write these one way,
+so a space in any of them is taken out. A DSL
 marker is told from every other name by its shape, an underscore with nothing
 but lower case behind it, which no declared name in Malterlib has. Settling the
 token is also what lets a statement broken at its `=` be measured, and so

@@ -1997,19 +1997,32 @@ namespace NMib::NDevelop
 				return ECodeSpacing::mc_Preserve;
 		}
 
-		// Plain '=' assigns and initializes, and is written apart from both sides. Behind
-		// one of Malterlib's DSL markers it is instead the tail of a spelling that hugs the
-		// key it follows, '"Names"_o= _o[...]', and a marker is told from every other name
-		// by its shape: an underscore with nothing but lower case behind it, which no
-		// declared name has. A capture default is settled by the markers around it, and an
-		// operator function's name keeps whatever spelling it has.
-		if (fLeft("=") || fRight("="))
-		{
-			if (fRight("=") && Left.m_Kind == ECodeTokenKind::mc_Identifier && fg_IsDSLMarker(_Tokens, Left))
-				return ECodeSpacing::mc_Preserve;
+		// One of Malterlib's DSL markers hugs what it marks: the '=' that makes a key of the
+		// literal in front of it, '"Names"_o= 5', and the brackets of an array, '_o[1, 2]'.
+		// A marker with no key in front of it spells an object, and its '=' hugs the brace
+		// as well: '_o={"Key"_o= 5}'. A marker is told from every other name by its shape,
+		// an underscore with nothing but lower case behind it, which no declared name has.
+		if (Left.m_Kind == ECodeTokenKind::mc_Identifier && fg_IsDSLMarker(_Tokens, Left) && (fRight("=") || fRight("[")))
+			return ECodeSpacing::mc_None;
 
-			return ECodeSpacing::mc_Space;
+		if (fLeft("=") && fRight("{"))
+		{
+			auto iMarker = fg_PreviousCode(_Tokens, _iLeft);
+			auto iKey = iMarker >= 0 ? fg_PreviousCode(_Tokens, umint(iMarker)) : aint(-1);
+			bool bMarker = iMarker >= 0 && Tokens[umint(iMarker)].m_Kind == ECodeTokenKind::mc_Identifier && fg_IsDSLMarker(_Tokens, Tokens[umint(iMarker)]);
+			bool bKeyed = iKey >= 0
+				&& Tokens[umint(iKey)].m_Kind == ECodeTokenKind::mc_StringLiteral
+				&& Tokens[umint(iKey)].f_GetEnd() == Tokens[umint(iMarker)].m_iOffset
+			;
+			if (bMarker && !bKeyed)
+				return ECodeSpacing::mc_None;
 		}
+
+		// Plain '=' assigns and initializes, and is written apart from both sides. A capture
+		// default is settled by the markers around it, and an operator function's name keeps
+		// whatever spelling it has.
+		if (fLeft("=") || fRight("="))
+			return ECodeSpacing::mc_Space;
 
 		// An operator in an infix position is written apart from both of its operands,
 		// whatever they are spelled with: 'nFlags & mc_Mask', '5 * 5', 'a * (b + c)'. The
