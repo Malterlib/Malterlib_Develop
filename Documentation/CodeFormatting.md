@@ -519,6 +519,14 @@ it on the line, and only one is taken: a head that needs a second has more in
 it than a name, and opens the arguments after all, which is what an explicit
 instantiation whose arguments fill a line of their own does.
 
+A call or a subscript on what a call or a subscript yields is a postfix
+operation like a member access and binds the same way, so it is a link of the
+chain: `f_CallActor(&C::f_Fn)`, `[1]`, `(_Params)` and `.f_Timeout(10.0)` each
+take a line once the chain gives. A lambda's parameter list, a cast's operand
+and an empty list are not links. A subscript hugs what yields it,
+`f_Get()[0]`, where an attribute's brackets stand apart, `if (bFlag)
+[[unlikely]]`.
+
 A member chain that gives at all gives at every member, whether it resumes
 under a closing marker or starts at the access that kept a scope whole, and
 whether or not what is left of it would fit on one line. Filled a call at a

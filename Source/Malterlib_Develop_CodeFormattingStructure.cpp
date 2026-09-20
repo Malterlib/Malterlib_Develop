@@ -2062,6 +2062,16 @@ namespace NMib::NDevelop
 		if (fg_IsInfixOperator(_Tokens, _Structure, _iLeft) || fg_IsInfixOperator(_Tokens, _Structure, _iRight))
 			return ECodeSpacing::mc_Space;
 
+		// A subscript on what a call or another subscript yields hugs it, as one behind a
+		// name does: 'f_Get()[0]', 'm_Rows[0][1]'. An attribute opens with two brackets and
+		// stands apart from the parenthesis in front of it: 'if (bFlag) [[unlikely]]'.
+		if (fRight("[") && (fLeft(")") || fLeft("]")))
+		{
+			auto iInner = fg_NextCode(_Tokens, _iRight);
+			if (iInner < 0 || !_Tokens.f_IsText(Tokens[umint(iInner)], "["))
+				return ECodeSpacing::mc_None;
+		}
+
 		// A conditional's '?' and ':' stand apart from both of their operands, a
 		// parenthesised one included: 'bFlag ? (a + b) : (c + d)'.
 		if (fLeft("?") || fRight("?"))

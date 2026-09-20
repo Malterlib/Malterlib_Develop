@@ -603,6 +603,7 @@ namespace
 		bool fp_IsCastGroup(umint _iNode) const;
 		bool fp_IsNamedCast(umint _iOpen) const;
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent, bool _bMustSplit = false);
+		bool fp_IsYieldedScope(umint _iOpen) const;
 		bool fp_LayoutMembers(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
 		bool fp_BreakAtQualification(umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
 		bool fp_LayoutHead(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
@@ -5032,8 +5033,42 @@ namespace
 		;
 	}
 
+	// A call or a subscript on what a call or a subscript yields is a postfix operation
+	// like a member access, and binds the same way: 'f_CallActor(&C::f_Fn)(_Params)[0]'.
+	// A lambda's parameter list stands behind a closing marker too and is part of its
+	// introducer instead, a cast's operand is what the cast converts, and an empty list
+	// holds nothing to give a line to: '(*pFunctor)()'.
+	bool CFormattingAnalyzer::fp_IsYieldedScope(umint _iOpen) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		if (!m_Tokens.f_IsText(Tokens[_iOpen], "(") && !m_Tokens.f_IsText(Tokens[_iOpen], "["))
+			return false;
+
+		auto iBefore = fp_PreviousCode(_iOpen);
+		if (iBefore < 0 || (!m_Tokens.f_IsText(Tokens[umint(iBefore)], ")") && !m_Tokens.f_IsText(Tokens[umint(iBefore)], "]")))
+			return false;
+
+		auto iInner = fp_NextCode(_iOpen);
+		if (iInner < 0 || m_Tokens.f_IsText(Tokens[umint(iInner)], ")") || m_Tokens.f_IsText(Tokens[umint(iInner)], "]"))
+			return false;
+
+		if (m_Tokens.f_IsText(Tokens[umint(iBefore)], "]") && fg_IsCaptureList(m_Tokens, m_Structure, umint(iBefore)))
+			return false;
+
+		auto const &Nodes = m_Structure.f_GetNodes();
+		for (umint iNode = 0; iNode < Nodes.f_GetLen(); ++iNode)
+		{
+			if (Nodes[iNode].m_Kind == ECodeNodeKind::mc_Group && Nodes[iNode].m_iLastToken == umint(iBefore))
+				return !fp_IsCastGroup(iNode);
+		}
+
+		return true;
+	}
+
 	// The last resort for a line nothing else can shorten: every member access at the
 	// line's own level takes a line of its own, and each part is then laid out on its own.
+	// A call or a subscript on what the chain yields is one of its links, and gives with
+	// the rest.
 	bool CFormattingAnalyzer::fp_LayoutMembers(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation)
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
@@ -5041,7 +5076,17 @@ namespace
 		TCVector<umint> Members;
 		for (umint i = _iFirst + 1; i <= _iLast; ++i)
 		{
-			if (m_TokenDepth[i] != nLevel || (!m_Tokens.f_IsText(Tokens[i], ".") && !m_Tokens.f_IsText(Tokens[i], "->")))
+			if (m_TokenDepth[i] != nLevel)
+				continue;
+
+			if (fp_IsYieldedScope(i))
+			{
+				Members.f_Insert(i);
+
+				continue;
+			}
+
+			if (!m_Tokens.f_IsText(Tokens[i], ".") && !m_Tokens.f_IsText(Tokens[i], "->"))
 				continue;
 
 			auto iBefore = fp_PreviousCode(i);
@@ -5430,6 +5475,11 @@ namespace
 				fp_BreakBefore(Breaks[iBreak], nContinuation);
 				bSplit = true;
 				iLineFirst = Breaks[iBreak];
+				// A call or a subscript on what the chain yields is a link of it, and a chain
+				// that gives at one link gives at all of them.
+				if (fp_IsYieldedScope(iLineFirst) && fp_LayoutMembers(_iNode, iLineFirst, _iLast, nContinuation, nContinuation))
+					break;
+
 				// The rest of one introducer follows at once, so its parts never end up on
 				// two lines where the source had three parts.
 				while (Introducer[iBreak] && iBreak + 1 < Breaks.f_GetLen() && Introducer[iBreak + 1])

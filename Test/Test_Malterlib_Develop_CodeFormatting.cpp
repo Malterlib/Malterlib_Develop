@@ -299,6 +299,15 @@ namespace
 					;
 					CStr Pointers = "void (*g_pCall)(int);\nvoid (&g_Call)(int) = fg_F;\nvoid f()\n{\n\tm_Actor.f_CallActor(&CActor::f_Get)(1);\n}\n";
 					fg_ExpectFormat("FunctionPointer", Pointers, Pointers);
+					// A subscript on what a call or a subscript yields hugs it, which is what lets
+					// one written on a line of its own be joined. An attribute's brackets do not.
+					fg_ExpectFormat
+						(
+							"YieldedSubscript"
+							, "void f()\n{\n\ta = g(x)\n\t\t[1];\n\tb = h[1] [2];\n\tif (c) [[unlikely]]\n\t\tg();\n}\n"
+							, "void f()\n{\n\ta = g(x)[1];\n\tb = h[1][2];\n\tif (c) [[unlikely]]\n\t\tg();\n}\n"
+						)
+					;
 					// A call is not a name, whatever stands in front of it.
 					fg_ExpectFormat("CallKept", "void f()\n{\n\tauto A = g(1);\n\tauto B = h(a, i(b));\n}\n", "void f()\n{\n\tauto A = g(1);\n\tauto B = h(a, i(b));\n}\n");
 					// Declarators keep their Malterlib spelling; they are not expression operators.
@@ -1414,6 +1423,15 @@ namespace
 							"ChainedRedundant"
 							, "void f()\n{\n\tg(@).f_Call(@).f_Wrap(@);\n}\n"
 							, "void f()\n{\n\tg(@)\n\t\t.f_Call(@)\n\t\t.f_Wrap(@)\n\t;\n}\n"
+						)
+					;
+					// A call or a subscript on what the chain yields is a link of it like a member
+					// access, and gives with the rest.
+					fSplit
+						(
+							"ChainedYielded"
+							, "void f()\n{\n\tActor.f_CallActor(&C::f_Fn_@)[1](a, b).f_Timeout(10.0, \"@\") > Results;\n}\n"
+							, "void f()\n{\n\tActor.f_CallActor(&C::f_Fn_@)\n\t\t[1]\n\t\t(a, b)\n\t\t.f_Timeout(10.0, \"@\")\n\t\t> Results\n\t;\n}\n"
 						)
 					;
 					fSplit
