@@ -5897,11 +5897,30 @@ namespace
 		auto nContinuation = _bIndentContinuations && !bLeadsOpened ? _iIndent + nTab : _iIndent;
 		m_bOperatorSplit |= _bIndentContinuations;
 		// A lambda is written behind the operator that takes it, so that operator stays on
-		// the line its left hand side ends: 'g_Dispatch /' with the lambda below it. Only
-		// the first operator qualifies, and only while the line in front of it is whole.
+		// the line its left hand side ends, and so does the capture list where it fits
+		// there: 'g_ActorFunctor / [this]' with the parameter list and the return type
+		// below it. Only a capture list too long for that line goes below the operator,
+		// 'g_Dispatch /' with the list opened under it. Only the first operator qualifies,
+		// and only while the line in front of it is whole.
 		bool bOperatorTrails = fp_IsLambdaIntroducer(Operators[0]) && fp_FitsInline(_iFirst, Operators[0], _iIndent);
+		umint iHeadEnd = Operators[0];
 		if (bOperatorTrails)
-			fp_BreakAfter(Operators[0], nContinuation);
+		{
+			auto iCapture = fp_NextCode(Operators[0]);
+			for (auto iChild : Nodes[_iNode].m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_Kind != ECodeNodeKind::mc_Group || iCapture < 0 || Child.m_iFirstToken != umint(iCapture))
+					continue;
+
+				if (Child.m_iLastToken <= _iLast && fp_FitsInline(_iFirst, Child.m_iLastToken, _iIndent))
+					iHeadEnd = Child.m_iLastToken;
+
+				break;
+			}
+
+			fp_BreakAfter(iHeadEnd, nContinuation);
+		}
 
 		for (umint i = bOperatorTrails ? 1 : 0; i < Operators.f_GetLen(); ++i)
 			fp_BreakBefore(Operators[i], nContinuation);
@@ -5924,17 +5943,18 @@ namespace
 
 			auto iStart = iSegment ? Operators[iSegment - 1] : _iFirst;
 			auto iEnd = iSegment < Operators.f_GetLen() ? umint(fp_PreviousCode(Operators[iSegment])) : _iLast;
-			// An operator left on the previous line belongs to neither segment's own line.
+			// An operator left on the previous line belongs to neither segment's own line,
+			// nor does the capture list left there with it.
 			if (iSegment == 1 && bOperatorTrails)
 			{
-				auto iNext = fp_NextCode(iStart);
+				auto iNext = fp_NextCode(iHeadEnd);
 				if (iNext < 0 || umint(iNext) > iEnd)
 					continue;
 
 				iStart = umint(iNext);
 			}
 			else if (!iSegment && bOperatorTrails)
-				iEnd = Operators[0];
+				iEnd = iHeadEnd;
 
 			if (iEnd < iStart)
 				continue;

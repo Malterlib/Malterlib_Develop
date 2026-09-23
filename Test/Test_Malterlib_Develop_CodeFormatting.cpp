@@ -1634,19 +1634,43 @@ namespace
 
 				DMibTestCategory("Lambda")
 				{
-					// A lambda is given a line of its own first, then its introducer is
-					// separated from its parameters, and only then its return type.
+					// A lambda's capture list stays on the line of the operator that takes it,
+					// and the rest of the introducer follows below: the parameter list with the
+					// return type behind it, opened where it does not fit on a line of its own.
 					CStr Head = "void f()\n{\n\tm_fOnClose = g_ActorFunctorWeak / ";
 					CStr Split = "void f()\n{\n\tm_fOnClose = g_ActorFunctorWeak /\n\t\t";
 					CStr Body = "\n\t{\n\t\treturn;\n\t}\n\t;\n}\n";
 					CStr Captures = "[this, pConnectionWeak, Sequence, _bRetry, _SomeMoreCaptureNames, _AndYetAnotherOne]";
 					CStr Params = "(NWeb::EWebSocketStatus _ReasonForTheClosure, NStr::CStr _MessageDescribingTheClose, NWeb::EWebSocketCloseOrigin _OriginOfTheClose)";
-					fg_ExpectFormat("Whole", Head + "[this]" + Params + " -> TCFuture<void>" + Body, Split + "[this]" + Params + " -> TCFuture<void>" + Body);
+					fg_ExpectFormat("Whole", Head + "[this]" + Params + " -> TCFuture<void>" + Body, Head + "[this]\n\t\t" + Params + " -> TCFuture<void>" + Body);
 					fg_ExpectFormat
 						(
 							"Introducer"
 							, Head + Captures + Params + " -> TCFuture<void>" + Body
-							, Split + Captures + "\n\t\t" + Params + " -> TCFuture<void>" + Body
+							, Head + Captures + "\n\t\t" + Params + " -> TCFuture<void>" + Body
+						)
+					;
+					CStr Filler;
+					for (umint i = 0; i < 80; ++i)
+						Filler += "W";
+
+					CStr LongParams = "(NWeb::EWebSocketStatus _ReasonForTheClosure, NStr::CStr _Message@, NWeb::EWebSocketCloseOrigin _Origin@)";
+					fg_ExpectFormat
+						(
+							"OpenedParameters"
+							, (Head + "[this]" + LongParams + " -> TCFuture<void>" + Body).f_Replace("@", Filler)
+							, (Head + "[this]\n\t\t(\n\t\t\tNWeb::EWebSocketStatus _ReasonForTheClosure\n\t\t\t, NStr::CStr _Message@\n\t\t\t, NWeb::EWebSocketCloseOrigin _Origin@\n\t\t)"
+								"\n\t\t-> TCFuture<void>" + Body).f_Replace("@", Filler)
+						)
+					;
+					// Only a capture list too long for the operator's line goes below it, opened.
+					CStr LongCaptures = "[this, pConnectionWeak, Sequence, _bRetry, pThis@, _Last@]";
+					fg_ExpectFormat
+						(
+							"OpenedCaptures"
+							, (Head + LongCaptures + "() -> TCFuture<void>" + Body).f_Replace("@", Filler)
+							, (Split + "[\n\t\t\tthis\n\t\t\t, pConnectionWeak\n\t\t\t, Sequence\n\t\t\t, _bRetry\n\t\t\t, pThis@\n\t\t\t, _Last@\n\t\t]"
+								"\n\t\t() -> TCFuture<void>" + Body).f_Replace("@", Filler)
 						)
 					;
 					// A directive fixes the capture list's lines, and the parameter list behind
@@ -1675,7 +1699,7 @@ namespace
 						(
 							"TemplateParameters"
 							, Head + Captures + Template + Params + " -> TCFuture<void>" + Body
-							, Split + Captures + "\n\t\t" + Template + "\n\t\t" + Params + " -> TCFuture<void>" + Body
+							, Head + Captures + "\n\t\t" + Template + "\n\t\t" + Params + " -> TCFuture<void>" + Body
 						)
 					;
 				};

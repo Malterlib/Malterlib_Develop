@@ -364,7 +364,11 @@ that does not is split, outermost break first, and each resulting line is split
 further only while it is still too long:
 
 1. The loosest binary operators at the line's own bracket level each start a
-   line. The first operator stays on the line before a lambda it takes. A
+   line. The first operator stays on the line before a lambda it takes, and
+   so does the lambda's capture list where it fits there: `g_ActorFunctor /
+   [this]` with the parameter list and the return type on the lines below,
+   the parameter list opened where it does not fit. Only a capture list too
+   long for that line goes below the operator, opened. A
    conditional's `?` and `:` bind loosest of all, so a conditional gives at
    them before either of its operands is opened: the condition, `? a` and
    `: b` each take a line. A range holding a gap the standard does not settle
