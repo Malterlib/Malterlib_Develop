@@ -5576,7 +5576,27 @@ namespace
 					&& (m_Tokens.f_IsText(Tokens[umint(iMember)], ".") || m_Tokens.f_IsText(Tokens[umint(iMember)], "->"))
 					&& !fp_IsTrailingReturnArrow(umint(iMember))
 				;
-				if (bOpens && bMember && fp_FitsInline(iLineFirst, Link.m_iLastToken, nLineIndent))
+				// The name a type declares resumes under its argument list the same way, and
+				// takes the line below the type on its own: 'TCMap<CStr, CValue>' with
+				// 'm_Values' under it.
+				bool bDeclared = iMember >= 0
+					&& umint(iMember) <= _iLast
+					&& Link.m_Bracket == ECodeBracket::mc_Angle
+					&& (Tokens[umint(iMember)].m_Kind == ECodeTokenKind::mc_Identifier || fg_IsDeclaratorToken(m_Tokens, m_Structure, umint(iMember)))
+				;
+				if (bDeclared)
+				{
+					auto iName = umint(iMember);
+					while (iName < _iLast && fg_IsDeclaratorToken(m_Tokens, m_Structure, iName))
+						iName = umint(fp_NextCode(iName));
+
+					bDeclared = Tokens[iName].m_Kind == ECodeTokenKind::mc_Identifier
+						&& !m_Tokens.f_IsText(Tokens[iName], "final")
+						&& fp_FitsInline(umint(iMember), _iLast, nContinuation)
+					;
+				}
+
+				if (bOpens && (bMember || bDeclared) && fp_FitsInline(iLineFirst, Link.m_iLastToken, nLineIndent))
 				{
 					fp_MarkInline(iLineFirst, Link.m_iLastToken);
 					fp_BreakBefore(umint(iMember), nContinuation);
@@ -5589,7 +5609,7 @@ namespace
 					// The chain is broken at every member, as one that resumes under a closing
 					// marker is: a statement that gives at its member accesses gives at all of
 					// them, rather than ending in a line of as many calls as happened to fit.
-					if (fp_LayoutMembers(_iNode, iLineFirst, _iLast, nLineIndent, nLineIndent))
+					if (bMember && fp_LayoutMembers(_iNode, iLineFirst, _iLast, nLineIndent, nLineIndent))
 						break;
 
 					continue;

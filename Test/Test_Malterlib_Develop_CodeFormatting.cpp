@@ -1545,6 +1545,16 @@ namespace
 						"\t\t, CStr _UserID\n\t\t, bool _bIncludePrivate@\n\t)\n;\n"
 					;
 					fSplit("AttributeMacro", Attribute, AttributeResult);
+					// Opening a type's argument list would leave the name it declares on a line
+					// of its own anyway, so the type stays whole and the name takes the line
+					// below it.
+					fSplit
+						(
+							"DeclaredName"
+							, "struct C\n{\n\tTCMap<CStr, TCFunction<void (@)>> m_Values_@;\n};\n"
+							, "struct C\n{\n\tTCMap<CStr, TCFunction<void (@)>>\n\t\tm_Values_@\n\t;\n};\n"
+						)
+					;
 					// A class's 'final' stays behind its template argument list's closing
 					// marker, like a function's qualifiers behind its parameter list.
 					fSplit

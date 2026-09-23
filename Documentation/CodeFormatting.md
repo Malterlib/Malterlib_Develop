@@ -394,6 +394,10 @@ further only while it is still too long:
    `.f_Timeout(30.0)` and `.f_CallSync(m_pRunLoop)` under it. A scope holding a
    lambda body is not one of those, since its body takes lines whether the
    scope is opened or not.
+   The name a declaration's type declares stands behind the type's template
+   argument list the same way, so the type stays whole and the name, with any
+   declarator, takes the line below it: `TCMap<CStr, CValue>` with `m_Values`
+   under it.
 4. A name that is still too long with its parameter list opened breaks at its
    qualification, then opens its own template argument list, and after that
    breaks at its member accesses, all at once.
