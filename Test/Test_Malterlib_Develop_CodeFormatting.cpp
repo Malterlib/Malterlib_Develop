@@ -335,6 +335,15 @@ namespace
 								"constexpr auto gc_C = TCFoo<CBindOptions(a, b)>::mc_Value;\n"
 						)
 					;
+					// A cv-qualifier behind a pointer declarator qualifies the pointer and stands
+					// apart from it, as it does from a type.
+					fg_ExpectFormat
+						(
+							"PointerQualifier"
+							, "void f(char *const argv[], ch8 const *const *ppA)\n{\n\tCFoo *const pA = g();\n\tCFoo *volatile pB;\n\tint *const &pC = pA;\n}\n"
+							, "void f(char * const argv[], ch8 const * const *ppA)\n{\n\tCFoo * const pA = g();\n\tCFoo * volatile pB;\n\tint * const &pC = pA;\n}\n"
+						)
+					;
 					// 'decltype' and its operand name a type: what a parenthesis behind the name
 					// holds is declared, and a declarator behind the operand is one too. As an
 					// expression's own the same keyword declares nothing.
@@ -1799,7 +1808,7 @@ namespace
 					fMoves("BehindName", "mark_nodebug const CFoo &fg_F();\nmark_nodebug const CFoo fg_G();\n", "mark_nodebug CFoo const &fg_F();\nmark_nodebug CFoo const fg_G();\n");
 					// A qualifier already behind its type, a pointer's own, a function's, a macro's
 					// bare argument, and one with a comment or an unresolved '<' behind it stay.
-					CStr Kept = "struct C\n{\n\tCFoo const m_A;\n\tint *const m_pB = nullptr;\n\tCFoo const &f_C() const override;\n"
+					CStr Kept = "struct C\n{\n\tCFoo const m_A;\n\tint * const m_pB = nullptr;\n\tCFoo const &f_C() const override;\n"
 						"\tvoid f_D() const requires cFoo<C>;\n\tconst /* why */ int m_E;\n\tDMacro(const, x);\n};\n"
 					;
 					fg_ExpectFormat("Kept", Kept, Kept);

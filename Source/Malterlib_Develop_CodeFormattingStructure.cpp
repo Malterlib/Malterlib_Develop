@@ -2192,10 +2192,15 @@ namespace NMib::NDevelop
 			return ECodeSpacing::mc_None;
 
 		// A declarator is separated from the type it modifies and hugs what it declares:
-		// 'CStr const &_Name', 'TCVector<int> *&_pList', 'ch8 const *const'. Another
+		// 'CStr const &_Name', 'TCVector<int> *&_pList', 'ch8 const * const'. Another
 		// declarator hugs it.
 		if (fg_IsDeclaratorText(_Tokens, Right) && fg_IsDeclaratorToken(_Tokens, _Structure, _iRight))
 			return fg_IsDeclaratorText(_Tokens, Left) ? ECodeSpacing::mc_None : ECodeSpacing::mc_Space;
+
+		// A cv-qualifier behind a pointer declarator qualifies the pointer, and stands apart
+		// from the declarator as it does from a type: 'CFoo * const pFoo', 'ch8 const * const *'.
+		if (fLeft("*") && (fRight("const") || fRight("volatile")) && fg_IsDeclaratorToken(_Tokens, _Structure, _iLeft))
+			return ECodeSpacing::mc_Space;
 
 		if (fg_IsDeclaratorText(_Tokens, Left) && fg_IsDeclaratorToken(_Tokens, _Structure, _iLeft))
 		{
