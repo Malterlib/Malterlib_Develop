@@ -460,7 +460,10 @@ and `_j=` command-line DSL. A template header, a `requires` clause, a label, and
 the statement a clause guards each keep their own line. A template header too
 long for its line opens its parameter list, with `template` alone on its line
 and the markers at the header's own level, since nothing extends the header
-behind its `>`.
+behind its `>`. A class's own template argument list, behind the name its
+definition or specialization declares, opens at the head's level the same way,
+`struct TCFoo` over `<` and `>`, while a base clause behind it continues the
+head one level in, `: public CBase`.
 
 A line that is still too long after all of that is broken again, so the layout
 does not depend on where the source happened to break: an element the source

@@ -1646,13 +1646,14 @@ namespace
 							, "struct C\n{\n\tTCMap<CStr, TCFunction<void (@)>>\n\t\tm_Values_@\n\t;\n};\n"
 						)
 					;
-					// A class's 'final' stays behind its template argument list's closing
-					// marker, like a function's qualifiers behind its parameter list.
+					// A class's own argument list opens at the head's level, since nothing
+					// extends the head as an expression; 'final' stays behind its closing marker
+					// and the base clause continues the head below it.
 					fSplit
 						(
 							"FinalAfterArguments"
 							, "struct TCFoo<@, @> final : public CBase\n{\n};\n"
-							, "struct TCFoo\n\t<\n\t\t@\n\t\t, @\n\t> final\n\t: public CBase\n{\n};\n"
+							, "struct TCFoo\n<\n\t@\n\t, @\n> final\n\t: public CBase\n{\n};\n"
 						)
 					;
 				};

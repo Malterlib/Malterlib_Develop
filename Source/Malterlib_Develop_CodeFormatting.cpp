@@ -5698,14 +5698,28 @@ namespace
 			}
 
 			// A scope that already starts its line owns that line's indentation; one that
-			// is pushed off the line it was on opens at the continuation level.
-			auto nMarkerIndent = bStartsLine ? nLineIndent : nContinuation;
+			// is pushed off the line it was on opens at the continuation level. A class's
+			// own argument list, behind the name its definition declares, is part of a head
+			// nothing extends as an expression, and opens at the head's level like a template
+			// header does: 'struct TCFoo' / '<' / 't_C' / '>'.
+			bool bClassArguments = false;
+			if (Scope.m_Bracket == ECodeBracket::mc_Angle && iLineFirst == _iFirst)
+			{
+				auto const &Keyword = Tokens[_iFirst];
+				auto iName = fp_NextCode(_iFirst);
+				bClassArguments = (m_Tokens.f_IsText(Keyword, "struct") || m_Tokens.f_IsText(Keyword, "class") || m_Tokens.f_IsText(Keyword, "union"))
+					&& iName >= 0
+					&& fp_NextCode(umint(iName)) == aint(Scope.m_iFirstToken)
+				;
+			}
+			auto nMarkerIndent = bStartsLine || bClassArguments ? nLineIndent : nContinuation;
 			++iScope;
 			if (!fp_LayoutGroup(Scopes[iScope - 1], nMarkerIndent, !bStartsLine))
 				continue;
 
 			bSplit = true;
-			nLineIndent = nMarkerIndent;
+			// The base clause behind a class's list goes on the head as a continuation.
+			nLineIndent = bClassArguments ? nContinuation : nMarkerIndent;
 			auto iNext = fp_NextCode(Scope.m_iLastToken);
 			if (iNext < 0 || umint(iNext) > _iLast)
 				break;
