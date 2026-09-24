@@ -794,7 +794,13 @@ namespace NMib::NDevelop
 					if (mp_pTokens->f_IsText(Next, "else") || mp_pTokens->f_IsText(Next, "while") || mp_pTokens->f_IsText(Next, "catch"))
 						continue;
 
-					if (Next.m_Kind == ECodeTokenKind::mc_Punctuator && !mp_pTokens->f_IsText(Next, "{") && !mp_pTokens->f_IsText(Next, "}"))
+					// Two brackets open an attribute, which starts the next declaration rather than
+					// subscripting anything: '[[nodiscard]] bool f_IsEmpty() const' behind a body.
+					bool bAttribute = mp_pTokens->f_IsText(Next, "[")
+						&& i + 1 < mp_Significant.f_GetLen()
+						&& mp_pTokens->f_IsText(Tokens[mp_Significant[i + 1]], "[")
+					;
+					if (Next.m_Kind == ECodeTokenKind::mc_Punctuator && !mp_pTokens->f_IsText(Next, "{") && !mp_pTokens->f_IsText(Next, "}") && !bAttribute)
 						continue;
 				}
 

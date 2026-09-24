@@ -775,6 +775,14 @@ namespace
 					fg_ExpectFormat("BraceOnHead", "void f() {\n\tg();\n}\n", "void f()\n{\n\tg();\n}\n");
 					fg_ExpectFormat("OneLine", "void f() { g(); }\n", "void f()\n{\n\tg();\n}\n");
 					fg_ExpectFormat("Definition", "struct C { int a; };\n", "struct C\n{\n\tint a;\n};\n");
+					// An attribute behind a body starts the next declaration; it subscripts nothing.
+					fg_ExpectFormat
+						(
+							"AttributeAfterBody"
+							, "struct C\n{\n\tbool f_A() const\n\t{\n\t\treturn true;\n\t}\n\t[[nodiscard]] bool f_B() const {return false;}\n};\n"
+							, "struct C\n{\n\tbool f_A() const\n\t{\n\t\treturn true;\n\t}\n\n\t[[nodiscard]] bool f_B() const\n\t{\n\t\treturn false;\n\t}\n};\n"
+						)
+					;
 					// A definition's keyword stands behind the template header that declares it,
 					// and a template's body holds statements the same way: one whose only member
 					// is a function definition has no terminator at its own level to say so.

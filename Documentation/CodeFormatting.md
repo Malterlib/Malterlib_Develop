@@ -583,6 +583,11 @@ marker for the same reason, `> g_DiscardResult;`. A statement that merely starts
 `(*fLocked)() > [&]` with its lambda below it, has a continuation level and
 keeps the terminator on its own line.
 
+What follows a block continues its statement only where the block is a lambda's
+body inside an expression: an operator, a member access or a call behind the
+closing brace. Two brackets open an attribute, which starts the next
+declaration, `[[nodiscard]] bool f_IsEmpty() const` behind a member's body.
+
 A brace holds statements, rather than the elements of a braced initializer,
 when a statement terminator stands at its own level or an element of it starts
 with a keyword only a statement begins with. A body whose every statement is
