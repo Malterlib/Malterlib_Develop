@@ -1845,6 +1845,23 @@ namespace
 					;
 				};
 
+				DMibTestCategory("EmptyStatement")
+				{
+					// A terminator that ends nothing goes, in a class body and in a block alike.
+					// A separator of 'for (;;)', a guarded empty statement, and one with a
+					// comment in front of it stay.
+					fg_ExpectFormat
+						(
+							"Removed"
+							, "struct C\n{\n\tusing CA = int;;\n};;\n\nvoid f()\n{\n\tg();;\n\tx = 1;\n\t;\n}\n"
+							, "struct C\n{\n\tusing CA = int;\n};\n\nvoid f()\n{\n\tg();\n\tx = 1;\n}\n"
+							, false
+						)
+					;
+					CStr Kept = "void f()\n{\n\tfor (;;)\n\t\th();\n\tif (a)\n\t\t;\n\ty = 2; // Why\n\t;\n}\n";
+					fg_ExpectFormat("Kept", Kept, Kept);
+				};
+
 				DMibTestCategory("SpecifierOrder")
 				{
 					// 'static' stands in front of 'constexpr', whatever specifiers stand between

@@ -612,6 +612,7 @@ namespace
 		bool fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent);
 		void fp_ConvertQualifiers();
 		void fp_ConvertSpecifiers();
+		void fp_ConvertEmptyStatements();
 		bool fp_DropBraces(umint _iStatement, umint _iGuard);
 		bool fp_AddBraces(umint _iStatement, umint _iGuard);
 		bool fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const;
@@ -1758,6 +1759,7 @@ namespace
 		bool bQualifierStage = !m_Structural.f_IsEmpty();
 		if (!bQualifierStage && m_bAllowConversions)
 		{
+			fp_ConvertEmptyStatements();
 			m_bProbing = true;
 			fp_RuleLineBreaks();
 			m_bProbing = false;
@@ -1808,6 +1810,8 @@ namespace
 					Explanation = "a qualifier stands behind the type it qualifies";
 				else if (Edit.m_Rule == "specifier-order")
 					Explanation = "'static' stands in front of 'constexpr'";
+				else if (Edit.m_Rule == "empty-statement")
+					Explanation = "a terminator that ends nothing is taken out";
 
 				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
 			}
@@ -2579,6 +2583,42 @@ namespace
 			Remove.m_iOffset = iRemove;
 			Remove.m_nLength = nRemove;
 			Remove.m_Rule = "specifier-order";
+		}
+	}
+
+	// Takes out a statement terminator that ends nothing: the second ';' of 'f_Call();;'
+	// is an empty statement of its own. Only one standing alone as a statement goes, never
+	// a separator of 'for (;;)', and only where nothing but spaces and line breaks stand
+	// between it and the terminator in front of it, so no comment or directive moves.
+	void CFormattingAnalyzer::fp_ConvertEmptyStatements()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		for (auto const &Node : m_Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Statement || Node.m_iFirstToken != Node.m_iLastToken || !m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], ";"))
+				continue;
+
+			auto iEmpty = Node.m_iFirstToken;
+			auto iBefore = fp_PreviousCode(iEmpty);
+			if (iBefore < 0 || !m_Tokens.f_IsText(Tokens[umint(iBefore)], ";"))
+				continue;
+
+			bool bPlain = true;
+			for (auto iGap = umint(iBefore) + 1; iGap < iEmpty && bPlain; ++iGap)
+				bPlain = Tokens[iGap].m_Kind == ECodeTokenKind::mc_Whitespace || Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline;
+
+			if (!bPlain)
+				continue;
+
+			auto iRemove = Tokens[umint(iBefore)].f_GetEnd();
+			auto nRemove = Tokens[iEmpty].f_GetEnd() - iRemove;
+			if (fp_IsDisabled(iRemove, nRemove) || !fp_IsSelected(iRemove, nRemove))
+				continue;
+
+			auto &Remove = m_Structural.f_Insert();
+			Remove.m_iOffset = iRemove;
+			Remove.m_nLength = nRemove;
+			Remove.m_Rule = "empty-statement";
 		}
 	}
 

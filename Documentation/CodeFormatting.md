@@ -78,8 +78,9 @@ is not handled, and `mc_Failed` when analysis could not produce a usable plan.
 
 ## Rules
 
-The implemented rule matrix is whitespace-only but for four conversions: the
-trailing return type, `braces`, `east-qualifier`, and `specifier-order`. Every plan is verified
+The implemented rule matrix is whitespace-only but for five conversions: the
+trailing return type, `braces`, `east-qualifier`, `specifier-order`, and
+`empty-statement`. Every plan is verified
 against `fg_HasEquivalentCodeTokens` on the converted source, and whole-file
 plans are re-analyzed to prove the result is stable; either check failing is a
 formatter failure, not an edit.
@@ -105,6 +106,7 @@ formatter failure, not an edit.
 | `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source. |
 | `east-qualifier` | A `const` or `volatile` written in front of its type moves behind it: `const int &_Value` becomes `int const &_Value`. |
 | `specifier-order` | `static` stands in front of `constexpr`: `constexpr static umint` becomes `static constexpr umint`. |
+| `empty-statement` | A statement terminator that ends nothing is taken out: `f_Call();;` becomes `f_Call();`. Only an empty statement standing directly behind another terminator goes, with nothing but spaces and line breaks between them; a comment between the two keeps both. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound

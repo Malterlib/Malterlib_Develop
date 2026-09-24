@@ -49,9 +49,10 @@ operations, Git access, or console output in the engine; those belong in the
 consumer. `MTool Format` applies the plan and `MTool Validate` reports it, so a
 rule must never be reimplemented as a separate regular-expression check.
 
-Every rule but four conversions changes whitespace only: the trailing return
+Every rule but five conversions changes whitespace only: the trailing return
 type, the braces dropped around a single guarded statement, a qualifier moved
-behind the type it leads, and `static` moved in front of `constexpr`. A conversion is decided first, on the original
+behind the type it leads, `static` moved in front of `constexpr`, and an empty
+statement taken out behind another terminator. A conversion is decided first, on the original
 source, and the layout is made on the converted source, so a plan is verified
 with `fg_HasEquivalentCodeTokens` against the converted source, and a whole-file
 plan is re-analyzed to prove it converged; a failing check reports a formatter
@@ -59,7 +60,7 @@ failure instead of emitting edits. Conversions that can rewrite the same text
 are made in stages rather than taught about each other: words that only change
 places, qualifiers and specifiers, move first,
 the source that leaves is analyzed by an inner analyzer that makes the other
-two, and `fg_ComposeEdits` merges any edit that reaches into a conversion's text
+three, and `fg_ComposeEdits` merges any edit that reaches into a conversion's text
 with that conversion. A conversion has to be a fixpoint of its own rule, which
 the re-analysis enforces per file: one whose output it would convert again,
 as a moved qualifier in front of a macro would be, must refuse instead. Another
