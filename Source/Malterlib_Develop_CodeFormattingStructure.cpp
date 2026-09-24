@@ -1741,6 +1741,68 @@ namespace NMib::NDevelop
 {
 	// A capture list stands where an operand cannot: a subscript follows a name, a call, a
 	// template argument list, another subscript, or a literal.
+	// Whether an element of a parenthesis can only be an argument, which a parameter
+	// list never holds: one that opens with a function's name, a literal, a keyword that
+	// is a value, a unary operator or a brace. 'TCSet<int> Set(fg_Construct(&Allocator))'
+	// constructs a variable, where the same tokens with types in the parenthesis would
+	// declare a function.
+	bool fg_HoldsArguments(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup)
+	{
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto const &Group = Nodes[_iGroup];
+		auto const &Tokens = _Tokens.f_GetTokens();
+		constexpr ch8 const *c_pValues[] =
+			{
+				"this", "nullptr", "true", "false"
+			}
+		;
+		constexpr ch8 const *c_pUnary[] =
+			{
+				"&", "*", "!", "-", "+", "~", "{"
+			}
+		;
+		bool bElementStart = true;
+		for (auto i = Group.m_iFirstToken + 1; i < Group.m_iLastToken; ++i)
+		{
+			auto const &Token = Tokens[i];
+			if (!fg_IsSignificant(Token.m_Kind))
+				continue;
+
+			if (bElementStart)
+			{
+				bool bArgument = Token.m_Kind == ECodeTokenKind::mc_Number
+					|| Token.m_Kind == ECodeTokenKind::mc_StringLiteral
+					|| Token.m_Kind == ECodeTokenKind::mc_CharLiteral
+					|| fg_IsAnyText(_Tokens, Token, c_pValues)
+					|| fg_IsAnyText(_Tokens, Token, c_pUnary)
+					|| fg_NamesFunction(_Tokens, Token)
+				;
+				if (bArgument)
+					return true;
+
+				bElementStart = false;
+			}
+
+			bool bNested = false;
+			for (auto iChild : Group.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				{
+					i = Child.m_iLastToken;
+					bNested = true;
+
+					break;
+				}
+			}
+
+			if (!bNested && _Tokens.f_IsText(Token, ","))
+				bElementStart = true;
+		}
+
+		return false;
+	}
+
 	bool fg_IsCaptureList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)
 	{
 		auto const &Tokens = _Tokens.f_GetTokens();

@@ -420,8 +420,14 @@ further only while it is still too long:
 A declaration whose name does not fit in front of its parameter list first has
 its return type moved behind that list, as `auto ... -> Type`, when the
 converted signature fits on one line or the name would not fit otherwise and
-the type is wider than the `auto` that replaces it. An explicit instantiation
-is converted the same way. A bare name behind a complete type, such as an
+the type is wider than the `auto` that replaces it. The specifiers in front of
+the return type stay in front of `auto`, and are measured with it:
+`inline_small auto f_Get(...)`. An explicit instantiation
+is converted the same way. A variable constructed with arguments has the same
+shape, and is told by what its parenthesis holds: an element that opens with a
+function's name, a literal, a keyword that is a value, a unary operator or a
+brace is an argument, which no parameter list holds, so `TCSet<int>
+Set(fg_Construct(&Allocator))` is never converted. A bare name behind a complete type, such as an
 attribute macro, keeps the declaration from being converted. The
 conversion is the one rule that changes tokens. It is decided on the original
 source, and the layout is then made on the converted source, so the lines the

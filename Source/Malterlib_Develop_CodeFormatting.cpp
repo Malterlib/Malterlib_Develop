@@ -2929,6 +2929,11 @@ namespace
 		if (iOpen == Node.m_iFirstToken)
 			return false;
 
+		// A variable constructed with arguments has the shape of a declaration too; what the
+		// parenthesis holds is what tells them apart.
+		if (fg_HoldsArguments(m_Tokens, m_Structure, iParen))
+			return false;
+
 		auto iBeforeOpen = fp_PreviousCode(iOpen);
 		if (iBeforeOpen < 0)
 			return false;
@@ -3019,6 +3024,7 @@ namespace
 			}
 		;
 		umint iReturn = _iDeclFirst;
+		umint iSpecifiersFirst = _iDeclFirst;
 		while (iReturn < iDeclarator)
 		{
 			auto const &Token = Tokens[iReturn];
@@ -3045,6 +3051,7 @@ namespace
 					return false;
 
 				iReturn = iAfter;
+				iSpecifiersFirst = iAfter;
 
 				continue;
 			}
@@ -3240,7 +3247,14 @@ namespace
 		// step after this one, not a part of it.
 		umint nSignature = 0;
 		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		// The specifiers in front of the return type stay in front of 'auto', and take their
+		// columns on the line with it: 'inline_small auto f_Get(...)'. A template header has
+		// a line of its own.
 		auto nAuto = _iIndent + CStr("auto ").f_GetLen();
+		auto iSpecifiersLast = fp_PreviousCode(iReturn);
+		umint nSpecifiers = 0;
+		if (iReturn > iSpecifiersFirst && iSpecifiersLast >= 0 && umint(iSpecifiersLast) >= iSpecifiersFirst && fp_MeasureJoinedWidth(iSpecifiersFirst, umint(iSpecifiersLast), nSpecifiers))
+			nAuto += nSpecifiers + 1;
 		bool bFits = fp_MeasureJoinedWidth(iDeclarator, umint(iPrevious), nSignature) && (!nMaxColumns || nAuto + nSignature <= nMaxColumns);
 
 		// Converting costs eight columns of its own. It pays for itself when it makes the

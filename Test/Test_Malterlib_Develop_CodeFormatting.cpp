@@ -1929,6 +1929,34 @@ namespace
 
 				DMibTestCategory("TrailingReturn")
 				{
+					// A variable constructed with arguments has a declaration's shape, and is told
+					// by what its parenthesis holds: a call to a function is no parameter.
+					fg_ExpectFormat
+						(
+							"ConstructedVariable"
+							, "void f()\n{\n\tTCSet<int, CCompare, CDiffAllocator> Testing(CAllocatorConstructTag(), CCompareConstructTag(), "
+								"fg_Construct(&MemoryManagerWithAMuchLongerName), fg_Construct(CCompare{.m_bReverse = true}));\n}\n"
+							, "void f()\n{\n\tTCSet<int, CCompare, CDiffAllocator> Testing\n\t\t(\n\t\t\tCAllocatorConstructTag()\n\t\t\t, CCompareConstructTag()\n"
+								"\t\t\t, fg_Construct(&MemoryManagerWithAMuchLongerName)\n\t\t\t, fg_Construct(CCompare{.m_bReverse = true})\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// The specifiers in front of the return type stay in front of 'auto' and take
+					// their columns on its line, so they count when the converted signature is
+					// measured: without them this one looks as if it would fit on one line.
+					{
+						CStr Name;
+						for (umint i = 0; i < 130; ++i)
+							Name += "W";
+
+						fg_ExpectFormat
+							(
+								"SpecifiersCounted"
+								, CStr("template <typename t_C>\ninline_small void TCFoo<t_C>::f_@(t_C &&_Functor, umint _Start) const\n{\n}\n").f_Replace("@", Name)
+								, CStr("template <typename t_C>\ninline_small void TCFoo<t_C>::f_@\n\t(\n\t\tt_C &&_Functor\n\t\t, umint _Start\n\t) const\n{\n}\n").f_Replace("@", Name)
+							)
+						;
+					}
+
 					// The name before the parameter list must itself exceed the limit.
 					CStr Wide;
 					for (umint i = 0; i < 180; ++i)
