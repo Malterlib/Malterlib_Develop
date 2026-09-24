@@ -1948,6 +1948,22 @@ namespace
 								"\t\t\t, fg_Construct(&MemoryManagerWithAMuchLongerName)\n\t\t\t, fg_Construct(CCompare{.m_bReverse = true})\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A template header too long for its line opens its parameter list, with
+					// 'template' alone and the markers at the header's level.
+					{
+						CStr Name;
+						for (umint i = 0; i < 60; ++i)
+							Name += "W";
+
+						fg_ExpectFormat
+							(
+								"LongHeader"
+								, CStr("template <typename t_CFirst@, typename t_CSecond@, template <umint t_n> class t_TCThird@>\nstruct TCFoo;\n").f_Replace("@", Name)
+								, CStr("template\n<\n\ttypename t_CFirst@\n\t, typename t_CSecond@\n\t, template <umint t_n> class t_TCThird@\n>\nstruct TCFoo;\n")
+									.f_Replace("@", Name)
+							)
+						;
+					}
 					// The specifiers in front of the return type stay in front of 'auto' and take
 					// their columns on its line, so they count when the converted signature is
 					// measured: without them this one looks as if it would fit on one line.

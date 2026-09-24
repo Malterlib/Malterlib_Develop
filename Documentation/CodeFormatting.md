@@ -452,7 +452,10 @@ arguments is a member access, and only one behind a parameter list a trailing
 return type. A braced initializer written across lines is excluded because it is data,
 most of it written one element per line on purpose, including Malterlib's `_o=`
 and `_j=` command-line DSL. A template header, a `requires` clause, a label, and
-the statement a clause guards each keep their own line.
+the statement a clause guards each keep their own line. A template header too
+long for its line opens its parameter list, with `template` alone on its line
+and the markers at the header's own level, since nothing extends the header
+behind its `>`.
 
 A line that is still too long after all of that is broken again, so the layout
 does not depend on where the source happened to break: an element the source

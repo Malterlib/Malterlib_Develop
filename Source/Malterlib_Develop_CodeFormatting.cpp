@@ -3603,10 +3603,32 @@ namespace
 			if (iNext == iDeclFirst || iNext > iSignatureLast)
 				break;
 
-			// The header itself still comes back to one line where it fits.
+			// The header itself still comes back to one line where it fits. One that does not
+			// fit opens its parameter list, with 'template' alone on its line and the markers
+			// at the header's level, since nothing extends the header behind its '>':
+			// 'template' / '<' / 'typename t_C' / '>'.
 			auto iHeaderLast = fp_PreviousCode(iNext);
-			if (!m_bProbing && iHeaderLast >= 0 && umint(iHeaderLast) > iDeclFirst && fp_FitsInline(iDeclFirst, umint(iHeaderLast), _iIndent))
-				fp_MarkInline(iDeclFirst, umint(iHeaderLast));
+			if (!m_bProbing && iHeaderLast >= 0 && umint(iHeaderLast) > iDeclFirst)
+			{
+				if (fp_FitsInline(iDeclFirst, umint(iHeaderLast), _iIndent))
+					fp_MarkInline(iDeclFirst, umint(iHeaderLast));
+				else
+				{
+					auto iOpen = fp_NextCode(iDeclFirst);
+					umint nJoined = 0;
+					for (auto iChild : Node.m_Children)
+					{
+						auto const &Child = Nodes[iChild];
+						if (iOpen < 0 || Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_iFirstToken != umint(iOpen) || Child.m_iLastToken != umint(iHeaderLast))
+							continue;
+
+						if (fp_MeasureJoinedWidth(iDeclFirst, umint(iHeaderLast), nJoined))
+							fp_LayoutGroup(iChild, _iIndent, true);
+
+						break;
+					}
+				}
+			}
 
 			iDeclFirst = iNext;
 		}
