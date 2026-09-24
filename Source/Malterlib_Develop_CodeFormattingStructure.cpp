@@ -1768,7 +1768,58 @@ namespace NMib::NDevelop
 		if (!_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
 			return false;
 
-		return fg_ClosesParameterList(_Tokens, _Structure, umint(iBefore));
+		if (fg_ClosesParameterList(_Tokens, _Structure, umint(iBefore)))
+			return true;
+
+		// A macro that opens a function, named 'D' and a capital by Malterlib's naming, is
+		// followed by the return type and the body the way a parameter list is:
+		// 'DMibTestSuite("Name") -> TCFuture<void> {'. A member access behind a macro's
+		// result, 'DEPTR(p)->m_Value', never reaches a body through a type alone.
+		for (auto const &Node : _Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Paren || Node.m_iLastToken != umint(iBefore))
+				continue;
+
+			auto iName = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+			if (iName < 0 || Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
+				return false;
+
+			auto Name = _Tokens.f_GetText(Tokens[umint(iName)]);
+			if (Name.f_GetLen() < 2 || Name.f_GetStr()[0] != 'D' || Name.f_GetStr()[1] < 'A' || Name.f_GetStr()[1] > 'Z')
+				return false;
+
+			umint nAngle = 0;
+			for (auto iType = fg_NextCode(_Tokens, _iArrow); iType >= 0; iType = fg_NextCode(_Tokens, umint(iType)))
+			{
+				auto const &Type = Tokens[umint(iType)];
+				if (_Structure.f_IsAngleBracket(umint(iType)))
+				{
+					if (_Tokens.f_IsText(Type, "<"))
+						++nAngle;
+					else if (nAngle)
+						--nAngle;
+
+					continue;
+				}
+
+				if (nAngle)
+					continue;
+
+				if (_Tokens.f_IsText(Type, "{"))
+					return true;
+
+				bool bTypePart = (Type.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Type, gc_pExpressionKeywords))
+					|| _Tokens.f_IsText(Type, "::")
+					|| fg_IsDeclaratorText(_Tokens, Type)
+				;
+				if (!bTypePart)
+					return false;
+			}
+
+			return false;
+		}
+
+		return false;
 	}
 
 	bool fg_ClosesParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)

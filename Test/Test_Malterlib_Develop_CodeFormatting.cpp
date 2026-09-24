@@ -529,6 +529,15 @@ namespace
 							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[&]<typename ...tfp_C>(tfp_C ...p_P) mutable -> int\n\t\t\t{\n\t\t\t\treturn 0;\n\t\t\t}\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A macro that opens a function is followed by its return type and body the
+					// way a parameter list is; a member access behind a macro's result is not.
+					fg_ExpectFormat
+						(
+							"MacroArrow"
+							, "void f()\n{\n\tDMibTestSuite(\"A\")->TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n\tx = DEPTR(p) -> m_Value;\n}\n"
+							, "void f()\n{\n\tDMibTestSuite(\"A\") -> TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n\tx = DEPTR(p)->m_Value;\n}\n"
+						)
+					;
 					// A lambda that takes nothing may leave its parameter list out, and its arrow
 					// then stands behind the capture list, its qualifiers, or an attribute macro.
 					// It owns its body all the same. The brackets of 'delete []' capture nothing.

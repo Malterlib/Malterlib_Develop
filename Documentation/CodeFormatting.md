@@ -217,7 +217,10 @@ literal, spells a type in front of the list the way an ordinary declaration
 does. A lambda that takes nothing may leave its parameter list out, and its
 arrow then stands behind the capture list, its qualifiers, or the attribute
 macro that follows the list, `[pState] mutable -> TCFuture<void>`; such a
-lambda owns its body like any other. The brackets of `delete []` capture
+lambda owns its body like any other. A macro that opens a function, named `D` and a capital,
+is followed by its return type and body the same way, `DMibTestSuite("Name")
+-> TCFuture<void>`, where a member access behind a macro's result never
+reaches a body through a type alone, `DEPTR(p)->m_Value`. The brackets of `delete []` capture
 nothing, so `delete [] pArray->m_pData` keeps its member access.
 
 A conditional's `?` and `:` stand apart from both of their operands, a
