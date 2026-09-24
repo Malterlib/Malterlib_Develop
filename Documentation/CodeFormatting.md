@@ -312,7 +312,9 @@ has a closing marker of its own, and two closers written apart are joined back
 into one `>>` unless the layout gives the second a line of its own. A brace
 holding a statement terminator at its
 own level is a block, which is how a lambda body inside an argument list is told
-apart from a braced initializer.
+apart from a braced initializer. Behind the call operator's name, `operator ()`, a `<` can open nothing
+else, so it opens a list however it is spaced: `fCheck.template operator
+()<void>("Void")`.
 
 `fg_GetCanonicalSpacing` gives the inline separator between two adjacent tokens.
 It decides only the spellings the standard settles, and answers `mc_Preserve`

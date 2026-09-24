@@ -458,6 +458,15 @@ namespace
 								"\t\t\t+ g_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 2;\n\t\t\t}\n\t\t)\n\t;\n\t{\n\t}\n\t-x;\n}\n"
 						)
 					;
+					// Behind the call operator's name a '<' can only open a template argument
+					// list, however it is spaced; a call behind the name is not one.
+					fg_ExpectFormat
+						(
+							"CallOperatorArguments"
+							, "void f()\n{\n\tfA.template operator () < void > (\"A\");\n\tfB.template operator()<16>(16);\n\tR = a.operator ()(1) < b;\n}\n"
+							, "void f()\n{\n\tfA.template operator ()<void>(\"A\");\n\tfB.template operator ()<16>(16);\n\tR = a.operator () (1) < b;\n}\n"
+						)
+					;
 					// 'sizeof...' and a fold's ellipsis are spelled by rules of their own.
 					CStr Packs = "template <typename ...tp_CParams>\nconstexpr umint gc_n = sizeof...(tp_CParams);\n";
 					fg_ExpectFormat("EllipsisKept", Packs, Packs);

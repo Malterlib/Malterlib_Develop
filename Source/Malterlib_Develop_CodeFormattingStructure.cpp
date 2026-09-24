@@ -297,12 +297,20 @@ namespace NMib::NDevelop
 
 		// A template argument list follows a name. A lambda writes its own template
 		// parameter list behind the capture list, which is the other thing a '<' can follow.
+		// The call operator's name ends in its own parentheses, and nothing but a template
+		// argument list can follow that name: 'fCheck.template operator ()<void>("Void")'.
 		auto const &Previous = Tokens[mp_Significant[_iToken - 1]];
-		if (Previous.m_Kind != ECodeTokenKind::mc_Identifier && !mp_pTokens->f_IsText(Previous, "]"))
+		bool bCallOperator = _iToken >= 3
+			&& mp_pTokens->f_IsText(Previous, ")")
+			&& mp_pTokens->f_IsText(Tokens[mp_Significant[_iToken - 2]], "(")
+			&& mp_pTokens->f_IsText(Tokens[mp_Significant[_iToken - 3]], "operator")
+		;
+		if (Previous.m_Kind != ECodeTokenKind::mc_Identifier && !mp_pTokens->f_IsText(Previous, "]") && !bCallOperator)
 			return 0;
 
-		// A template header's list can only be one, however it is spaced.
-		bool bHeader = mp_pTokens->f_IsText(Previous, "template");
+		// A template header's list can only be one, however it is spaced, and so can the
+		// one behind the call operator's name.
+		bool bHeader = mp_pTokens->f_IsText(Previous, "template") || bCallOperator;
 
 		// Malterlib writes a comparison with spaces and a template argument list tight
 		// against its name, so a gap that is neither empty nor a line break is a comparison.
