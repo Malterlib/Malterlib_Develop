@@ -1479,6 +1479,16 @@ namespace
 					fg_ExpectFormat("ConditionalJoined", "void f()\n{\n\tx = a ?\n\t\t(b) :\n\t\t(c);\n}\n", "void f()\n{\n\tx = a ? (b) : (c);\n}\n");
 					CStr Unsettled = "void f()\n{\n\ty = a + g(b &\n\t\tc) + d;\n}\n";
 					fg_ExpectFormat("UnsettledOperators", Unsettled, Unsettled);
+					// An operand too long for its line gives at the operators it holds before its
+					// scopes open, and they line up with the looser one it was cut at. One that
+					// holds a lambda keeps the operator that takes it.
+					fSplit
+						(
+							"OperandOperators"
+							, "void f()\n{\n\tg(@) + h(@) + k(1) > Actor / [&](int _A)\n\t\t{\n\t\t\tx = _A;\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\tg(@)\n\t\t+ h(@)\n\t\t+ k(1)\n\t\t> Actor / [&](int _A)\n\t\t{\n\t\t\tx = _A;\n\t\t}\n\t;\n}\n"
+						)
+					;
 					// The loosest operator wins, so a tighter one stays on its line.
 					fSplit("Precedence", "void f()\n{\n\treturn g(\"@\") && h(\"@\") == nullptr;\n}\n", "void f()\n{\n\treturn g(\"@\")\n\t\t&& h(\"@\") == nullptr\n\t;\n}\n");
 					// An element that still does not fit splits its own scope markers.

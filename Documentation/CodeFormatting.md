@@ -369,7 +369,11 @@ that does not is split, outermost break first, and each resulting line is split
 further only while it is still too long:
 
 1. The loosest binary operators at the line's own bracket level each start a
-   line. The first operator stays on the line before a lambda it takes, and
+   line. An operand still too long for its line gives at the tighter
+   operators it holds before any of its scopes is opened, and those line up
+   with the looser ones: `a(…)`, `+ b(…)` and `> Actor / [&]` each take a
+   line. An operand holding a lambda is laid out by its scopes instead.
+   The first operator stays on the line before a lambda it takes, and
    so does the lambda's capture list where it fits there: `g_ActorFunctor /
    [this]` with the parameter list and the return type on the lines below,
    the parameter list opened where it does not fit. Only a capture list too

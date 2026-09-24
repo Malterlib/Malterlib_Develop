@@ -5981,9 +5981,55 @@ namespace
 
 			auto nSegmentIndent = iSegment ? nContinuation : _iIndent;
 			if (fp_FitsInline(iStart, iEnd, nSegmentIndent))
+			{
 				fp_MarkInline(iStart, iEnd);
-			else
-				fp_LayoutScopes(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iSegment, _bIndentContinuations && !iSegment);
+
+				continue;
+			}
+
+			// An operand that holds operators binding tighter than the ones it was cut at
+			// gives at those first, and they stand at the continuation level with the ones
+			// it was cut at: 'a + b > c' with 'a', '+ b' and '> c' each on a line.
+			TCVector<umint> Inner;
+			auto iInnerFirst = iSegment ? umint(fp_NextCode(iStart)) : iStart;
+			if (iInnerFirst <= iEnd)
+				fp_FindLooseOperators(iInnerFirst, iEnd, Inner);
+
+			// An operand that holds a lambda is laid out by its scopes, which is where its body
+			// and the operator that takes it are placed: '> TestActor / [&]' stays whole.
+			for (auto i = iStart; i <= iEnd && !Inner.f_IsEmpty(); ++i)
+			{
+				if (m_Tokens.f_IsText(Tokens[i], "{") || fp_IsLambdaIntroducer(i))
+					Inner.f_Clear();
+			}
+
+			if (!Inner.f_IsEmpty())
+			{
+				umint nJoined = 0;
+				if (fp_MeasureJoinedWidth(iStart, iEnd, nJoined))
+				{
+					for (auto iInnerOperator : Inner)
+						fp_BreakBefore(iInnerOperator, nContinuation);
+
+					for (umint iPart = 0; iPart <= Inner.f_GetLen(); ++iPart)
+					{
+						auto iPartStart = iPart ? Inner[iPart - 1] : iStart;
+						auto iPartEnd = iPart < Inner.f_GetLen() ? umint(fp_PreviousCode(Inner[iPart])) : iEnd;
+						if (iPartEnd < iPartStart)
+							continue;
+
+						auto nPartIndent = iPart ? nContinuation : nSegmentIndent;
+						if (fp_FitsInline(iPartStart, iPartEnd, nPartIndent))
+							fp_MarkInline(iPartStart, iPartEnd);
+						else
+							fp_LayoutScopes(_iNode, iPartStart, iPartEnd, nPartIndent, _bClause && !iSegment && !iPart, false);
+					}
+
+					continue;
+				}
+			}
+
+			fp_LayoutScopes(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iSegment, _bIndentContinuations && !iSegment);
 		}
 
 		return true;
