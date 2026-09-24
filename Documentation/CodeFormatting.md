@@ -243,7 +243,9 @@ condition, which declares nothing without an `=` of its own. A parenthesis that
 could close a cast is not such a marker, so `(int)*pValue` keeps its spelling,
 while `sizeof`, `alignof`, `typeid`, and `noexcept` yield a value the way a
 call does and `decltype` names a type. Everywhere else the pair keeps what the
-source has.
+source has. A lambda's body closes an operand the way a closing
+parenthesis does, so a sign behind it is binary: `[] { ... } + g_Other`. A
+statement's own block closes none, and a sign behind one is unary.
 
 A bit-field's width hugs the `:` that introduces it, `uint8 mp_Priority:2 = 0`,
 named or not. What stands in front of that `:` is the name a type declares,

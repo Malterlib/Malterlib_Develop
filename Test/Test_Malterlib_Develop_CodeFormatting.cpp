@@ -447,6 +447,17 @@ namespace
 								"\nTCTuple<tp_CParams && ...> g_A;\nCStr f_GetPath(tfp_C const & ...p_Component) const;\n"
 						)
 					;
+					// A lambda's body ends an operand like a closing parenthesis does, so the
+					// operator behind it is binary; one behind a statement's block is unary.
+					fg_ExpectFormat
+						(
+							"OperatorAfterBody"
+							, "void f()\n{\n\tauto [A, B] = co_await\n\t\t(\n\t\t\tg_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 1;\n\t\t\t}\n"
+								"\t\t\t+g_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 2;\n\t\t\t}\n\t\t)\n\t;\n\t{\n\t}\n\t-x;\n}\n"
+							, "void f()\n{\n\tauto [A, B] = co_await\n\t\t(\n\t\t\tg_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 1;\n\t\t\t}\n"
+								"\t\t\t+ g_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 2;\n\t\t\t}\n\t\t)\n\t;\n\t{\n\t}\n\t-x;\n}\n"
+						)
+					;
 					// 'sizeof...' and a fold's ellipsis are spelled by rules of their own.
 					CStr Packs = "template <typename ...tp_CParams>\nconstexpr umint gc_n = sizeof...(tp_CParams);\n";
 					fg_ExpectFormat("EllipsisKept", Packs, Packs);

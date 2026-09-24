@@ -1547,6 +1547,30 @@ namespace
 		return true;
 	}
 
+	// A closing brace ends an operand where it closes a lambda's body inside an expression:
+	// the statement the body stands in goes on behind it, 'g_Dispatch / [] { ... } + g_Other'.
+	bool fg_ClosesExpressionBody(CCodeStructure const &_Structure, umint _iBrace)
+	{
+		auto const &Nodes = _Structure.f_GetNodes();
+		for (auto const &Node : Nodes)
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Block || Node.m_iLastToken != _iBrace)
+				continue;
+
+			if (Node.m_iParent >= Nodes.f_GetLen())
+				return false;
+
+			// One inside a group is a lambda's body wherever it stands.
+			auto const &Parent = Nodes[Node.m_iParent];
+			if (Parent.m_Kind == ECodeNodeKind::mc_Group)
+				return true;
+
+			return Parent.m_Kind == ECodeNodeKind::mc_Statement && Parent.m_iLastToken > _iBrace;
+		}
+
+		return false;
+	}
+
 	// An operator's spelling says what it does only where an operand stands on both sides
 	// of it. Without one in front it is the unary form, '-1' and '*pValue'; without one
 	// behind it names something else, a cast's '(CFoo *)' or a pack's '&& ...'. '*', '&'
@@ -1585,6 +1609,7 @@ namespace
 			|| _Tokens.f_IsText(Before, ")")
 			|| _Tokens.f_IsText(Before, "]")
 			|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
+			|| (_Tokens.f_IsText(Before, "}") && fg_ClosesExpressionBody(_Structure, umint(iBefore)))
 		;
 		if (!bOperand)
 			return false;
@@ -2415,6 +2440,7 @@ namespace NMib::NDevelop
 					|| _Tokens.f_IsText(Before, ")")
 					|| _Tokens.f_IsText(Before, "]")
 					|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
+					|| (_Tokens.f_IsText(Before, "}") && fg_ClosesExpressionBody(_Structure, umint(iBefore)))
 				;
 			}
 
