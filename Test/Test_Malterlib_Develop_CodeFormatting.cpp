@@ -944,6 +944,21 @@ namespace
 							, "void f()\n{\n\t[&]() inline_never\n\t{\n\t\tg();\n\t}();\n\t[&]<typename ...tfp_C>(CList<tfp_C...> &&)\n\t{\n\t\tg();\n\t}\n\t(CParams());\n}\n"
 						)
 					;
+					// Whether a statement broke at its operators is its own, and a statement that
+					// opens with an attribute does not open with its lambda.
+					CStr Wide;
+					for (umint i = 0; i < 90; ++i)
+						Wide += "W";
+
+					fg_ExpectFormat
+						(
+							"AfterOperatorSplit"
+							, ("void f()\n{\n\tReturn += g(@) + h(@);\n\t[&]() inline_never\n\t\t{\n\t\t\tg();\n\t\t}\n\t();\n"
+								"\t[[maybe_unused]] auto fA = [&]()\n\t{\n\t\treturn;\n\t}\n\t;\n}\n").f_Replace("@", Wide)
+							, ("void f()\n{\n\tReturn += g(@)\n\t\t+ h(@)\n\t;\n\t[&]() inline_never\n\t{\n\t\tg();\n\t}\n\t();\n"
+								"\t[[maybe_unused]] auto fA = [&]()\n\t\t{\n\t\t\treturn;\n\t\t}\n\t;\n}\n").f_Replace("@", Wide)
+						)
+					;
 					// With no continuation level for the call to stand at, the terminator ends
 					// the call's line rather than standing at that level on one of its own.
 					fg_ExpectFormat

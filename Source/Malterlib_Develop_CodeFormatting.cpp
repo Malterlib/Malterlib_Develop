@@ -3412,6 +3412,9 @@ namespace
 
 	void CFormattingAnalyzer::fp_LayoutStatement(umint _iNode, umint _iIndent)
 	{
+		// Whether a statement broke at its operators is its own: one left over from the
+		// statement before would keep this one's body from being placed.
+		m_bOperatorSplit = false;
 		auto const &Nodes = m_Structure.f_GetNodes();
 		auto const &Node = Nodes[_iNode];
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
@@ -3498,7 +3501,11 @@ namespace
 		// in. A statement that opens with the lambda itself has no such expression and no
 		// continuation level: its body stands where the statement does, like the lines of
 		// one that opens with a parenthesis, and what it is called with under the brace.
-		bool bBodyIn = bLambdaBody && !m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "[");
+		// An attribute opens with two brackets and is no capture list: '[[maybe_unused]] auto
+		// fA = [&] { ... };' has its lambda in an expression like any other.
+		auto iSecond = fp_NextCode(Node.m_iFirstToken);
+		bool bOpensWithLambda = m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "[") && !(iSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSecond)], "["));
+		bool bBodyIn = bLambdaBody && !bOpensWithLambda;
 		// A name can end in a template argument list, and nothing before it is ever broken.
 		// A lambda's own template parameter list ends the same way but names nothing.
 		bool bNamed = bDeclarator
