@@ -1849,9 +1849,31 @@ namespace NMib::NDevelop
 				"const", "volatile", "noexcept", "override", "final", "mutable", "&", "&&"
 			}
 		;
-		auto iBefore = fg_PreviousCode(_Tokens, _iArrow);
+		// A 'noexcept' may take its condition in a parenthesis of its own, which is stepped
+		// over with it: ') const noexcept(noexcept(fg_A())) -> COrdering'.
+		auto fSkipNoexceptCondition = [&](aint _iToken) -> aint
+			{
+				if (_iToken < 0 || !_Tokens.f_IsText(Tokens[umint(_iToken)], ")"))
+					return _iToken;
+
+				for (auto const &Node : _Structure.f_GetNodes())
+				{
+					if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Paren || Node.m_iLastToken != umint(_iToken))
+						continue;
+
+					auto iKeyword = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+					if (iKeyword >= 0 && _Tokens.f_IsText(Tokens[umint(iKeyword)], "noexcept"))
+						return iKeyword;
+
+					break;
+				}
+
+				return _iToken;
+			}
+		;
+		auto iBefore = fSkipNoexceptCondition(fg_PreviousCode(_Tokens, _iArrow));
 		while (iBefore >= 0 && fg_IsAnyText(_Tokens, Tokens[umint(iBefore)], c_pQualifiers))
-			iBefore = fg_PreviousCode(_Tokens, umint(iBefore));
+			iBefore = fSkipNoexceptCondition(fg_PreviousCode(_Tokens, umint(iBefore)));
 
 		if (iBefore < 0)
 			return false;

@@ -400,8 +400,10 @@ further only while it is still too long:
    is done, and the whole call expression stays on the line in front of it.
 3. The first scope on the line is opened: its opening and closing markers take
    lines of their own and every element stands on one, laid out the same way.
-   What follows the closing marker resumes under it. A function's qualifiers
-   and its pure specifier stay behind the closing parenthesis where they fit.
+   What follows the closing marker resumes under it, and so do a function's
+   qualifiers, `override`, `final` and its pure specifier behind an opened
+   parameter list: `)` alone, then `const noexcept` on the line below it, and a
+   trailing return type below that.
    Where a member access follows that closing marker, opening the scope would
    put the access on a line of its own anyway, and that line was all the
    statement needed: the scope stays whole and the chain behind it takes the

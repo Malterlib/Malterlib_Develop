@@ -558,6 +558,9 @@ namespace
 							, "void f()\n{\n\tDMibTestSuite(\"A\") -> TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n\tx = DEPTR(p)->m_Value;\n}\n"
 						)
 					;
+					// A 'noexcept' with a condition is a qualifier like any other, and the arrow
+					// behind it a trailing return type's.
+					fg_ExpectFormat("NoexceptArrow", "auto f() const noexcept(noexcept(g()))->int;\n", "auto f() const noexcept(noexcept(g())) -> int;\n");
 					// A lambda that takes nothing may leave its parameter list out, and its arrow
 					// then stands behind the capture list, its qualifiers, or an attribute macro.
 					// It owns its body all the same. The brackets of 'delete []' capture nothing.
@@ -1389,7 +1392,7 @@ namespace
 						(
 							"AssignPure"
 							, CStr("struct C\n{\n\tvirtual TCFuture<TCSubscription<>> f_Register(CFoo_@ _A, CBar_@ _B, CBaz_@ _C) = 0;\n};\n").f_Replace("@", Name)
-							, CStr("struct C\n{\n\tvirtual TCFuture<TCSubscription<>> f_Register\n\t\t(\n\t\t\tCFoo_@ _A\n\t\t\t, CBar_@ _B\n\t\t\t, CBaz_@ _C\n\t\t) = 0\n\t;\n};\n")
+							, CStr("struct C\n{\n\tvirtual TCFuture<TCSubscription<>> f_Register\n\t\t(\n\t\t\tCFoo_@ _A\n\t\t\t, CBar_@ _B\n\t\t\t, CBaz_@ _C\n\t\t)\n\t\t= 0\n\t;\n};\n")
 								.f_Replace("@", Name)
 						)
 					;
@@ -1464,7 +1467,7 @@ namespace
 							// parenthesis.
 							"Qualifiers"
 							, "struct C\n{\n\tvoid f_F(int @, int @) const volatile = 0;\n};\n"
-							, "struct C\n{\n\tvoid f_F\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t) const volatile = 0\n\t;\n};\n"
+							, "struct C\n{\n\tvoid f_F\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t)\n\t\tconst volatile = 0\n\t;\n};\n"
 						)
 					;
 					// An operator function's name is written apart from its parameter list, and
@@ -1473,7 +1476,7 @@ namespace
 						(
 							"OperatorName"
 							, "struct C\n{\n\tvoid operator + (int @, int @) &&;\n};\n"
-							, "struct C\n{\n\tvoid operator +\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t) &&\n\t;\n};\n"
+							, "struct C\n{\n\tvoid operator +\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t)\n\t\t&&\n\t;\n};\n"
 						)
 					;
 					// Every scope marker of a split statement gets its own line.
@@ -1976,7 +1979,7 @@ namespace
 							(
 								"SpecifiersCounted"
 								, CStr("template <typename t_C>\ninline_small void TCFoo<t_C>::f_@(t_C &&_Functor, umint _Start) const\n{\n}\n").f_Replace("@", Name)
-								, CStr("template <typename t_C>\ninline_small void TCFoo<t_C>::f_@\n\t(\n\t\tt_C &&_Functor\n\t\t, umint _Start\n\t) const\n{\n}\n").f_Replace("@", Name)
+								, CStr("template <typename t_C>\ninline_small void TCFoo<t_C>::f_@\n\t(\n\t\tt_C &&_Functor\n\t\t, umint _Start\n\t)\n\tconst\n{\n}\n").f_Replace("@", Name)
 							)
 						;
 					}

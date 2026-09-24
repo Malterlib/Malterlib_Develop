@@ -597,7 +597,6 @@ namespace
 		bool fp_FollowsScope(umint _iToken) const;
 		bool fp_IsFunctionQualifier(umint _iToken) const;
 		bool fp_IsTrailingReturnArrow(umint _iToken) const;
-		umint fp_SkipFunctionQualifiers(umint _iToken) const;
 		bool fp_ClosesLambdaIntroducer(umint _iToken) const;
 		umint fp_SkipTemplateHeader(umint _iToken) const;
 		bool fp_IsCastGroup(umint _iNode) const;
@@ -4920,54 +4919,6 @@ namespace
 		return _iToken;
 	}
 
-	// Steps over the run of qualifiers a declarator's parameter list may carry, including
-	// the argument one of them can take.
-	umint CFormattingAnalyzer::fp_SkipFunctionQualifiers(umint _iToken) const
-	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		aint i = aint(_iToken);
-		while (i >= 0)
-		{
-			// A pure specifier or a defaulted or deleted definition ends the declarator the
-			// same way and stands behind the parenthesis with the qualifiers: ') const = 0'.
-			if (m_Tokens.f_IsText(Tokens[umint(i)], "="))
-			{
-				auto iValue = fp_NextCode(umint(i));
-				if (iValue < 0)
-					break;
-
-				auto const &Value = Tokens[umint(iValue)];
-				if (!m_Tokens.f_IsText(Value, "0") && !m_Tokens.f_IsText(Value, "default") && !m_Tokens.f_IsText(Value, "delete"))
-					break;
-
-				i = fp_NextCode(umint(iValue));
-
-				break;
-			}
-
-			if (!fp_IsFunctionQualifier(umint(i)))
-				break;
-
-			auto iNext = fp_NextCode(umint(i));
-			if (iNext >= 0 && m_Tokens.f_IsText(Tokens[umint(iNext)], "("))
-			{
-				for (auto const &Node : m_Structure.f_GetNodes())
-				{
-					if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_iFirstToken != umint(iNext))
-						continue;
-
-					iNext = fp_NextCode(Node.m_iLastToken);
-
-					break;
-				}
-			}
-
-			i = iNext;
-		}
-
-		return i < 0 ? _iToken : umint(i);
-	}
-
 	// A capture list, or a lambda's own template parameter list, ends one part of an
 	// introducer. What follows stands on its own rather than belonging to what came before.
 	// An arrow introduces a trailing return type when a parameter list, or a function's
@@ -5759,13 +5710,12 @@ namespace
 			if (iNext < 0 || umint(iNext) > _iLast)
 				break;
 
-			// A function's qualifiers belong behind the closing parenthesis, on its line,
-			// wherever there is room for them, and a class's 'final' behind its template
-			// argument list the same way.
+			// A class's 'final' belongs behind its template argument list, on the closing
+			// marker's line. A function's qualifiers and its pure specifier do not: behind an
+			// opened parameter list they start the next line, under the marker, the way a
+			// trailing return type does.
 			auto iResume = umint(iNext);
-			if (Scope.m_Bracket == ECodeBracket::mc_Paren)
-				iResume = fp_SkipFunctionQualifiers(umint(iNext));
-			else if (Scope.m_Bracket == ECodeBracket::mc_Angle && m_Tokens.f_IsText(Tokens[umint(iNext)], "final"))
+			if (Scope.m_Bracket == ECodeBracket::mc_Angle && m_Tokens.f_IsText(Tokens[umint(iNext)], "final"))
 			{
 				auto iAfter = fp_NextCode(umint(iNext));
 				iResume = iAfter < 0 ? _iLast + 1 : umint(iAfter);
@@ -5793,6 +5743,27 @@ namespace
 			// What follows the scope resumes under its closing marker.
 			iLineFirst = umint(iNext);
 			fp_BreakBefore(iLineFirst, nLineIndent);
+
+			// Qualifiers moved below an opened parameter list are a line of their own, and a
+			// trailing return type behind them takes the next one, as it does behind the list.
+			if (Scope.m_Bracket == ECodeBracket::mc_Paren && (fp_IsFunctionQualifier(iLineFirst) || m_Tokens.f_IsText(Tokens[iLineFirst], "=")))
+			{
+				for (auto iArrow = iLineFirst; iArrow <= _iLast; ++iArrow)
+				{
+					if (m_TokenDepth[iArrow] != m_TokenDepth[iLineFirst] || !m_Tokens.f_IsText(Tokens[iArrow], "->") || !fp_IsTrailingReturnArrow(iArrow))
+						continue;
+
+					auto iQualifiersLast = fp_PreviousCode(iArrow);
+					if (iQualifiersLast >= 0 && fp_FitsInline(iLineFirst, umint(iQualifiersLast), nLineIndent))
+					{
+						fp_MarkInline(iLineFirst, umint(iQualifiersLast));
+						fp_BreakBefore(iArrow, nLineIndent);
+						iLineFirst = iArrow;
+					}
+
+					break;
+				}
+			}
 
 			// A member chain that resumes there and does not fit is broken at every member,
 			// each under the marker. Taken a scope at a time it would be broken only as far
