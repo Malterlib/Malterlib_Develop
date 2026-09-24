@@ -228,7 +228,7 @@ An operator with an operand on both sides of it is written apart from both,
 whatever they are spelled with: `5 * 5`, `nFlags & mc_Mask`, `a + (b | c)`.
 Without an operand in front, the same token is the unary form, `-1` and
 `*pValue`; without one behind, it belongs to something else, a cast's
-`(CFoo *)` or a pack's `&&...`. `*`, `&`, and `&&` stay ambiguous even between
+`(CFoo *)` or a pack's `&& ...`. `*`, `&`, and `&&` stay ambiguous even between
 two operands, since a name in front of one can be a type as easily as a value:
 `C(CStr &_A)` and `C(a & b)` spell the same tokens. Those three are settled
 only where a declaration cannot stand: behind a literal or the closing marker
@@ -269,9 +269,9 @@ name it introduces and stands apart from the type in front of it, as in
 that expands a pack has no name to hug and is written tight against what it
 expands, as in `tp_CParams...>` and `fg_Forward<tp_CParams>(p_Params)...`. The
 name behind the ellipsis is what tells the two apart. Behind a declarator the
-ellipsis stands apart the same way, `tfp_CParams && ...p_Params`, and where the
-pack has no name, `tfp_CParams && ...`; only one that expands into a template
-argument list hugs, `tp_CParams &&...>`. `sizeof...` and a fold's ellipsis are
+ellipsis stands apart the same way wherever it stands: `tfp_CParams &&
+...p_Params`, `tfp_CParams && ...` where the pack has no name, and
+`tp_CParams && ...>` where it expands. `sizeof...` and a fold's ellipsis are
 spelled by the rules for the tokens around them.
 
 `indentation` normalizes indentation characters, not indentation depth. Depth

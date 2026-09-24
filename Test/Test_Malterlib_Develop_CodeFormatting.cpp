@@ -442,9 +442,9 @@ namespace
 						(
 							"EllipsisDeclarator"
 							, "template <typename ...tp_CParams>\nvoid fg_A(tp_CParams &&...p_Params, tp_CParams &&  ...p_Other, tp_CParams &&...);\n"
-								"\nTCTuple<tp_CParams && ...> g_A;\n"
+								"\nTCTuple<tp_CParams &&...> g_A;\nCStr f_GetPath(tfp_C const &...p_Component) const;\n"
 							, "template <typename ...tp_CParams>\nvoid fg_A(tp_CParams && ...p_Params, tp_CParams && ...p_Other, tp_CParams && ...);\n"
-								"\nTCTuple<tp_CParams &&...> g_A;\n"
+								"\nTCTuple<tp_CParams && ...> g_A;\nCStr f_GetPath(tfp_C const & ...p_Component) const;\n"
 						)
 					;
 					// 'sizeof...' and a fold's ellipsis are spelled by rules of their own.

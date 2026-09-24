@@ -1549,7 +1549,7 @@ namespace
 
 	// An operator's spelling says what it does only where an operand stands on both sides
 	// of it. Without one in front it is the unary form, '-1' and '*pValue'; without one
-	// behind it names something else, a cast's '(CFoo *)' or a pack's '&&...'. '*', '&'
+	// behind it names something else, a cast's '(CFoo *)' or a pack's '&& ...'. '*', '&'
 	// and '&&' are ambiguous even in that position, since a name in front of one can be a
 	// type as easily as an operand, and behind a parameter list the same token qualifies
 	// the function: 'f_Get() const &'.
@@ -2205,16 +2205,10 @@ namespace NMib::NDevelop
 		if (fg_IsDeclaratorText(_Tokens, Left) && fg_IsDeclaratorToken(_Tokens, _Structure, _iLeft))
 		{
 			// A pack's ellipsis stands apart from the declarator in front of it, as it does
-			// from a type: 'tfp_CParams && ...p_Params', and '&& ...' where the pack has no
-			// name. Only the one that expands into a template argument list is written
-			// tight, like any other expansion there: 'tp_CParams &&...>'.
+			// from a type, wherever it stands: 'tfp_CParams && ...p_Params', '&& ...' where
+			// the pack has no name, and 'tp_CParams && ...>'.
 			if (fRight("..."))
-			{
-				auto iBehind = fg_NextCode(_Tokens, _iRight);
-				bool bExpands = iBehind >= 0 && _Structure.f_IsAngleBracket(umint(iBehind)) && _Tokens.f_IsText(Tokens[umint(iBehind)], ">");
-
-				return bExpands ? ECodeSpacing::mc_None : ECodeSpacing::mc_Space;
-			}
+				return ECodeSpacing::mc_Space;
 
 			if (Right.m_Kind == ECodeTokenKind::mc_Identifier)
 				return ECodeSpacing::mc_None;
