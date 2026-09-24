@@ -1585,6 +1585,57 @@ namespace
 		return false;
 	}
 
+	// A parenthesis that holds nothing but fundamental type words, and stands where no call
+	// or subscript could have produced it, is a cast: '(smint)-1', '(unsigned int)x'. The
+	// same parenthesis behind 'sizeof' is the operator's operand, '(sizeof(int) - 1)'.
+	bool fg_ClosesFundamentalCast(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		constexpr ch8 const *c_pFundamental[] =
+			{
+				"void", "bool", "char", "short", "int", "long", "unsigned", "signed", "float", "double"
+				, "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "smint", "umint", "aint", "mint"
+				, "fp32", "fp64", "ch8", "ch16", "ch32", "uch8", "uch16", "uch32", "const", "volatile"
+			}
+		;
+		for (auto const &Node : _Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Paren || Node.m_iLastToken != _iClose)
+				continue;
+
+			auto iBefore = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+			if (iBefore >= 0)
+			{
+				auto const &Before = Tokens[umint(iBefore)];
+				bool bCalled = (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
+					|| _Tokens.f_IsText(Before, "sizeof")
+					|| _Tokens.f_IsText(Before, "alignof")
+					|| _Tokens.f_IsText(Before, ")")
+					|| _Tokens.f_IsText(Before, "]")
+					|| _Structure.f_IsAngleBracket(umint(iBefore))
+				;
+				if (bCalled)
+					return false;
+			}
+
+			bool bType = false;
+			for (auto i = Node.m_iFirstToken + 1; i < Node.m_iLastToken; ++i)
+			{
+				if (!fg_IsSignificant(Tokens[i].m_Kind))
+					continue;
+
+				if (!fg_IsAnyText(_Tokens, Tokens[i], c_pFundamental))
+					return false;
+
+				bType = true;
+			}
+
+			return bType;
+		}
+
+		return false;
+	}
+
 	// An operator's spelling says what it does only where an operand stands on both sides
 	// of it. Without one in front it is the unary form, '-1' and '*pValue'; without one
 	// behind it names something else, a cast's '(CFoo *)' or a pack's '&& ...'. '*', '&'
@@ -1635,6 +1686,10 @@ namespace
 			}
 		;
 		if (fg_IsAnyText(_Tokens, After, c_pCloses))
+			return false;
+
+		// A cast is no operand of its own: what follows it is the unary form.
+		if (_Tokens.f_IsText(Before, ")") && fg_ClosesFundamentalCast(_Tokens, _Structure, umint(iBefore)))
 			return false;
 
 		if (!fg_IsDeclaratorText(_Tokens, Token))
@@ -2451,8 +2506,9 @@ namespace NMib::NDevelop
 		if (fLeft(")"))
 		{
 			auto iInner = fg_PreviousCode(_Tokens, _iLeft);
-			bool bCast = iInner >= 0
-				&& (fg_IsDeclaratorText(_Tokens, Tokens[umint(iInner)]) || _Tokens.f_IsText(Tokens[umint(iInner)], "const") || _Tokens.f_IsText(Tokens[umint(iInner)], "volatile"))
+			bool bCast = (iInner >= 0
+					&& (fg_IsDeclaratorText(_Tokens, Tokens[umint(iInner)]) || _Tokens.f_IsText(Tokens[umint(iInner)], "const") || _Tokens.f_IsText(Tokens[umint(iInner)], "volatile")))
+				|| fg_ClosesFundamentalCast(_Tokens, _Structure, _iLeft)
 			;
 			bool bOperand = (Right.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))
 				|| Right.m_Kind == ECodeTokenKind::mc_Number
@@ -2543,7 +2599,7 @@ namespace NMib::NDevelop
 					|| Before.m_Kind == ECodeTokenKind::mc_StringLiteral
 					|| Before.m_Kind == ECodeTokenKind::mc_CharLiteral
 					|| (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
-					|| _Tokens.f_IsText(Before, ")")
+					|| (_Tokens.f_IsText(Before, ")") && !fg_ClosesFundamentalCast(_Tokens, _Structure, umint(iBefore)))
 					|| _Tokens.f_IsText(Before, "]")
 					|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
 					|| (_Tokens.f_IsText(Before, "}") && fg_ClosesExpressionBody(_Structure, umint(iBefore)))

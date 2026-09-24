@@ -245,7 +245,10 @@ while `sizeof`, `alignof`, `typeid`, and `noexcept` yield a value the way a
 call does and `decltype` names a type. Everywhere else the pair keeps what the
 source has. A lambda's body closes an operand the way a closing
 parenthesis does, so a sign behind it is binary: `[] { ... } + g_Other`. A
-statement's own block closes none, and a sign behind one is unary.
+statement's own block closes none, and a sign behind one is unary. A parenthesis holding nothing but fundamental type words,
+where no call or `sizeof` could have produced it, is a cast and no operand, so a
+sign behind it is unary, `(smint)-1`, where `sizeof(int) - 1` and `(Value) - 1`
+subtract.
 
 A bit-field's width hugs the `:` that introduces it, `uint8 mp_Priority:2 = 0`,
 named or not. What stands in front of that `:` is the name a type declares,

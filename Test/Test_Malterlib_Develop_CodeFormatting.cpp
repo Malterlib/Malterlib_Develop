@@ -337,6 +337,15 @@ namespace
 					;
 					// A cv-qualifier behind a pointer declarator qualifies the pointer and stands
 					// apart from it, as it does from a type.
+					// A parenthesis holding nothing but fundamental type words is a cast, and a sign
+					// behind it is unary; behind 'sizeof' or around a name it is an operand.
+					fg_ExpectFormat
+						(
+							"FundamentalCast"
+							, "void f()\n{\n\ts = b ? (smint) - 1 : (smint)1;\n\tx = (unsigned int) -y;\n\tn = sizeof(int) - 1;\n\tz = (Value) - 1;\n}\n"
+							, "void f()\n{\n\ts = b ? (smint)-1 : (smint)1;\n\tx = (unsigned int)-y;\n\tn = sizeof(int) - 1;\n\tz = (Value) - 1;\n}\n"
+						)
+					;
 					// A reference to a pointer stands apart from it like a qualifier of the pointer.
 					fg_ExpectFormat
 						(
