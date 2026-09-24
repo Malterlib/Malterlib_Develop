@@ -953,9 +953,9 @@ namespace
 					fg_ExpectFormat
 						(
 							"AfterOperatorSplit"
-							, ("void f()\n{\n\tReturn += g(@) + h(@);\n\t[&]() inline_never\n\t\t{\n\t\t\tg();\n\t\t}\n\t();\n"
+							, CStr("void f()\n{\n\tReturn += g(@) + h(@);\n\t[&]() inline_never\n\t\t{\n\t\t\tg();\n\t\t}\n\t();\n"
 								"\t[[maybe_unused]] auto fA = [&]()\n\t{\n\t\treturn;\n\t}\n\t;\n}\n").f_Replace("@", Wide)
-							, ("void f()\n{\n\tReturn += g(@)\n\t\t+ h(@)\n\t;\n\t[&]() inline_never\n\t{\n\t\tg();\n\t}\n\t();\n"
+							, CStr("void f()\n{\n\tReturn += g(@)\n\t\t+ h(@)\n\t;\n\t[&]() inline_never\n\t{\n\t\tg();\n\t}\n\t();\n"
 								"\t[[maybe_unused]] auto fA = [&]()\n\t\t{\n\t\t\treturn;\n\t\t}\n\t;\n}\n").f_Replace("@", Wide)
 						)
 					;
