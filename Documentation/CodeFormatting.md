@@ -364,7 +364,10 @@ parameters. A `new` hugs its placement arguments, which stand apart from the
 type behind them, `new(_pMemory) CFoo(1)`, and belong to the head: the layout
 opens the constructor's arguments, not them.
 A `const` or `volatile` behind a `*` qualifies the pointer and stands apart
-from it, as it does from a type: `CFoo * const pFoo`, `ch8 const * const *`.
+from it, as it does from a type: `CFoo * const pFoo`, `ch8 const * const *`. A
+`&` or `&&` behind a `*` refers to the pointer and stands apart from it the same
+way, `ch8 const * &o_pParse`, while a pointer to a pointer is written tight,
+`ch8 **ppArgv`.
 
 `line-break` lays every statement out in two phases. The statement is first
 taken as if it were written on one line, with every gap at its inline spelling:

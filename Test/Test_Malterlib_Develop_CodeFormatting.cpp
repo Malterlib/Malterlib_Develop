@@ -337,6 +337,14 @@ namespace
 					;
 					// A cv-qualifier behind a pointer declarator qualifies the pointer and stands
 					// apart from it, as it does from a type.
+					// A reference to a pointer stands apart from it like a qualifier of the pointer.
+					fg_ExpectFormat
+						(
+							"PointerReference"
+							, "void f(ch8 const *&o_pParse, CFoo *const &_pFoo, CFoo *&&_pBar, ch8 **ppArgv);\n"
+							, "void f(ch8 const * &o_pParse, CFoo * const &_pFoo, CFoo * &&_pBar, ch8 **ppArgv);\n"
+						)
+					;
 					fg_ExpectFormat
 						(
 							"PointerQualifier"
@@ -694,7 +702,7 @@ namespace
 					// A declarator is not a binary operator: it rejoins the name it declares
 					// where only a type can stand in front of it.
 					fg_ExpectFormat("ConstDeclarator", "void fg_F(CStr const &\n\t_A, ch8 const **\n\t_ppB);\n", "void fg_F(CStr const &_A, ch8 const **_ppB);\n");
-					fg_ExpectFormat("TemplateDeclarator", "void fg_F(TCVector<int>\n\t*&_pA);\n", "void fg_F(TCVector<int> *&_pA);\n");
+					fg_ExpectFormat("TemplateDeclarator", "void fg_F(TCVector<int>\n\t*&_pA, TCVector<int> **ppB);\n", "void fg_F(TCVector<int> * &_pA, TCVector<int> **ppB);\n");
 					// In a parameter list a declarator stands behind a plain name too.
 					fg_ExpectFormat("ParameterDeclarator", "void fg_F(CStr\n\t&_A, CFoo *\n\t_pB);\n", "void fg_F(CStr &_A, CFoo *_pB);\n");
 					fg_ExpectFormat
