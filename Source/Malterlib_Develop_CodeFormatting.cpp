@@ -3642,6 +3642,13 @@ namespace
 					if (bMoves)
 						fp_IndentBefore(umint(iTail), _iIndent);
 
+					// With no continuation level the terminator would stand at the level of the
+					// line it ends, so it ends that line instead, as the one of a statement
+					// split at its leading parenthesis does: '() > fg_TempCopy(Promise);'.
+					bool bOwnTail = iTail >= 0 && umint(iTail) < Node.m_iLastToken && fp_IsFirstOnLine(umint(iTail));
+					if (bOwnTail && m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && fp_FitsInline(umint(iTail), Node.m_iLastToken, _iIndent))
+						fp_MarkInline(umint(iTail), Node.m_iLastToken);
+
 					return;
 				}
 

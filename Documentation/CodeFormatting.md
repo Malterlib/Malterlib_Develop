@@ -514,7 +514,8 @@ A statement that opens with its lambda has no expression for the body to
 stand under and no continuation level, like one that opens with a parenthesis:
 its body stands where the statement does, and what it is called with under the
 brace, written as the source has it, `}();` or `(CParams());` on a line of its
-own. An attribute macro may
+own. With no continuation level the terminator would stand at the level of the
+line it ends, so it ends that line instead: `() > fg_TempCopy(Promise);`. An attribute macro may
 stand between a capture list and the parameters, apart from both,
 `[&] mark_nodebug (int _A)`,
 and the lambda is one all the same: its body opens one level in, and its

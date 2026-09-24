@@ -933,6 +933,15 @@ namespace
 							, "void f()\n{\n\t[&]() inline_never\n\t{\n\t\tg();\n\t}();\n\t[&]<typename ...tfp_C>(CList<tfp_C...> &&)\n\t{\n\t\tg();\n\t}\n\t(CParams());\n}\n"
 						)
 					;
+					// With no continuation level for the call to stand at, the terminator ends
+					// the call's line rather than standing at that level on one of its own.
+					fg_ExpectFormat
+						(
+							"CalledAtOnceTerminator"
+							, "void f()\n{\n\t[&]() -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t\t() > fg_TempCopy(Promise)\n\t;\n}\n"
+							, "void f()\n{\n\t[&]() -> int\n\t{\n\t\treturn 1;\n\t}\n\t() > fg_TempCopy(Promise);\n}\n"
+						)
+					;
 					// A subscript operator's name ends in brackets of its own, which name a
 					// declaration and no lambda: its body opens at the statement's level.
 					CStr Subscript = "auto C::operator [] (int &&_Key) -> int\n{\n\treturn 0;\n}\n";
