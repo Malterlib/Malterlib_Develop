@@ -150,9 +150,12 @@ namespace
 				"const", "volatile", "static", "constexpr"
 			}
 		;
+		// A run of statement terminators reads as one, since the stage takes out the ones
+		// that end nothing: 'f_Call();;' reads as 'f_Call();'.
 		CCodeTokenStream Tokens(_Source);
 		CStr Text;
 		umint nMoved[4] = {};
+		bool bTerminated = false;
 		for (auto const &Token : Tokens.f_GetTokens())
 		{
 			if (!fg_IsCodeToken(Token))
@@ -165,8 +168,14 @@ namespace
 				nMoved[i] += bMoved;
 			}
 
-			if (!bMoved)
+			if (bMoved)
+				continue;
+
+			bool bTerminator = Tokens.f_IsText(Token, ";");
+			if (!bTerminator || !bTerminated)
 				Text += Tokens.f_GetText(Token);
+
+			bTerminated = bTerminator;
 		}
 
 		for (auto nWords : nMoved)
@@ -1745,20 +1754,21 @@ namespace
 		// single guarded statement, change tokens, which no other rule does. Those
 		// conversions are decided first, and the layout is then made on the converted
 		// source, so the lines it settles on are the lines a later pass sees.
-		// A qualifier in front of its type moves behind it before anything else is decided.
-		// The other conversions rewrite text a qualifier can stand in, a return type above
-		// all, so they are made on the source this one leaves, in a stage of their own.
+		// A qualifier in front of its type moves behind it before anything else is decided,
+		// and a terminator that ends nothing goes. The other conversions rewrite text a
+		// qualifier can stand in, a return type above all, and count the statements a
+		// block holds, so they are made on the source this stage leaves, in one of their own.
 		m_Baseline = m_Request.m_Source;
 		if (m_bAllowQualifiers)
 		{
 			fp_ConvertQualifiers();
 			fp_ConvertSpecifiers();
+			fp_ConvertEmptyStatements();
 		}
 
 		bool bQualifierStage = !m_Structural.f_IsEmpty();
 		if (!bQualifierStage && m_bAllowConversions)
 		{
-			fp_ConvertEmptyStatements();
 			m_bProbing = true;
 			fp_RuleLineBreaks();
 			m_bProbing = false;

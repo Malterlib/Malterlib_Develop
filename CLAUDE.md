@@ -58,9 +58,9 @@ with `fg_HasEquivalentCodeTokens` against the converted source, and a whole-file
 plan is re-analyzed to prove it converged; a failing check reports a formatter
 failure instead of emitting edits. Conversions that can rewrite the same text
 are made in stages rather than taught about each other: words that only change
-places, qualifiers and specifiers, move first,
-the source that leaves is analyzed by an inner analyzer that makes the other
-three, and `fg_ComposeEdits` merges any edit that reaches into a conversion's text
+places, qualifiers and specifiers, move first, and terminators that end nothing
+go with them; the source that leaves is analyzed by an inner analyzer that makes
+the other two, and `fg_ComposeEdits` merges any edit that reaches into a conversion's text
 with that conversion. A conversion has to be a fixpoint of its own rule, which
 the re-analysis enforces per file: one whose output it would convert again,
 as a moved qualifier in front of a macro would be, must refuse instead. Another

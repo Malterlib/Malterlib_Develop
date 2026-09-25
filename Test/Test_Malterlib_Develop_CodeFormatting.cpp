@@ -1961,6 +1961,16 @@ namespace
 							, false
 						)
 					;
+					// The terminator goes before the braces are decided, so a body left with one
+					// statement stands without them in the same pass.
+					fg_ExpectFormat
+						(
+							"BeforeBraces"
+							, "void f()\n{\n\tfor (int i = 0; i < n; ++i)\n\t{\n\t\tg(i);;\n\t}\n}\n"
+							, "void f()\n{\n\tfor (int i = 0; i < n; ++i)\n\t\tg(i);\n}\n"
+							, false
+						)
+					;
 					CStr Kept = "void f()\n{\n\tfor (;;)\n\t\th();\n\tif (a)\n\t\t;\n\ty = 2; // Why\n\t;\n}\n";
 					fg_ExpectFormat("Kept", Kept, Kept);
 				};
