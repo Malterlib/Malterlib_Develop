@@ -81,6 +81,7 @@ namespace NMib::NDevelop
 		umint fp_BuildGroup(umint _iParent, umint _iToken, ECodeBracket _Bracket);
 		umint fp_MatchAngleGroup(umint _iToken) const;
 		bool fp_IsBlockBrace(umint _iToken) const;
+		bool fp_IsRequirementBrace(umint _iToken) const;
 
 		void fp_Note(umint _iNode, umint _iSignificant);
 

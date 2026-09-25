@@ -597,6 +597,12 @@ marker for the same reason, `> g_DiscardResult;`. A statement that merely starts
 `(*fLocked)() > [&]` with its lambda below it, has a continuation level and
 keeps the terminator on its own line.
 
+A compound requirement inside a `requires` expression opens its statement with
+a brace, and holds an expression rather than statements: it is no block, its
+braces stand apart from the expression, the arrow behind it names a concept,
+`{ _fOnEntry(_Key) } -> cIsSame<bool>;`, and one written across lines comes back
+to one, since it is no initializer's data either.
+
 What follows a block continues its statement only where the block is a lambda's
 body inside an expression: an operator, a member access or a call behind the
 closing brace. Two brackets open an attribute, which starts the next

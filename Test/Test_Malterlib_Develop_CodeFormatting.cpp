@@ -795,6 +795,16 @@ namespace
 					fg_ExpectFormat("BraceOnHead", "void f() {\n\tg();\n}\n", "void f()\n{\n\tg();\n}\n");
 					fg_ExpectFormat("OneLine", "void f() { g(); }\n", "void f()\n{\n\tg();\n}\n");
 					fg_ExpectFormat("Definition", "struct C { int a; };\n", "struct C\n{\n\tint a;\n};\n");
+					// A compound requirement opens its statement with a brace that holds an expression,
+					// not a block; its braces stand apart from the expression and the arrow behind it
+					// names a concept. One written across lines comes back to one.
+					fg_ExpectFormat
+						(
+							"CompoundRequirement"
+							, "template <typename t_F>\nconcept cFoo = requires (t_F _f)\n\t{\n\t\t{_f(1)\n\t\t} ->cIsSame<bool>;\n\t\t{ _f(2) };\n\t\t{_f(3)} noexcept;\n\t}\n;\n"
+							, "template <typename t_F>\nconcept cFoo = requires (t_F _f)\n\t{\n\t\t{ _f(1) } -> cIsSame<bool>;\n\t\t{ _f(2) };\n\t\t{ _f(3) } noexcept;\n\t}\n;\n"
+						)
+					;
 					// An attribute behind a body starts the next declaration; it subscripts nothing.
 					fg_ExpectFormat
 						(

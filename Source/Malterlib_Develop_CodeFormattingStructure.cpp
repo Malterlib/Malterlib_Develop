@@ -222,8 +222,14 @@ namespace NMib::NDevelop
 			return;
 
 		// A braced initializer is written one element per line on purpose, so a construct
-		// around one keeps its lines instead of collapsing the list into an expression.
-		if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace)
+		// around one keeps its lines instead of collapsing the list into an expression. A
+		// compound requirement opens its statement, which no initializer does, and holds an
+		// expression rather than data.
+		bool bRequirement = Node.m_iParent < mp_Nodes.f_GetLen()
+			&& mp_Nodes[Node.m_iParent].m_Kind == ECodeNodeKind::mc_Statement
+			&& mp_Nodes[Node.m_iParent].m_iFirstToken == Node.m_iFirstToken
+		;
+		if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace && !bRequirement)
 		{
 			auto const &Source = mp_pTokens->f_GetSource();
 			for (auto i = Node.m_iFirstToken; i <= _iLastToken && !Node.m_bHasMultiLineBrace; ++i)
@@ -389,6 +395,50 @@ namespace NMib::NDevelop
 		}
 
 		return 0;
+	}
+
+	// A compound requirement inside a requires expression opens with a brace where a statement
+	// does, and holds an expression rather than statements: '{ _fOnEntry(_Key) } -> cFoo;'.
+	// A block is never followed by an arrow or 'noexcept', and one holding an expression
+	// alone, with no terminator or brace of its own, is none either.
+	bool CCodeStructure::fp_IsRequirementBrace(umint _iToken) const
+	{
+		auto const &Tokens = mp_pTokens->f_GetTokens();
+		umint nDepth = 0;
+		bool bInnerTerminator = false;
+		bool bEmpty = true;
+		for (auto i = _iToken; i < mp_Significant.f_GetLen(); ++i)
+		{
+			auto const &Token = Tokens[mp_Significant[i]];
+			if (i > _iToken && nDepth == 1 && !mp_pTokens->f_IsText(Token, "}"))
+				bEmpty = false;
+
+			if (mp_pTokens->f_IsText(Token, "{") || mp_pTokens->f_IsText(Token, "(") || mp_pTokens->f_IsText(Token, "["))
+			{
+				if (nDepth == 1 && mp_pTokens->f_IsText(Token, "{"))
+					bInnerTerminator = true;
+
+				++nDepth;
+			}
+			else if (mp_pTokens->f_IsText(Token, "}") || mp_pTokens->f_IsText(Token, ")") || mp_pTokens->f_IsText(Token, "]"))
+			{
+				if (--nDepth)
+					continue;
+
+				if (i + 1 >= mp_Significant.f_GetLen())
+					return false;
+
+				auto const &After = Tokens[mp_Significant[i + 1]];
+				if (mp_pTokens->f_IsText(After, "->") || mp_pTokens->f_IsText(After, "noexcept"))
+					return true;
+
+				return mp_pTokens->f_IsText(After, ";") && !bEmpty && !bInnerTerminator;
+			}
+			else if (nDepth == 1 && mp_pTokens->f_IsText(Token, ";"))
+				bInnerTerminator = true;
+		}
+
+		return false;
 	}
 
 	// A brace that holds statements is a block, even inside an argument list, where it is a
@@ -718,7 +768,7 @@ namespace NMib::NDevelop
 					|| mp_pTokens->f_IsText(First, "enum")
 					|| mp_pTokens->f_IsText(First, "namespace")
 				;
-				bool bBlock = bAfterCloseParen || bAfterTrailingReturn || i == _iToken || bDefinition;
+				bool bBlock = bAfterCloseParen || bAfterTrailingReturn || (i == _iToken && !fp_IsRequirementBrace(i)) || bDefinition;
 				if (!bBlock)
 				{
 					// A statement terminator at the brace's own level settles it wherever the
@@ -1926,6 +1976,18 @@ namespace NMib::NDevelop
 				return _iToken;
 			}
 		;
+		// The arrow behind a compound requirement names the concept its expression satisfies:
+		// '{ _fOnEntry(_Key) } -> cFoo'.
+		auto iRequirement = fg_PreviousCode(_Tokens, _iArrow);
+		if (iRequirement >= 0 && _Tokens.f_IsText(Tokens[umint(iRequirement)], "}"))
+		{
+			for (auto const &Node : _Structure.f_GetNodes())
+			{
+				if (Node.m_iLastToken == umint(iRequirement))
+					return Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace;
+			}
+		}
+
 		auto iBefore = fSkipNoexceptCondition(fg_PreviousCode(_Tokens, _iArrow));
 		while (iBefore >= 0 && fg_IsAnyText(_Tokens, Tokens[umint(iBefore)], c_pQualifiers))
 			iBefore = fSkipNoexceptCondition(fg_PreviousCode(_Tokens, umint(iBefore)));
@@ -2220,6 +2282,30 @@ namespace NMib::NDevelop
 			if (!bOperatorName)
 				return ECodeSpacing::mc_None;
 		}
+
+		// A compound requirement's braces stand apart from the expression they hold, where an
+		// initializer's hug their elements: '{ _fOnEntry(_Key) } -> cFoo', 'CFoo{1, 2}'. A
+		// requirement is a brace group that opens a statement, which no initializer does.
+		auto fIsRequirement = [&](umint _iBrace)
+			{
+				for (auto const &Node : _Structure.f_GetNodes())
+				{
+					if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Brace || (Node.m_iFirstToken != _iBrace && Node.m_iLastToken != _iBrace))
+						continue;
+
+					if (Node.m_iParent >= _Structure.f_GetNodes().f_GetLen())
+						return false;
+
+					auto const &Parent = _Structure.f_GetNodes()[Node.m_iParent];
+
+					return Parent.m_Kind == ECodeNodeKind::mc_Statement && Parent.m_iFirstToken == Node.m_iFirstToken;
+				}
+
+				return false;
+			}
+		;
+		if ((fLeft("{") && !fRight("}") && fIsRequirement(_iLeft)) || (fRight("}") && !fLeft("{") && fIsRequirement(_iRight)))
+			return ECodeSpacing::mc_Space;
 
 		// Scope markers hug their contents, including a separator that ends the last element.
 		if (fLeft("(") || fLeft("[") || fLeft("{"))
