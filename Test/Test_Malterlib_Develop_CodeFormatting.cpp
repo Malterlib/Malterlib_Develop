@@ -1999,6 +1999,15 @@ namespace
 								"\t\t\t, fg_Construct(&MemoryManagerWithAMuchLongerName)\n\t\t\t, fg_Construct(CCompare{.m_bReverse = true})\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A requires clause behind a header keeps its line, and so does a member template's
+					// header behind the clause; the declaration behind them is laid out as usual.
+					fg_ExpectFormat
+						(
+							"RequiresClauseHeader"
+							, "template <typename t_C>\n\trequires cFoo<t_C>\ntemplate <typename tf_C>\nauto TCFoo<t_C>::f_Get(tf_C _A)\n\tconst -> int\n{\n\treturn 0;\n}\n"
+							, "template <typename t_C>\n\trequires cFoo<t_C>\ntemplate <typename tf_C>\nauto TCFoo<t_C>::f_Get(tf_C _A) const -> int\n{\n\treturn 0;\n}\n"
+						)
+					;
 					// A template header too long for its line opens its parameter list, with
 					// 'template' alone and the markers at the header's level.
 					{

@@ -470,7 +470,10 @@ and the markers at the header's own level, since nothing extends the header
 behind its `>`. A class's own template argument list, behind the name its
 definition or specialization declares, opens at the head's level the same way,
 `struct TCFoo` over `<` and `>`, while a base clause behind it continues the
-head one level in, `: public CBase`.
+head one level in, `: public CBase`. A requires clause behind a header keeps the lines it was
+written on as well, and so does a member template's header behind the clause;
+the declaration behind them starts its own line and is laid out as usual. Only a
+requires clause elsewhere in a declaration keeps the whole statement's lines.
 
 A line that is still too long after all of that is broken again, so the layout
 does not depend on where the source happened to break: an element the source

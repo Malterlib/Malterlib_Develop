@@ -3595,45 +3595,87 @@ namespace
 
 		// A template header holds the line it is on. The declaration behind it starts a
 		// line of its own and is laid out there, so the header is stepped over first.
+		// A template header and a requires clause behind one each keep the line they are on,
+		// in whatever order and number they stand, and the declaration behind them starts a
+		// line of its own that is laid out as usual. Only a clause elsewhere in the
+		// declaration keeps the whole statement's lines.
 		umint iDeclFirst = Node.m_iFirstToken;
+		bool bFixedLineBreaks = Node.m_bFixedLineBreaks;
+		bool bSteppedOverClause = false;
 		while (Node.m_bTemplateHeader)
 		{
-			auto iNext = fp_SkipTemplateHeader(iDeclFirst);
-			if (iNext == iDeclFirst || iNext > iSignatureLast)
+			if (m_Tokens.f_IsText(Tokens[iDeclFirst], "template"))
+			{
+				auto iNext = fp_SkipTemplateHeader(iDeclFirst);
+				if (iNext == iDeclFirst || iNext > iSignatureLast)
+					break;
+
+				// The header itself still comes back to one line where it fits. One that does not
+				// fit opens its parameter list, with 'template' alone on its line and the markers
+				// at the header's level, since nothing extends the header behind its '>':
+				// 'template' / '<' / 'typename t_C' / '>'.
+				auto iHeaderLast = fp_PreviousCode(iNext);
+				if (!m_bProbing && iHeaderLast >= 0 && umint(iHeaderLast) > iDeclFirst)
+				{
+					if (fp_FitsInline(iDeclFirst, umint(iHeaderLast), _iIndent))
+						fp_MarkInline(iDeclFirst, umint(iHeaderLast));
+					else
+					{
+						auto iOpen = fp_NextCode(iDeclFirst);
+						umint nJoined = 0;
+						for (auto iChild : Node.m_Children)
+						{
+							auto const &Child = Nodes[iChild];
+							if (iOpen < 0 || Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_iFirstToken != umint(iOpen) || Child.m_iLastToken != umint(iHeaderLast))
+								continue;
+
+							if (fp_MeasureJoinedWidth(iDeclFirst, umint(iHeaderLast), nJoined))
+								fp_LayoutGroup(iChild, _iIndent, true);
+
+							break;
+						}
+					}
+				}
+
+				iDeclFirst = iNext;
+
+				continue;
+			}
+
+			if (!m_Tokens.f_IsText(Tokens[iDeclFirst], "requires"))
 				break;
 
-			// The header itself still comes back to one line where it fits. One that does not
-			// fit opens its parameter list, with 'template' alone on its line and the markers
-			// at the header's level, since nothing extends the header behind its '>':
-			// 'template' / '<' / 'typename t_C' / '>'.
-			auto iHeaderLast = fp_PreviousCode(iNext);
-			if (!m_bProbing && iHeaderLast >= 0 && umint(iHeaderLast) > iDeclFirst)
+			auto nLevel = m_TokenDepth[iDeclFirst];
+			aint iClauseEnd = -1;
+			for (auto iNext = fp_NextCode(iDeclFirst); iNext >= 0 && umint(iNext) <= iSignatureLast; iNext = fp_NextCode(umint(iNext)))
 			{
-				if (fp_FitsInline(iDeclFirst, umint(iHeaderLast), _iIndent))
-					fp_MarkInline(iDeclFirst, umint(iHeaderLast));
-				else
+				if (m_TokenDepth[umint(iNext)] == nLevel && fp_IsFirstOnLine(umint(iNext)))
 				{
-					auto iOpen = fp_NextCode(iDeclFirst);
-					umint nJoined = 0;
-					for (auto iChild : Node.m_Children)
-					{
-						auto const &Child = Nodes[iChild];
-						if (iOpen < 0 || Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_iFirstToken != umint(iOpen) || Child.m_iLastToken != umint(iHeaderLast))
-							continue;
+					iClauseEnd = iNext;
 
-						if (fp_MeasureJoinedWidth(iDeclFirst, umint(iHeaderLast), nJoined))
-							fp_LayoutGroup(iChild, _iIndent, true);
-
-						break;
-					}
+					break;
 				}
 			}
 
-			iDeclFirst = iNext;
+			if (iClauseEnd < 0)
+				break;
+
+			iDeclFirst = umint(iClauseEnd);
+			bSteppedOverClause = true;
+		}
+
+		if (bSteppedOverClause)
+		{
+			bFixedLineBreaks = false;
+			for (auto iRest = iDeclFirst; iRest <= Node.m_iLastToken; ++iRest)
+			{
+				if (m_Tokens.f_IsText(Tokens[iRest], "requires"))
+					bFixedLineBreaks = true;
+			}
 		}
 
 		bool bJoinable = fp_IsRangeJoinable(_iNode, iDeclFirst, iSignatureLast)
-			&& !Node.m_bFixedLineBreaks
+			&& !bFixedLineBreaks
 			&& Node.m_Kind != ECodeNodeKind::mc_Unsupported
 			&& fp_IsFirstOnLine(iDeclFirst)
 		;
