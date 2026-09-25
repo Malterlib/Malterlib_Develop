@@ -337,6 +337,17 @@ namespace
 					;
 					// A cv-qualifier behind a pointer declarator qualifies the pointer and stands
 					// apart from it, as it does from a type.
+					// A qualified call is no declaration, and behind a declarator stands a name, never
+					// a literal or 'sizeof'; '*this' behind a condition is still a dereference.
+					fg_ExpectFormat
+						(
+							"QualifiedCallOperand"
+							, "void f()\n{\n\tNMemory::fg_MemMove(&pA[i], &pB[i], nMove *sizeof(t_CKey));\n\tx = (i*8) / n;\n\tif (b)\n\t\t*this = {};\n}\n"
+								"void NMib::fg_Foo(CFoo *_pA);\n"
+							, "void f()\n{\n\tNMemory::fg_MemMove(&pA[i], &pB[i], nMove * sizeof(t_CKey));\n\tx = (i * 8) / n;\n\tif (b)\n\t\t*this = {};\n}\n\n"
+								"void NMib::fg_Foo(CFoo *_pA);\n"
+						)
+					;
 					// A parenthesis holding nothing but fundamental type words is a cast, and a sign
 					// behind it is unary; behind 'sizeof' or around a name it is an operand.
 					fg_ExpectFormat

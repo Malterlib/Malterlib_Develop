@@ -1434,8 +1434,39 @@ namespace
 		}
 
 		// What the statement spells in front of the name is a type or a specifier when it
-		// is made of names, qualification, template argument lists, and declarators.
+		// is made of names, qualification, template argument lists, and declarators. The
+		// name's own qualification is part of the name, and what stands in front of it
+		// is what is read: 'NMemory::fg_MemMove(...)' has nothing there and is a call.
 		auto iBefore = fg_PreviousCode(_Tokens, umint(iName));
+		while (iBefore >= 0 && _Tokens.f_IsText(Tokens[umint(iBefore)], "::"))
+		{
+			auto iScope = fg_PreviousCode(_Tokens, umint(iBefore));
+			if (iScope >= 0 && _Structure.f_IsAngleBracket(umint(iScope)) && _Tokens.f_IsText(Tokens[umint(iScope)], ">"))
+			{
+				aint iOpen = -1;
+				for (auto const &Node : Nodes)
+				{
+					if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Angle && Node.m_iLastToken == umint(iScope))
+					{
+						iOpen = aint(Node.m_iFirstToken);
+
+						break;
+					}
+				}
+
+				iScope = iOpen >= 0 ? fg_PreviousCode(_Tokens, umint(iOpen)) : aint(-1);
+			}
+
+			if (iScope < 0 || Tokens[umint(iScope)].m_Kind != ECodeTokenKind::mc_Identifier)
+			{
+				iBefore = iScope;
+
+				break;
+			}
+
+			iBefore = fg_PreviousCode(_Tokens, umint(iScope));
+		}
+
 		if (iBefore >= 0 && iBefore < aint(Parent.m_iFirstToken))
 			iBefore = -1;
 
@@ -1743,6 +1774,22 @@ namespace
 			return false;
 
 		if (!fg_IsDeclaratorText(_Tokens, Token))
+			return true;
+
+		// Behind a declarator stands a name, never a literal or an operator spelled as a
+		// keyword, so an operand of that kind settles the reading: 'nMove * sizeof(t_CKey)'.
+		constexpr ch8 const *c_pValueOperands[] =
+			{
+				"sizeof", "alignof", "this", "nullptr", "true", "false"
+			}
+		;
+		// Behind a closing parenthesis the rules below tell a call from a condition or a cast.
+		bool bValueOperand = !_Tokens.f_IsText(Before, ")") && !_Tokens.f_IsText(Before, "]") && (After.m_Kind == ECodeTokenKind::mc_Number
+			|| After.m_Kind == ECodeTokenKind::mc_StringLiteral
+			|| After.m_Kind == ECodeTokenKind::mc_CharLiteral
+			|| fg_IsAnyText(_Tokens, After, c_pValueOperands))
+		;
+		if (bValueOperand)
 			return true;
 
 		if (fg_IsDeclaratorToken(_Tokens, _Structure, _iToken))

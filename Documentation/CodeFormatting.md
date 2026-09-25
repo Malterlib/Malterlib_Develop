@@ -245,7 +245,11 @@ while `sizeof`, `alignof`, `typeid`, and `noexcept` yield a value the way a
 call does and `decltype` names a type. Everywhere else the pair keeps what the
 source has. A lambda's body closes an operand the way a closing
 parenthesis does, so a sign behind it is binary: `[] { ... } + g_Other`. A
-statement's own block closes none, and a sign behind one is unary. A parenthesis holding nothing but fundamental type words,
+statement's own block closes none, and a sign behind one is unary. Behind a declarator stands the name it declares, never a literal or an operator
+spelled as a keyword, so `nMove * sizeof(t_CKey)` and `i * 8` multiply wherever
+they stand. A function's own qualification is part of its name, so
+`NMemory::fg_MemMove(...)` is a call, where `void NMib::fg_Foo(CFoo *_pA)`
+declares one. A parenthesis holding nothing but fundamental type words,
 where no call or `sizeof` could have produced it, is a cast and no operand, so a
 sign behind it is unary, `(smint)-1`, where `sizeof(int) - 1` and `(Value) - 1`
 subtract.
