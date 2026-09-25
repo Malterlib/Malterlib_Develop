@@ -337,6 +337,15 @@ namespace
 					;
 					// A cv-qualifier behind a pointer declarator qualifies the pointer and stands
 					// apart from it, as it does from a type.
+					// An attribute's brackets capture nothing, so the name behind them is no attribute
+					// macro of a lambda and hugs its parenthesis.
+					fg_ExpectFormat
+						(
+							"AttributeBeforeCall"
+							, "void f()\n{\n\t[[maybe_unused]] decltype (g(p)) Key;\n\t[[nodiscard]] auto x = h (1);\n}\n"
+							, "void f()\n{\n\t[[maybe_unused]] decltype(g(p)) Key;\n\t[[nodiscard]] auto x = h(1);\n}\n"
+						)
+					;
 					// A qualified call is no declaration, and behind a declarator stands a name, never
 					// a literal or 'sizeof'; '*this' behind a condition is still a dereference.
 					fg_ExpectFormat

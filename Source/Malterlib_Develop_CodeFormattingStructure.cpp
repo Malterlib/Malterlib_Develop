@@ -1969,6 +1969,11 @@ namespace NMib::NDevelop
 			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Square || Node.m_iLastToken != _iClose)
 				continue;
 
+			// Two brackets open an attribute, which captures nothing: '[[maybe_unused]]'.
+			auto iInner = fg_NextCode(_Tokens, Node.m_iFirstToken);
+			if (iInner >= 0 && _Tokens.f_IsText(Tokens[umint(iInner)], "["))
+				return false;
+
 			auto iBefore = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
 			if (iBefore < 0)
 				return true;
