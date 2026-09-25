@@ -506,7 +506,9 @@ initializer written across lines, a block comment inside, a multiline token. So
 does a statement inside a conditional, whose depth the sources decide for
 themselves. A case written on its label's line stays there whole, as
 `case 1: return 1;` is written on purpose, and so do the `if` of an `else if`
-and an attribute on a clause's line. Behind a closing brace only a keyword
+and an attribute on a clause's line. The `if` is laid out against the line the
+`else` starts, so a condition that does not fit behind both opens under the
+`else`, as it would under an `if` of its own. Behind a closing brace only a keyword
 starts a statement of its own, since a name there declares a variable of the
 type just defined. A lambda's terminator stands on a line of its own at the
 statement's indentation, wherever the source left it, on that line already or

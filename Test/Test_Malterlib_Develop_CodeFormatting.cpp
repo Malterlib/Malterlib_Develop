@@ -1174,6 +1174,26 @@ namespace
 					;
 					// A clause split across lines keeps its braces, as the standard requires.
 					fKept("SplitClause", "\tif\n\t(\n\t\t" + Wide + "\n\t\t&& " + Wide + "\n\t)\n\t{\n\t\tg();\n\t}\n");
+					// The 'if' of an 'else if' stays behind the 'else' and is split against its line,
+					// which counts the 'else' too: this condition fits only without it.
+					fg_ExpectFormat
+						(
+							"ElseIfSplit"
+							, "void f()\n{\n\tif (a)\n\t\tg();\n\telse if (" + Wide + Wide + ")\n\t\th();\n}\n"
+							, "void f()\n{\n\tif (a)\n\t\tg();\n\telse if\n\t(\n\t\t" + Wide + Wide + "\n\t)\n\t{\n\t\th();\n\t}\n}\n"
+							, false
+						)
+					;
+					// No ref-qualifier is followed by a '&', so the '&&' in front of one is an
+					// operation like the others and the condition breaks there too.
+					fg_ExpectFormat
+						(
+							"AddressOperand"
+							, "void f()\n{\n\tif (a && " + Wide + " && &" + Wide + " == p)\n\t\tg();\n}\n"
+							, "void f()\n{\n\tif\n\t(\n\t\ta\n\t\t&& " + Wide + "\n\t\t&& &" + Wide + " == p\n\t)\n\t{\n\t\tg();\n\t}\n}\n"
+							, false
+						)
+					;
 				};
 
 				DMibTestCategory("Bodies")

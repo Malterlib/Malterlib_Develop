@@ -583,6 +583,7 @@ namespace
 		aint fp_PreviousCode(umint _iToken) const;
 		aint fp_NextCode(umint _iToken) const;
 		bool fp_IsFirstOnLine(umint _iToken) const;
+		aint fp_LeadingElse(umint _iToken) const;
 		bool fp_IsLastOnLine(umint _iToken) const;
 
 		void fp_RuleIndentation();
@@ -1052,6 +1053,21 @@ namespace
 		auto iPrevious = fp_PreviousSignificant(_iToken);
 
 		return iPrevious < 0 || m_Tokens.f_GetTokens()[umint(iPrevious)].m_bMultiLine;
+	}
+
+	// The 'else' that starts the line an 'else if' is written on, or -1. The 'if' has no
+	// line of its own, so its statement is laid out against the one the 'else' starts.
+	aint CFormattingAnalyzer::fp_LeadingElse(umint _iToken) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		if (!m_Tokens.f_IsText(Tokens[_iToken], "if") || fp_IsFirstOnLine(_iToken))
+			return -1;
+
+		auto iElse = fp_PreviousCode(_iToken);
+		if (iElse < 0 || !m_Tokens.f_IsText(Tokens[umint(iElse)], "else") || !fp_IsFirstOnLine(umint(iElse)))
+			return -1;
+
+		return iElse;
 	}
 
 	bool CFormattingAnalyzer::fp_IsLastOnLine(umint _iToken) const
@@ -3684,15 +3700,17 @@ namespace
 			}
 		}
 
+		auto iElse = fp_LeadingElse(iDeclFirst);
+		umint iLineFirst = iElse >= 0 ? umint(iElse) : iDeclFirst;
 		bool bJoinable = fp_IsRangeJoinable(_iNode, iDeclFirst, iSignatureLast)
 			&& !bFixedLineBreaks
 			&& Node.m_Kind != ECodeNodeKind::mc_Unsupported
-			&& fp_IsFirstOnLine(iDeclFirst)
+			&& fp_IsFirstOnLine(iLineFirst)
 		;
 		if (iInitializerList != TCLimitsInt<umint>::mc_Max)
 			iHeadLast = iSignatureLast;
 
-		bool bFits = bJoinable && fp_FitsInline(iDeclFirst, iHeadLast, _iIndent);
+		bool bFits = bJoinable && fp_FitsInline(iLineFirst, iHeadLast, _iIndent);
 
 		// The first phase only decides which return types move. A declaration that fits as
 		// it stands has no reason to; one that does not is converted where that lets its
@@ -3816,7 +3834,7 @@ namespace
 				// The terminator ends the expression's line and counts towards it. An
 				// expression that only fits without it is still one that has to be split,
 				// since the terminator takes a line of its own only from a split statement.
-				bMustSplit = fp_FitsInline(iDeclFirst, iRangeLast, _iIndent);
+				bMustSplit = fp_FitsInline(iLineFirst, iRangeLast, _iIndent);
 			}
 
 			// A trailing return type is one unit on a line of its own, so the signature in
@@ -3839,7 +3857,7 @@ namespace
 			m_bOperatorSplit = false;
 			// A statement with no scope marker to split keeps its shape; only a statement
 			// that was actually relaid out puts its terminator on a line of its own.
-			bool bSplit = fp_LayoutRange(_iNode, iDeclFirst, iSignatureEnd, _iIndent, bClause, true, bMustSplit);
+			bool bSplit = fp_LayoutRange(_iNode, iLineFirst, iSignatureEnd, _iIndent, bClause, true, bMustSplit);
 			if (bTrailing)
 			{
 				fp_BreakBefore(iTrailingReturn, _iIndent + nTab);
@@ -4475,8 +4493,11 @@ namespace
 			default: break;
 		}
 
-		if (Node.m_Kind == ECodeNodeKind::mc_Statement)
-			fp_LayoutStatement(_iNode, fp_GetStatementIndent(Node.m_iFirstToken));
+		if (Node.m_Kind != ECodeNodeKind::mc_Statement)
+			return;
+
+		auto iElse = fp_LeadingElse(Node.m_iFirstToken);
+		fp_LayoutStatement(_iNode, fp_GetStatementIndent(iElse >= 0 ? umint(iElse) : Node.m_iFirstToken));
 	}
 
 	void CFormattingAnalyzer::fp_RuleLineBreaks()
@@ -4870,11 +4891,14 @@ namespace
 
 				// A '&' or '&&' is the function's ref-qualifier when nothing that could be an
 				// operand follows it: what comes after one is the trailing return type, the
-				// body, a pure specifier, a requires clause, or another qualifier.
+				// body, a pure specifier, a requires clause, or another qualifier. That is never
+				// a second ref-qualifier, so a '&' behind it takes an address: 'a && &b == p'.
 				if (m_Tokens.f_IsText(Tokens[i], "&") || m_Tokens.f_IsText(Tokens[i], "&&"))
 				{
 					auto iNext = fp_NextCode(i);
+					bool bReference = iNext >= 0 && (m_Tokens.f_IsText(Tokens[umint(iNext)], "&") || m_Tokens.f_IsText(Tokens[umint(iNext)], "&&"));
 					bool bQualifier = iNext >= 0
+						&& !bReference
 						&& (m_Tokens.f_IsText(Tokens[umint(iNext)], "->")
 							|| m_Tokens.f_IsText(Tokens[umint(iNext)], "{")
 							|| m_Tokens.f_IsText(Tokens[umint(iNext)], "=")
