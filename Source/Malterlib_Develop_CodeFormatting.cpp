@@ -476,8 +476,8 @@ namespace NMib::NDevelop
 				continue;
 
 			auto Text = Stream.f_GetText(Token);
-			// Trailing space inside a line comment is layout, not comment text.
-			if (Kind == ECodeTokenKind::mc_LineComment)
+			// Trailing space inside a line comment or behind a directive is layout, not text.
+			if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_Preprocessor)
 				Text = fg_TrimCommentTrailingSpace(Text);
 
 			auto fInsert = [&](CStr const &_Text)
@@ -1234,7 +1234,9 @@ namespace
 			return;
 		}
 
-		if (fp_IsLastOnLine(_iToken))
+		// A gap the layout breaks is its own, whichever side of it asks for the space.
+		auto iNextCode = fp_NextCode(_iToken);
+		if (fp_IsLastOnLine(_iToken) || (iNextCode >= 0 && fp_IsBreakGap(umint(iNextCode))))
 			return;
 
 		auto const &Next = Tokens[_iToken + 1];
@@ -1583,6 +1585,17 @@ namespace
 
 				fp_RemoveFollowingBlankLines(umint(iColon), "access-blank-line", "no blank line follows an access specifier");
 				if (m_Tokens.f_IsText(Before, "{"))
+					continue;
+
+				// Behind a specifier with an empty section the line after that one decides:
+				// 'private:' directly over 'public:'.
+				auto iOwner = m_Tokens.f_IsText(Before, ":") ? fp_PreviousCode(umint(iBefore)) : aint(-1);
+				bool bBehindSpecifier = iOwner >= 0
+					&& (m_Tokens.f_IsText(Tokens[umint(iOwner)], "public")
+						|| m_Tokens.f_IsText(Tokens[umint(iOwner)], "private")
+						|| m_Tokens.f_IsText(Tokens[umint(iOwner)], "protected"))
+				;
+				if (bBehindSpecifier)
 					continue;
 
 				umint nNewlines = 0;
@@ -2029,17 +2042,20 @@ namespace
 				bool bClosers = m_Structure.f_IsAngleBracket(iPrevious) && m_Structure.f_IsAngleBracket(i)
 					&& m_Tokens.f_IsText(Tokens[iPrevious], ">") && m_Tokens.f_IsText(Token, ">")
 				;
+				// A gap the standard settles is measured as the spacing rule writes it, so a
+				// line measured to fit still fits once its gaps are respaced.
 				if (bClosers || bComment)
 					nColumns += 0;
-				else if (!bNewline)
-					nColumns += nGap;
 				else
 				{
 					auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, iPrevious, i);
-					if (Spacing == ECodeSpacing::mc_Preserve)
+					if (Spacing == ECodeSpacing::mc_Preserve && bNewline)
 						return false;
 
-					nColumns += Spacing == ECodeSpacing::mc_Space;
+					if (Spacing == ECodeSpacing::mc_Preserve)
+						nColumns += nGap;
+					else
+						nColumns += Spacing == ECodeSpacing::mc_Space;
 				}
 			}
 
@@ -2426,6 +2442,12 @@ namespace
 
 					iStart += nKeep;
 					nLength -= nKeep;
+					// A comment can open the line the token is on: only its indentation moves.
+					umint nIndent = 0;
+					while (nIndent < nLength && fg_IsSpaceOrTab(pGap[nKeep + nIndent]))
+						++nIndent;
+
+					nLength = nIndent;
 
 					return fp_MakeIndent(m_GapIndent[i]);
 				}
@@ -3714,12 +3736,11 @@ namespace
 
 		// The first phase only decides which return types move. A declaration that fits as
 		// it stands has no reason to; one that does not is converted where that lets its
-		// name fit, and the converted source is what gets laid out.
-		if (m_bProbing)
+		// name fit, and the converted source is what gets laid out. Anything else is laid
+		// out as the second phase will, so the bodies inside it are measured at the depth
+		// they are moved to rather than the one the source gave them.
+		if (m_bProbing && bJoinable && !bFits && fp_ConvertTrailingReturn(_iNode, iDeclFirst, _iIndent))
 		{
-			if (bJoinable && !bFits)
-				fp_ConvertTrailingReturn(_iNode, iDeclFirst, _iIndent);
-
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
 			{
 				fp_PlaceBody(_iNode, iBlock, _iIndent, !bBodyIn);

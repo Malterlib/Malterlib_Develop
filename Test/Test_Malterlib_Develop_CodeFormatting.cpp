@@ -669,6 +669,15 @@ namespace
 							, "struct C\n{\npublic:\n\tC();\n\nprivate:\n\tint m_A;\n\n\t// Comment\nprotected:\n\tint m_B;\n\npublic:\n\tint m_C;\n};\n"
 						)
 					;
+					// A specifier with an empty section has no blank line after it, so the next
+					// one stands directly under it.
+					fg_ExpectFormat
+						(
+							"EmptyAccess"
+							, "struct C\n{\n\tint m_A;\n\nprivate:\n\npublic:\n\tC();\n};\n"
+							, "struct C\n{\n\tint m_A;\n\nprivate:\npublic:\n\tC();\n};\n"
+						)
+					;
 					// A base clause's 'public' is no label.
 					fg_ExpectFormat("BaseClause", "struct C : public CBase\n{\n};\n", "struct C : public CBase\n{\n};\n");
 					fg_ExpectFormat("AfterBraceMultiple", "void f()\n{\n\t\n\n\tint a;\n}\n", "void f()\n{\n\tint a;\n}\n");
@@ -873,6 +882,10 @@ namespace
 					// A name behind a closing brace declares a variable of the type just defined.
 					CStr Instance = "struct\n{\n\tint a;\n} g_Instance;\n";
 					fg_ExpectFormat("Instance", Instance, Instance);
+					// A comment opening a statement's line keeps its text; only the indentation moves.
+					fg_ExpectFormat("LeadingComment", "void f()\n{\n  /*x*/ g();\n}\n", "void f()\n{\n\t/*x*/ g();\n}\n");
+					// Space behind a directive is trailing space like any other.
+					fg_ExpectFormat("DirectiveTrailingSpace", "#include \"a.h\" \nint g_A;\n", "#include \"a.h\"\nint g_A;\n");
 					CStr Attribute = "void f()\n{\n\tif (a) [[unlikely]]\n\t\tg();\n}\n";
 					fg_ExpectFormat("Attribute", Attribute, Attribute);
 					// A comment on a line of its own is one of the body's lines and follows it:
@@ -1191,6 +1204,29 @@ namespace
 							"AddressOperand"
 							, "void f()\n{\n\tif (a && " + Wide + " && &" + Wide + " == p)\n\t\tg();\n}\n"
 							, "void f()\n{\n\tif\n\t(\n\t\ta\n\t\t&& " + Wide + "\n\t\t&& &" + Wide + " == p\n\t)\n\t{\n\t\tg();\n\t}\n}\n"
+							, false
+						)
+					;
+					// A line is measured as the spacing rule writes it: this call fits only as
+					// written, with no space around its '-'.
+					CStr Rest;
+					for (umint i = 0; i < 84; ++i)
+						Rest += "R";
+
+					fg_ExpectFormat
+						(
+							"MeasuredRespaced"
+							, "void f()\n{\n\tif (a)\n\t\tg(" + Wide + "-1, " + Rest + ");\n}\n"
+							, "void f()\n{\n\tif (a)\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t" + Wide + " - 1\n\t\t\t\t, " + Rest + "\n\t\t\t)\n\t\t;\n\t}\n}\n"
+							, false
+						)
+					;
+					// A clause written against its parenthesis still opens it on a line of its own.
+					fg_ExpectFormat
+						(
+							"ClauseAgainstParen"
+							, "void f()\n{\n\tif(g(" + Wide + ", " + Rest + ") != FALSE)\n\t\th();\n}\n"
+							, "void f()\n{\n\tif\n\t(\n\t\tg(" + Wide + ", " + Rest + ")\n\t\t!= FALSE\n\t)\n\t{\n\t\th();\n\t}\n}\n"
 							, false
 						)
 					;
@@ -2409,6 +2445,7 @@ namespace
 				{
 					DMibExpectTrue(fg_HasEquivalentCodeTokens("int  a =  1;\n", "int a = 1;\n"));
 					DMibExpectTrue(fg_HasEquivalentCodeTokens("int a; // c  \n", "int a; // c\n"));
+					DMibExpectTrue(fg_HasEquivalentCodeTokens("#include \"a.h\" \n", "#include \"a.h\"\n"));
 					DMibExpectFalse(fg_HasEquivalentCodeTokens("int a;\n", "int b;\n"));
 					DMibExpectFalse(fg_HasEquivalentCodeTokens("int a;\n", "int a\n"));
 					DMibExpectFalse(fg_HasEquivalentCodeTokens("auto s = \"a b\";\n", "auto s = \"a  b\";\n"));

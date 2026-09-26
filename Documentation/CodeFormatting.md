@@ -172,7 +172,8 @@ body below them.
 stands between it and what is in front of it, since the blank line then belongs
 in front of that comment, if anywhere. A specifier still written on the line of
 a member gets its blank line from the layout, together with the line of its
-own. The blank-line rules never overlap: where none may stand, behind a brace
+own. A specifier directly behind another, whose section is empty, stands under
+it with no blank line between. The blank-line rules never overlap: where none may stand, behind a brace
 or a label, that rule takes the whole run, and `blank-line` only ever takes
 what is left of one behind its first.
 
