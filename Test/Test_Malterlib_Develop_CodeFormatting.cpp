@@ -882,6 +882,20 @@ namespace
 					// A name behind a closing brace declares a variable of the type just defined.
 					CStr Instance = "struct\n{\n\tint a;\n} g_Instance;\n";
 					fg_ExpectFormat("Instance", Instance, Instance);
+					// A name in one branch of a conditional is not followed by the word the other
+					// branch opens with, so the declarator in front of it still hugs it.
+					{
+						CStr Branches = "void f()\n{\n\tauto fAdd = [&]\n\t\t(\n#if defined(X)\n\t\t\tauto &&_fThis\n#else\n\t\t\tthis auto &&_fThis\n#endif\n"
+							"\t\t\t, int _A\n\t\t)\n\t\t{\n\t\t}\n\t;\n}\n"
+						;
+						fg_ExpectFormat("DeclaratorBeforeBranch", Branches, Branches);
+					}
+					// A condition spelled like a pointer to function's declarator is no declarator: the
+					// arrow behind the statement it guards is a member access.
+					{
+						CStr Condition = "void f()\n{\n\tif (*pManager)\n\t\t(*pManager)->f_BlockDestroy(x);\n}\n";
+						fg_ExpectFormat("ConditionNoDeclarator", Condition, Condition);
+					}
 					// A comment opening a statement's line keeps its text; only the indentation moves.
 					fg_ExpectFormat("LeadingComment", "void f()\n{\n  /*x*/ g();\n}\n", "void f()\n{\n\t/*x*/ g();\n}\n");
 					// Space behind a directive is trailing space like any other.

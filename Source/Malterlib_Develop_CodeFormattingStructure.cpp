@@ -1352,6 +1352,21 @@ namespace
 		if (!Node.m_SplitPoints.f_IsEmpty())
 			return false;
 
+		// The declarator stands behind the type it returns. Behind a clause keyword or
+		// another parenthesis the same spelling is a condition or a call's operand,
+		// 'if (*pManager) (*pManager)->f_Destroy()'.
+		auto iType = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+		if (iType < 0)
+			return false;
+
+		auto const &Type = Tokens[umint(iType)];
+		bool bBehindType = (Type.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Type, gc_pExpressionKeywords))
+			|| (_Structure.f_IsAngleBracket(umint(iType)) && _Tokens.f_IsText(Type, ">"))
+			|| fg_IsDeclaratorText(_Tokens, Type)
+		;
+		if (!bBehindType)
+			return false;
+
 		auto iInner = fg_NextCode(_Tokens, Node.m_iFirstToken);
 		if (iInner >= 0 && Tokens[umint(iInner)].m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Tokens[umint(iInner)], gc_pExpressionKeywords))
 			iInner = fg_NextCode(_Tokens, umint(iInner));
@@ -2755,8 +2770,25 @@ namespace NMib::NDevelop
 			bool bQualifier = _Tokens.f_IsText(Right, "const") || _Tokens.f_IsText(Right, "volatile");
 			if (Right.m_Kind == ECodeTokenKind::mc_Identifier && !bQualifier && !fg_IsAnyText(_Tokens, Right, gc_pExpressionKeywords))
 			{
+				// The name has to follow on the same branch of a conditional, and a word that
+				// never names a declaration is no name: 'auto &&_fThis' / '#else' / 'this auto'.
+				constexpr ch8 const *c_pNoName[] =
+					{
+						"this", "auto", "const", "volatile", "typename", "struct", "class", "enum", "static", "constexpr", "inline"
+					}
+				;
 				auto iBehind = fg_NextCode(_Tokens, _iRight);
-				if (iBehind >= 0 && Tokens[umint(iBehind)].m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Tokens[umint(iBehind)], gc_pExpressionKeywords))
+				bool bDirective = false;
+				for (auto i = _iRight + 1; iBehind >= 0 && i < umint(iBehind); ++i)
+					bDirective |= Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor;
+
+				bool bName = iBehind >= 0
+					&& !bDirective
+					&& Tokens[umint(iBehind)].m_Kind == ECodeTokenKind::mc_Identifier
+					&& !fg_IsAnyText(_Tokens, Tokens[umint(iBehind)], gc_pExpressionKeywords)
+					&& !fg_IsAnyText(_Tokens, Tokens[umint(iBehind)], c_pNoName)
+				;
+				if (bName)
 					return ECodeSpacing::mc_Space;
 			}
 
