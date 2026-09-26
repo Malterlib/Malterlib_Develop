@@ -882,6 +882,15 @@ namespace
 					// A name behind a closing brace declares a variable of the type just defined.
 					CStr Instance = "struct\n{\n\tint a;\n} g_Instance;\n";
 					fg_ExpectFormat("Instance", Instance, Instance);
+					// A gap is joined the way it is measured, so an operator the spacing rules write
+					// apart joins its line like any other.
+					fg_ExpectFormat
+						(
+							"JoinSpacedOperator"
+							, "template <typename tf_C>\nTCEnableIf\n<\n\tcA<tf_C>\n\t|| cB<tf_C>\n\t, void\n>\nfg_Call(tf_C &_Type)\n{\n}\n"
+							, "template <typename tf_C>\nTCEnableIf<cA<tf_C> || cB<tf_C>, void> fg_Call(tf_C &_Type)\n{\n}\n"
+						)
+					;
 					// A name in one branch of a conditional is not followed by the word the other
 					// branch opens with, so the declarator in front of it still hugs it.
 					{

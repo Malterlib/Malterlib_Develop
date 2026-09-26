@@ -2272,7 +2272,8 @@ namespace
 
 				if (bNewline)
 				{
-					auto Spacing = fp_GetCanonicalSpacing(iPrevious, i);
+					// Written the way it was measured, the spacing rules' spelling included.
+					auto Spacing = fp_GetInlineSpacing(iPrevious, i);
 					auto iStart = Tokens[iPrevious].f_GetEnd();
 					fp_AddEdit("line-break", iStart, Tokens[i].m_iOffset - iStart, Spacing == ECodeSpacing::mc_Space ? " " : CStr(), "the construct fits on one line");
 				}
@@ -2648,7 +2649,9 @@ namespace
 				if (!bNewline || bKeepLines)
 					continue;
 
-				auto Spacing = fp_GetCanonicalSpacing(umint(iPrevious), i);
+				// Joined the way it was measured: the operator a spacing rule writes apart,
+				// 'cA<t_C> || cB<t_C>', is apart here too.
+				auto Spacing = fp_GetInlineSpacing(umint(iPrevious), i);
 				if (Spacing == ECodeSpacing::mc_Preserve)
 					continue;
 
