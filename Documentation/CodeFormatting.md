@@ -441,14 +441,18 @@ shape, and is told by what its parenthesis holds: an element that opens with a
 function's name, a literal, a keyword that is a value, a unary operator or a
 brace is an argument, which no parameter list holds, so `TCSet<int>
 Set(fg_Construct(&Allocator))` is never converted. A bare name behind a complete type, such as an
-attribute macro, keeps the declaration from being converted. The
+attribute macro, keeps the declaration from being converted, and so does a
+macro in front of the name, `DMibFloatConstexpr`, which can expand to
+specifiers as readily as to a type. The
 conversion is the one rule that changes tokens. It is decided on the original
 source, and the layout is then made on the converted source, so the lines the
 plan writes are the lines a later pass sees.
 
 The decisions are kept per gap between tokens and written out once, so no
 decision depends on an edit already made, or on where the source happened to
-break its lines. A construct that contains a block comment, a multiline token,
+break its lines. A gap the standard settles is measured as it will be written,
+not as the source spells it, so a line measured to fit still fits once its
+gaps are respaced. A construct that contains a block comment, a multiline token,
 or a braced initializer written across lines keeps its lines; only its inner
 constructs are brought back to one line where they fit. A line comment only
 ends its line: a construct holding one never fits on a line and is split, and
