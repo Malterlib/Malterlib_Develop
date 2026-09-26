@@ -3147,6 +3147,19 @@ namespace
 		if (iReturnLast < 0 || umint(iReturnLast) < iReturn)
 			return false;
 
+		// A macro, named 'D' and a capital by Malterlib's naming, can expand to specifiers as
+		// readily as to a type, and a specifier moved behind the parameter list is no type.
+		for (auto i = iReturn; i <= umint(iReturnLast); ++i)
+		{
+			auto const &Token = Tokens[i];
+			if (Token.m_Kind != ECodeTokenKind::mc_Identifier)
+				continue;
+
+			auto Name = m_Tokens.f_GetText(Token);
+			if (Name.f_GetLen() >= 2 && Name.f_GetStr()[0] == 'D' && Name.f_GetStr()[1] >= 'A' && Name.f_GetStr()[1] <= 'Z')
+				return false;
+		}
+
 		// A return type that is already 'auto' has nowhere to go: moving it behind the
 		// parameter list would only spell the same deduction as 'auto ... -> auto'.
 		if (umint(iReturnLast) == iReturn && m_Tokens.f_IsText(Tokens[iReturn], "auto"))
@@ -4144,7 +4157,9 @@ namespace
 			return false;
 
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
-		auto nGuardIndent = fp_GetStatementIndent(Guard.m_iFirstToken);
+		// The 'if' of an 'else if' stands behind the 'else', whose line the braces go under.
+		auto iElse = fp_LeadingElse(Guard.m_iFirstToken);
+		auto nGuardIndent = fp_GetStatementIndent(iElse >= 0 ? umint(iElse) : Guard.m_iFirstToken);
 		if (!fp_IsRangeOneLine(Block.m_Children[0], Inner.m_iFirstToken, Inner.m_iLastToken, nGuardIndent + nTab))
 			return false;
 
@@ -4227,7 +4242,9 @@ namespace
 			return false;
 
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
-		auto nGuardIndent = fp_GetStatementIndent(Guard.m_iFirstToken);
+		// The 'if' of an 'else if' stands behind the 'else', whose line the braces go under.
+		auto iElse = fp_LeadingElse(Guard.m_iFirstToken);
+		auto nGuardIndent = fp_GetStatementIndent(iElse >= 0 ? umint(iElse) : Guard.m_iFirstToken);
 
 		// The brace opens behind an attribute on the clause's line.
 		auto iOpenAfter = Guard.m_iLastToken;

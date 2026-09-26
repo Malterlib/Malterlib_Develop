@@ -1230,6 +1230,17 @@ namespace
 							, false
 						)
 					;
+					// Braces added under an 'else if' go under the 'else', also where a conditional
+					// keeps each line's depth as written.
+					fg_ExpectFormat
+						(
+							"ElseIfBracesInConditional"
+							, "#if X\nvoid f()\n{\n\tif (a)\n\t\tg();\n\telse if (b)\n\t\tg(" + Wide + ", " + Wide + ");\n}\n#endif\n"
+							, "#if X\nvoid f()\n{\n\tif (a)\n\t\tg();\n\telse if (b)\n\t{\n\t\tg\n\t\t\t(\n\t\t\t\t" + Wide + "\n\t\t\t\t, " + Wide
+								+ "\n\t\t\t)\n\t\t;\n\t}\n}\n#endif\n"
+							, false
+						)
+					;
 				};
 
 				DMibTestCategory("Bodies")
@@ -2054,6 +2065,21 @@ namespace
 
 				DMibTestCategory("TrailingReturn")
 				{
+					// Only a return type moves. A macro in front of the name can expand to specifiers,
+					// which are no type behind the parameter list.
+					{
+						CStr Name;
+						for (umint i = 0; i < 60; ++i)
+							Name += "W";
+
+						fg_ExpectFormat
+							(
+								"MacroKeepsPlace"
+								, CStr("DMibConstexpr int TCFoo<t_CA@, t_CB@>::CInner::f_Get(TCFoo const &_Source)\n{\n}\n").f_Replace("@", Name)
+								, CStr("DMibConstexpr int TCFoo<t_CA@, t_CB@>::CInner::f_Get\n\t(\n\t\tTCFoo const &_Source\n\t)\n{\n}\n").f_Replace("@", Name)
+							)
+						;
+					}
 					// A variable constructed with arguments has a declaration's shape, and is told
 					// by what its parenthesis holds: a call to a function is no parameter.
 					fg_ExpectFormat
