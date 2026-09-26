@@ -95,7 +95,7 @@ formatter failure, not an edit.
 | `comma-space` | No space before a comma, one space after it on the same line. |
 | `operator-space` | One space around unambiguous binary operators. |
 | `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
-| `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon, a bit-field's width, and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. A run of pointers is one declarator, `CFoo **`, while a reference to a pointer stands apart from it: `CFoo * &`. |
+| `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon, a bit-field's width, and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. A run of pointers is one declarator, `CFoo **`, while a reference to a pointer stands apart from it: `CFoo * &`. A declarator stands apart from a calling convention macro between it and the name, `void * DMibCrossmoduleAPI fs_Alloc`. A postfix `++` or `--` ends its operand, so `*pParse++ - '0'` subtracts. |
 | `block-blank-line` | Removes blank lines directly after an opening brace and directly in front of a closing one. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `blank-line` | Collapses a run of blank lines into one. |
@@ -216,7 +216,10 @@ which is also what tells the arrow behind it, a trailing return type's, from
 the member access that `->` otherwise is: neither `operator co_await`, named by
 a keyword an expression uses, nor `operator ""_f`, named by a suffix behind a
 literal, spells a type in front of the list the way an ordinary declaration
-does. A lambda that takes nothing may leave its parameter list out, and its
+does. `noexcept(false)` counts as a qualifier like `noexcept`, and a body
+behind the arrow's type makes the arrow a trailing return type whatever the
+parenthesis is read as, `DMibTestSuite("Name") -> TCFuture<void>` above its
+braces. A lambda that takes nothing may leave its parameter list out, and its
 arrow then stands behind the capture list, its qualifiers, or the attribute
 macro that follows the list, `[pState] mutable -> TCFuture<void>`; such a
 lambda owns its body like any other. A macro that opens a function, named `D` and a capital,
@@ -231,6 +234,10 @@ conditional's when a `?` stands in front of it at the same level.
 
 An operator with an operand on both sides of it is written apart from both,
 whatever they are spelled with: `5 * 5`, `nFlags & mc_Mask`, `a + (b | c)`.
+Behind a cast a sign is unary, `(aint)-16324`: a parenthesis that ends in a
+declarator or a qualifier is a cast, and so is one holding a single name
+Malterlib spells as a type's, a type prefix or one of the fundamental aliases,
+where `sizeof(void *)` behind a name is an operand like any call.
 Without an operand in front, the same token is the unary form, `-1` and
 `*pValue`; without one behind, it belongs to something else, a cast's
 `(CFoo *)` or a pack's `&& ...`. `*`, `&`, and `&&` stay ambiguous even between
@@ -338,6 +345,9 @@ instead. That declares nothing, so what follows it is the rest of the
 declaration rather than a name, and stands apart from it: `f_Get() const &
 noexcept`. A parameter list is a template
 header's, a lambda's, a catch clause's, a function's, or a function type's:
+the parenthesis behind a pointer to function's declarator, `void (*pCall)(int
+_A)` and `void (DMibCrossmoduleAPI *m_fFree)(void *_pMemory)`, with a calling
+convention macro allowed in front of the declarator; and
 directly inside a template argument list a parenthesis behind a type, which
 ends in a template argument list of its own or in a name, and is written apart
 from the parenthesis, as in `TCFunction<void (CFoo &&_Value)>`. A template
@@ -448,7 +458,7 @@ another. A variable constructed with arguments elsewhere has the same
 shape, and is told by what its parenthesis holds: an element that opens with a
 function's name, a literal, a keyword that is a value, a unary operator or a
 brace is an argument, which no parameter list holds, so `TCSet<int>
-Set(fg_Construct(&Allocator))` is never converted. A bare name behind a complete type, such as an
+Set(fg_Construct(&Allocator))` is never converted. A bare name behind a complete type, `void *` included, such as an
 attribute macro, keeps the declaration from being converted, and so does a
 macro in front of the name, `DMibFloatConstexpr`, which can expand to
 specifiers as readily as to a type. The

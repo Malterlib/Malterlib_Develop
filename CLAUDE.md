@@ -95,7 +95,10 @@ function wherever it stands. Read it only where C++ itself settles nothing and
 the convention answers on its own, as `fg_NamesCall` does for a parenthesis
 inside a template argument list, which spells a call, a construction and a
 function type alike. A type prefix is weaker evidence than it looks: the same
-name constructs a value as readily as it names a function type's return.
+name constructs a value as readily as it names a function type's return. Where
+a parenthesis holds one name and nothing else, `fg_NamesType` reads a type
+prefix or a fundamental alias as a cast, since `(aint)` converts and `(Count)`
+groups.
 
 A decision and the spelling it is measured against have to agree. Width is
 measured at the width the spacing rules write, never at the source's, and a

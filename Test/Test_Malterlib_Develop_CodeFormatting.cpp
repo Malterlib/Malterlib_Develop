@@ -2304,6 +2304,35 @@ namespace
 					;
 				};
 
+				DMibTestCategory("Readings")
+				{
+					// Readings the whole tree corrected: a postfix '++' ends its operand, a cast
+					// of a type named by Malterlib's naming takes a sign as unary while
+					// 'sizeof(void *)' does not, 'noexcept(false)' stands in front of a trailing
+					// return type like 'noexcept', a body behind the arrow makes a test macro's
+					// arrow one too, a calling convention macro stands apart from the declarator
+					// in front of it and keeps the return type from being converted, and the
+					// parenthesis behind a pointer to function's declarator is its parameter list.
+					fExpect
+						(
+							"TreeCorrections"
+							, "struct C\n{\n\tauto operator = (C &&) noexcept(false)->C & = default;\n"
+								"\tvoid * (DMibCrossmoduleAPI * m_fFree)(void * _pMemory, umint _Size);\n"
+								"\tinline_always static void *DMibCrossmoduleAPI fs_Alloc(CMemoryManagerCrossModule *_pModule, umint &_Size, ch8 const *_pFile, aint _Line, "
+								"EHeapDebugFlag _Flags, EAllocationFlag _AllocFlags, ENumaNode _NumaNode);\n"
+								"};\nvoid f()\n{\n\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint) - 16324 + (smint)-1 + sizeof(void *)*4;\n"
+								"\tDMibTestSuite(\"Level {}\"_f << nLevel)->TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n}\n"
+							, "struct C\n{\n\tauto operator = (C &&) noexcept(false) -> C & = default;\n"
+								"\tvoid * (DMibCrossmoduleAPI * m_fFree)(void * _pMemory, umint _Size);\n\tinline_always static void * DMibCrossmoduleAPI fs_Alloc\n\t\t(\n"
+								"\t\t\tCMemoryManagerCrossModule *_pModule\n\t\t\t, umint &_Size\n\t\t\t, ch8 const *_pFile\n\t\t\t, aint _Line\n"
+								"\t\t\t, EHeapDebugFlag _Flags\n\t\t\t, EAllocationFlag _AllocFlags\n\t\t\t, ENumaNode _NumaNode\n\t\t)\n\t;\n};\nvoid f()\n{\n"
+								"\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint)-16324 + (smint)-1 + sizeof(void *) * 4;\n"
+								"\tDMibTestSuite(\"Level {}\"_f << nLevel) -> TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n}\n"
+							, false
+						)
+					;
+				};
+
 				DMibTestCategory("Body")
 				{
 					// In a function's body a type in front of a name and a parenthesis defines a

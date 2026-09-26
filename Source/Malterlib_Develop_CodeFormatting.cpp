@@ -3308,7 +3308,10 @@ namespace
 				continue;
 			}
 
-			bAfterName = false;
+			// A declarator completes the type in front of it, so a name behind 'void *' is
+			// as much a bare name as one behind 'void': 'void * DMibCrossmoduleAPI fs_Alloc'.
+			bool bDeclarator = m_Tokens.f_IsText(Token, "*") || m_Tokens.f_IsText(Token, "&") || m_Tokens.f_IsText(Token, "&&");
+			bAfterName = bAfterName && bDeclarator;
 
 			if (Token.m_Kind == ECodeTokenKind::mc_Number)
 				continue;

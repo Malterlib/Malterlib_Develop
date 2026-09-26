@@ -1210,6 +1210,43 @@ namespace
 		return false;
 	}
 
+	// Whether the name is a type's by Malterlib's naming, a type prefix followed by a
+	// capital, or one of the fundamental types and the aliases Malterlib spells them with.
+	bool fg_NamesType(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
+	{
+		if (_Token.m_Kind != ECodeTokenKind::mc_Identifier)
+			return false;
+
+		constexpr ch8 const *c_pFundamental[] =
+			{
+				"bool", "char", "short", "int", "long", "unsigned", "signed", "float", "double", "void", "wchar_t", "char8_t", "char16_t", "char32_t"
+				, "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "aint", "umint", "smint", "fp32", "fp64"
+				, "ch8", "ch16", "ch32", "uch8", "uch16", "uch32", "usize", "ssize"
+			}
+		;
+		if (fg_IsAnyText(_Tokens, _Token, c_pFundamental))
+			return true;
+
+		auto Text = _Tokens.f_GetText(_Token);
+		constexpr ch8 const *c_pPrefixes[] =
+			{
+				"C", "TC", "IC", "TIC", "E", "F"
+			}
+		;
+		for (auto pPrefix : c_pPrefixes)
+		{
+			CStr const Prefix = pPrefix;
+			if (Text.f_GetLen() <= Prefix.f_GetLen() || !Text.f_StartsWith(Prefix))
+				continue;
+
+			auto Behind = Text.f_GetStr()[Prefix.f_GetLen()];
+			if (Behind >= 'A' && Behind <= 'Z')
+				return true;
+		}
+
+		return false;
+	}
+
 	// The name a parenthesis stands behind, read through the template argument list it may
 	// end in: '::NMib::fg_GetHash<t_pMember>' is named by 'fg_GetHash'.
 	bool fg_NamesCall(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iName)
@@ -1259,6 +1296,35 @@ namespace
 		auto iOperator = fg_PreviousCode(_Tokens, umint(iOpen));
 
 		return iOperator >= 0 && _Tokens.f_IsText(Tokens[umint(iOperator)], "operator") ? iOperator : aint(-1);
+	}
+
+	// Whether the parenthesis closing at the token is a pointer to function's declarator:
+	// it opens with '*' or '&', or with a calling convention macro in front of one, names
+	// what it declares, holds no separator, and a parenthesis follows it.
+	bool fg_IsFunctionDeclaratorParenthesis(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		for (auto const &Node : _Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Paren || Node.m_iLastToken != _iClose)
+				continue;
+
+			if (!Node.m_SplitPoints.f_IsEmpty())
+				return false;
+
+			auto iInner = fg_NextCode(_Tokens, Node.m_iFirstToken);
+			if (iInner >= 0 && Tokens[umint(iInner)].m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Tokens[umint(iInner)], gc_pExpressionKeywords))
+				iInner = fg_NextCode(_Tokens, umint(iInner));
+
+			if (iInner < 0 || (!_Tokens.f_IsText(Tokens[umint(iInner)], "*") && !_Tokens.f_IsText(Tokens[umint(iInner)], "&")))
+				return false;
+
+			auto iBehind = fg_NextCode(_Tokens, _iClose);
+
+			return iBehind >= 0 && _Tokens.f_IsText(Tokens[umint(iBehind)], "(");
+		}
+
+		return false;
 	}
 
 	bool fg_IsParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup)
@@ -1409,6 +1475,10 @@ namespace
 
 			iName = iOperator;
 		}
+		// The parenthesis behind a pointer to function's declarator holds its parameters:
+		// 'void (*pCall)(int _A)', 'void (DMibCrossmoduleAPI *m_fFree)(void *_pMemory)'.
+		else if (_Tokens.f_IsText(Tokens[umint(iName)], ")") && fg_IsFunctionDeclaratorParenthesis(_Tokens, _Structure, umint(iName)))
+			return true;
 		// An operator function is named by the keyword and its symbol, and the call
 		// operator by the keyword and its own parentheses: 'operator () ('.
 		else if (Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
@@ -1720,6 +1790,74 @@ namespace
 		return false;
 	}
 
+	// Whether the parenthesis closing at the token spells a type and nothing else: it ends
+	// in a declarator or a qualifier, '(CFoo *)', or holds one name Malterlib spells as a
+	// type's, '(aint)'.
+	bool fg_IsCastParenthesis(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto iInner = fg_PreviousCode(_Tokens, _iClose);
+		if (iInner < 0)
+			return false;
+
+		// A parenthesis behind a name, a call's arguments or a subscript is an operator's
+		// operand, 'sizeof(void *)', or a call, never a cast.
+		aint iOpen = -1;
+		for (auto const &Node : _Structure.f_GetNodes())
+		{
+			if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Paren && Node.m_iLastToken == _iClose)
+				iOpen = aint(Node.m_iFirstToken);
+		}
+
+		if (iOpen < 0)
+			return false;
+
+		auto iBeforeOpen = fg_PreviousCode(_Tokens, umint(iOpen));
+		if (iBeforeOpen >= 0)
+		{
+			auto const &BeforeOpen = Tokens[umint(iBeforeOpen)];
+			bool bOperand = BeforeOpen.m_Kind == ECodeTokenKind::mc_Identifier
+				|| _Tokens.f_IsText(BeforeOpen, ")")
+				|| _Tokens.f_IsText(BeforeOpen, "]")
+				|| (_Structure.f_IsAngleBracket(umint(iBeforeOpen)) && _Tokens.f_IsText(BeforeOpen, ">"))
+			;
+			if (bOperand)
+				return false;
+		}
+
+		auto const &Inner = Tokens[umint(iInner)];
+		if (fg_IsDeclaratorText(_Tokens, Inner) || _Tokens.f_IsText(Inner, "const") || _Tokens.f_IsText(Inner, "volatile"))
+			return !fg_ClosesParameterList(_Tokens, _Structure, _iClose);
+
+		return fg_PreviousCode(_Tokens, umint(iInner)) == iOpen && fg_NamesType(_Tokens, Inner);
+	}
+
+	// Whether the parenthesis closing at the token is a cast by either reading.
+	bool fg_IsCast(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose)
+	{
+		return fg_ClosesFundamentalCast(_Tokens, _Structure, _iClose) || fg_IsCastParenthesis(_Tokens, _Structure, _iClose);
+	}
+
+	// A postfix '++' or '--' ends the operand it stands behind: '*pParse++ - '0''.
+	bool fg_IsPostfixStep(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		if (!_Tokens.f_IsText(Tokens[_iToken], "++") && !_Tokens.f_IsText(Tokens[_iToken], "--"))
+			return false;
+
+		auto iBefore = fg_PreviousCode(_Tokens, _iToken);
+		if (iBefore < 0)
+			return false;
+
+		auto const &Before = Tokens[umint(iBefore)];
+
+		return (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
+			|| _Tokens.f_IsText(Before, ")")
+			|| _Tokens.f_IsText(Before, "]")
+			|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
+		;
+	}
+
 	// An operator's spelling says what it does only where an operand stands on both sides
 	// of it. Without one in front it is the unary form, '-1' and '*pValue'; without one
 	// behind it names something else, a cast's '(CFoo *)' or a pack's '&& ...'. '*', '&'
@@ -1759,6 +1897,7 @@ namespace
 			|| _Tokens.f_IsText(Before, "]")
 			|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
 			|| (_Tokens.f_IsText(Before, "}") && fg_ClosesExpressionBody(_Structure, umint(iBefore)))
+			|| fg_IsPostfixStep(_Tokens, _Structure, umint(iBefore))
 		;
 		if (!bOperand)
 			return false;
@@ -1772,8 +1911,10 @@ namespace
 		if (fg_IsAnyText(_Tokens, After, c_pCloses))
 			return false;
 
-		// A cast is no operand of its own: what follows it is the unary form.
-		if (_Tokens.f_IsText(Before, ")") && fg_ClosesFundamentalCast(_Tokens, _Structure, umint(iBefore)))
+		// A cast is no operand of its own: what follows it is the unary form, '(aint)-1'. A
+		// cast holds fundamental type words, ends in a declarator or a qualifier, or holds
+		// one name Malterlib spells as a type's.
+		if (_Tokens.f_IsText(Before, ")") && fg_IsCast(_Tokens, _Structure, umint(iBefore)))
 			return false;
 
 		if (!fg_IsDeclaratorText(_Tokens, Token))
@@ -2534,7 +2675,16 @@ namespace NMib::NDevelop
 					// A pointer to function's declarator is followed by its parameter list and
 					// holds no separator, which is what tells 'void (*pCall)(int)' from a call
 					// whose first argument takes an address: 'f_Call(&CFoo::f_Get, _Value)'.
+					// A calling convention macro may stand in front of the declarator:
+					// 'void (DMibCrossmoduleAPI *m_fFree)(CFoo *_pModule)'.
 					auto iInner = fg_NextCode(_Tokens, _iRight);
+					if (iInner >= 0 && Tokens[umint(iInner)].m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Tokens[umint(iInner)], gc_pExpressionKeywords))
+					{
+						auto iStar = fg_NextCode(_Tokens, umint(iInner));
+						if (iStar >= 0 && (_Tokens.f_IsText(Tokens[umint(iStar)], "*") || _Tokens.f_IsText(Tokens[umint(iStar)], "&")))
+							iInner = iStar;
+					}
+
 					auto iBehind = fg_NextCode(_Tokens, Node.m_iLastToken);
 					bool bDeclarator = iInner >= 0
 						&& (_Tokens.f_IsText(Tokens[umint(iInner)], "*") || _Tokens.f_IsText(Tokens[umint(iInner)], "&"))
@@ -2608,6 +2758,17 @@ namespace NMib::NDevelop
 
 		if (fg_IsDeclaratorText(_Tokens, Left) && fg_IsDeclaratorToken(_Tokens, _Structure, _iLeft))
 		{
+			// A name behind the declarator that is followed by the declared name is a calling
+			// convention macro, and the declarator stands apart from it, as the sources write
+			// 'void * DMibCrossmoduleAPI fs_Alloc(umint _Size)'.
+			bool bQualifier = _Tokens.f_IsText(Right, "const") || _Tokens.f_IsText(Right, "volatile");
+			if (Right.m_Kind == ECodeTokenKind::mc_Identifier && !bQualifier && !fg_IsAnyText(_Tokens, Right, gc_pExpressionKeywords))
+			{
+				auto iBehind = fg_NextCode(_Tokens, _iRight);
+				if (iBehind >= 0 && Tokens[umint(iBehind)].m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Tokens[umint(iBehind)], gc_pExpressionKeywords))
+					return ECodeSpacing::mc_Space;
+			}
+
 			// A pack's ellipsis stands apart from the declarator in front of it, as it does
 			// from a type, wherever it stands: 'tfp_CParams && ...p_Params', '&& ...' where
 			// the pack has no name, and 'tp_CParams && ...>'.
@@ -2677,6 +2838,15 @@ namespace NMib::NDevelop
 					&& (fg_IsDeclaratorText(_Tokens, Tokens[umint(iInner)]) || _Tokens.f_IsText(Tokens[umint(iInner)], "const") || _Tokens.f_IsText(Tokens[umint(iInner)], "volatile")))
 				|| fg_ClosesFundamentalCast(_Tokens, _Structure, _iLeft)
 			;
+			// A parenthesis holding nothing but a type's name is a cast as well: '(aint)-1'.
+			// Malterlib's naming says which names are types, and the fundamental aliases
+			// are a closed set.
+			if (!bCast && iInner >= 0)
+			{
+				auto iOpen = fg_PreviousCode(_Tokens, umint(iInner));
+				bCast = iOpen >= 0 && _Tokens.f_IsText(Tokens[umint(iOpen)], "(") && fg_NamesType(_Tokens, Tokens[umint(iInner)]);
+			}
+
 			bool bOperand = (Right.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))
 				|| Right.m_Kind == ECodeTokenKind::mc_Number
 				|| fg_IsDeclaratorText(_Tokens, Right)
@@ -2766,10 +2936,11 @@ namespace NMib::NDevelop
 					|| Before.m_Kind == ECodeTokenKind::mc_StringLiteral
 					|| Before.m_Kind == ECodeTokenKind::mc_CharLiteral
 					|| (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
-					|| (_Tokens.f_IsText(Before, ")") && !fg_ClosesFundamentalCast(_Tokens, _Structure, umint(iBefore)))
+					|| (_Tokens.f_IsText(Before, ")") && !fg_IsCast(_Tokens, _Structure, umint(iBefore)))
 					|| _Tokens.f_IsText(Before, "]")
 					|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
 					|| (_Tokens.f_IsText(Before, "}") && fg_ClosesExpressionBody(_Structure, umint(iBefore)))
+					|| fg_IsPostfixStep(_Tokens, _Structure, umint(iBefore))
 				;
 			}
 
