@@ -613,6 +613,8 @@ namespace
 		bool fp_IsNamedCast(umint _iOpen) const;
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent, bool _bMustSplit = false);
 		bool fp_IsYieldedScope(umint _iOpen) const;
+		ECodeSpacing fp_GetInlineSpacing(umint _iLeft, umint _iRight) const;
+		bool fp_IsInFunctionBody(umint _iStatement) const;
 		bool fp_LayoutMembers(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
 		bool fp_BreakAtQualification(umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
 		bool fp_LayoutHead(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
@@ -1215,6 +1217,12 @@ namespace
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto const &Token = Tokens[_iToken];
+		// A gap the layout breaks is the layout's: a space written into it would land on
+		// the offset of the line break, and the plan keeps only one edit there.
+		auto iRight = _bBefore ? aint(_iToken) : fp_NextCode(_iToken);
+		if (iRight >= 0 && fp_IsBreakGap(umint(iRight)))
+			return;
+
 		if (_bBefore)
 		{
 			if (fp_IsFirstOnLine(_iToken))
@@ -1234,9 +1242,7 @@ namespace
 			return;
 		}
 
-		// A gap the layout breaks is its own, whichever side of it asks for the space.
-		auto iNextCode = fp_NextCode(_iToken);
-		if (fp_IsLastOnLine(_iToken) || (iNextCode >= 0 && fp_IsBreakGap(umint(iNextCode))))
+		if (fp_IsLastOnLine(_iToken))
 			return;
 
 		auto const &Next = Tokens[_iToken + 1];
@@ -1253,7 +1259,7 @@ namespace
 
 	void CFormattingAnalyzer::fp_RemoveSpaceBefore(umint _iToken, CStr const &_Rule, CStr const &_Explanation)
 	{
-		if (fp_IsFirstOnLine(_iToken))
+		if (fp_IsFirstOnLine(_iToken) || fp_IsBreakGap(_iToken))
 			return;
 
 		auto const &Previous = m_Tokens.f_GetTokens()[_iToken - 1];
@@ -1263,16 +1269,89 @@ namespace
 		fp_AddEdit(_Rule, Previous.m_iOffset, Previous.m_nLength, {}, _Explanation);
 	}
 
-	void CFormattingAnalyzer::fp_RuleTokenSpacing()
+	// Whether the token is one of the operators 'operator-space' writes apart from both
+	// operands. Plain assignment is deliberately absent: a lone '=' is also a lambda
+	// capture default and the trailing token of Malterlib's '_o=' and '_j=' DSL spellings.
+	bool fg_IsSpacedOperator(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		// Plain assignment is deliberately absent: a lone '=' is also a lambda capture
-		// default and the trailing token of Malterlib's '_o=' and '_j=' DSL spellings.
 		constexpr ch8 const *c_pSpacedOperators[] =
 			{
 				"==", "!=", "<=", ">=", "<=>", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
 			}
 		;
+		for (auto pOperator : c_pSpacedOperators)
+		{
+			if (_Tokens.f_IsText(_Token, pOperator))
+				return true;
+		}
+
+		return false;
+	}
+
+	// The separator the spacing rules write between two tokens on one line, in the order
+	// the rules are applied: the clause, angle, comma and operator rules first, and the
+	// standard's spelling of every other pair after them. The width a line is measured at
+	// has to be the width those rules leave it with, or the first pass lays out a line the
+	// second measures differently.
+	ECodeSpacing CFormattingAnalyzer::fp_GetInlineSpacing(umint _iLeft, umint _iRight) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Left = Tokens[_iLeft];
+		auto const &Right = Tokens[_iRight];
+		bool bClause = m_Tokens.f_IsText(Left, "if")
+			|| m_Tokens.f_IsText(Left, "for")
+			|| m_Tokens.f_IsText(Left, "while")
+			|| m_Tokens.f_IsText(Left, "switch")
+			|| m_Tokens.f_IsText(Left, "catch")
+		;
+		if (bClause && m_Tokens.f_IsText(Right, "("))
+			return ECodeSpacing::mc_Space;
+
+		if (m_Structure.f_IsAngleBracket(_iLeft) && m_Structure.f_IsAngleBracket(_iRight) && m_Tokens.f_IsText(Left, ">") && m_Tokens.f_IsText(Right, ">"))
+			return ECodeSpacing::mc_None;
+
+		if (m_Tokens.f_IsText(Right, ","))
+			return ECodeSpacing::mc_None;
+
+		if (m_Tokens.f_IsText(Left, ","))
+		{
+			bool bClosing = m_Tokens.f_IsText(Right, ")") || m_Tokens.f_IsText(Right, "]") || m_Tokens.f_IsText(Right, "}");
+
+			return bClosing || Right.m_bMultiLine ? ECodeSpacing::mc_Preserve : ECodeSpacing::mc_Space;
+		}
+
+		auto fSpacedOperator = [&](umint _iOperator)
+			{
+				if (!fg_IsSpacedOperator(m_Tokens, Tokens[_iOperator]))
+					return false;
+
+				auto iPrevious = fp_PreviousCode(_iOperator);
+				if (iPrevious >= 0 && m_Tokens.f_IsText(Tokens[umint(iPrevious)], "operator"))
+					return false;
+
+				return iPrevious >= 0 && fp_HasOperand(umint(iPrevious), true) && fp_HasOperand(_iOperator, false);
+			}
+		;
+		if (fSpacedOperator(_iRight) || fSpacedOperator(_iLeft))
+			return ECodeSpacing::mc_Space;
+
+		return fg_GetCanonicalSpacing(m_Tokens, m_Structure, _iLeft, _iRight);
+	}
+
+	// Whether the statement stands in a function's body, a lambda's or a control clause's,
+	// where a name behind a type followed by a parenthesis defines a variable rather than
+	// declaring a function: 'TCUniquePointer<CFoo> pFoo(fg_Construct())'.
+	bool CFormattingAnalyzer::fp_IsInFunctionBody(umint _iStatement) const
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto iBlock = Nodes[_iStatement].m_iParent;
+
+		return iBlock < Nodes.f_GetLen() && fg_IsFunctionBody(m_Tokens, m_Structure, iBlock);
+	}
+
+	void CFormattingAnalyzer::fp_RuleTokenSpacing()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 		{
 			auto const &Token = Tokens[i];
@@ -1325,11 +1404,7 @@ namespace
 				continue;
 			}
 
-			bool bSpaced = false;
-			for (auto pOperator : c_pSpacedOperators)
-				bSpaced |= m_Tokens.f_IsText(Token, pOperator);
-
-			if (!bSpaced)
+			if (!fg_IsSpacedOperator(m_Tokens, Token))
 				continue;
 
 			// An operator name is part of a declarator, not an expression operator.
@@ -1584,18 +1659,13 @@ namespace
 					continue;
 
 				fp_RemoveFollowingBlankLines(umint(iColon), "access-blank-line", "no blank line follows an access specifier");
-				if (m_Tokens.f_IsText(Before, "{"))
-					continue;
-
-				// Behind a specifier with an empty section the line after that one decides:
-				// 'private:' directly over 'public:'.
-				auto iOwner = m_Tokens.f_IsText(Before, ":") ? fp_PreviousCode(umint(iBefore)) : aint(-1);
-				bool bBehindSpecifier = iOwner >= 0
-					&& (m_Tokens.f_IsText(Tokens[umint(iOwner)], "public")
-						|| m_Tokens.f_IsText(Tokens[umint(iOwner)], "private")
-						|| m_Tokens.f_IsText(Tokens[umint(iOwner)], "protected"))
+				// One standing right behind another opens a section that holds nothing, and
+				// follows the label above it the way a member does.
+				auto iLabel = m_Tokens.f_IsText(Before, ":") ? fp_PreviousCode(umint(iBefore)) : aint(-1);
+				bool bAfterLabel = iLabel >= 0
+					&& (m_Tokens.f_IsText(Tokens[umint(iLabel)], "public") || m_Tokens.f_IsText(Tokens[umint(iLabel)], "private") || m_Tokens.f_IsText(Tokens[umint(iLabel)], "protected"))
 				;
-				if (bBehindSpecifier)
+				if (m_Tokens.f_IsText(Before, "{") || bAfterLabel)
 					continue;
 
 				umint nNewlines = 0;
@@ -2048,12 +2118,16 @@ namespace
 					nColumns += 0;
 				else
 				{
-					auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, iPrevious, i);
-					if (Spacing == ECodeSpacing::mc_Preserve && bNewline)
-						return false;
-
+					// A gap on one line is measured at the width the spacing rules leave it,
+					// which is its own only where the standard settles nothing.
+					auto Spacing = fp_GetInlineSpacing(iPrevious, i);
 					if (Spacing == ECodeSpacing::mc_Preserve)
+					{
+						if (bNewline)
+							return false;
+
 						nColumns += nGap;
+					}
 					else
 						nColumns += Spacing == ECodeSpacing::mc_Space;
 				}
@@ -2440,13 +2514,13 @@ namespace
 					while (nKeep && pGap[nKeep - 1] != '\n' && pGap[nKeep - 1] != '\r')
 						--nKeep;
 
-					iStart += nKeep;
-					nLength -= nKeep;
-					// A comment can open the line the token is on: only its indentation moves.
+					// A comment on the token's own line stays in front of it, so only the
+					// blanks between the line break and that comment are the indentation.
 					umint nIndent = 0;
-					while (nIndent < nLength && fg_IsSpaceOrTab(pGap[nKeep + nIndent]))
+					while (nKeep + nIndent < nLength && (pGap[nKeep + nIndent] == ' ' || pGap[nKeep + nIndent] == '\t'))
 						++nIndent;
 
+					iStart += nKeep;
 					nLength = nIndent;
 
 					return fp_MakeIndent(m_GapIndent[i]);
@@ -3752,7 +3826,7 @@ namespace
 		// name fit, and the converted source is what gets laid out. Anything else is laid
 		// out as the second phase will, so the bodies inside it are measured at the depth
 		// they are moved to rather than the one the source gave them.
-		if (m_bProbing && bJoinable && !bFits && fp_ConvertTrailingReturn(_iNode, iDeclFirst, _iIndent))
+		if (m_bProbing && bJoinable && !bFits && !fp_IsInFunctionBody(_iNode) && fp_ConvertTrailingReturn(_iNode, iDeclFirst, _iIndent))
 		{
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
 			{
@@ -4534,8 +4608,33 @@ namespace
 		if (Node.m_Kind != ECodeNodeKind::mc_Statement)
 			return;
 
+		// A statement that opens with an attribute on its clause's line, 'if (x)
+		// [[unlikely]]' with the block below, has no line of its own to be measured
+		// from: it is laid out at the clause's indentation, where its block opens. The
+		// 'if' of an 'else if' is laid out against the line the 'else' starts.
 		auto iElse = fp_LeadingElse(Node.m_iFirstToken);
-		fp_LayoutStatement(_iNode, fp_GetStatementIndent(iElse >= 0 ? umint(iElse) : Node.m_iFirstToken));
+		auto nIndent = fp_GetStatementIndent(iElse >= 0 ? umint(iElse) : Node.m_iFirstToken);
+		auto iSecond = fp_NextCode(Node.m_iFirstToken);
+		bool bAttribute = m_Tokens.f_IsText(m_Tokens.f_GetTokens()[Node.m_iFirstToken], "[")
+			&& iSecond >= 0
+			&& m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iSecond)], "[")
+		;
+		if (bAttribute && !fp_IsFirstOnLine(Node.m_iFirstToken) && Node.m_iParent < Nodes.f_GetLen())
+		{
+			umint iPrevious = TCLimitsInt<umint>::mc_Max;
+			for (auto iSibling : Nodes[Node.m_iParent].m_Children)
+			{
+				if (iSibling == _iNode)
+					break;
+
+				iPrevious = iSibling;
+			}
+
+			if (iPrevious != TCLimitsInt<umint>::mc_Max && fp_IsGuard(iPrevious))
+				nIndent = fp_GetStatementIndent(Nodes[iPrevious].m_iFirstToken);
+		}
+
+		fp_LayoutStatement(_iNode, nIndent);
 	}
 
 	void CFormattingAnalyzer::fp_RuleLineBreaks()

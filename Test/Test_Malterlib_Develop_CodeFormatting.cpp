@@ -2239,6 +2239,92 @@ namespace
 				};
 			};
 
+			// Each case here is one where the first pass and the second once disagreed on
+			// the whole tree: a decision made against a width or a position the rules then
+			// changed.
+			DMibTestSuite("Convergence")
+			{
+				CStr Wide;
+				for (umint i = 0; i < 60; ++i)
+					Wide += "W";
+
+				auto fExpect = [&](CStr const &_Case, CStr const &_Source, CStr const &_Expected, bool _bTokensPreserved = true)
+					{
+						fg_ExpectFormat(_Case, _Source.f_Replace("@", Wide), _Expected.f_Replace("@", Wide), _bTokensPreserved);
+					}
+				;
+				DMibTestCategory("Spelling")
+				{
+					// Two access specifiers in a row stand together: the second follows the
+					// first the way a member does, so no blank line is asked for between them.
+					fExpect
+						(
+							"ConsecutiveAccess"
+							, "struct C\n{\nprivate:\n\npublic:\n\tint a;\nprotected:\nprivate:\n\tint b;\n};\n"
+							, "struct C\n{\nprivate:\npublic:\n\tint a;\n\nprotected:\nprivate:\n\tint b;\n};\n"
+						)
+					;
+					// A run of pointers is one declarator, 'CFoo **', while a reference to a pointer
+					// stands apart from it: 'CFoo * &'.
+					fExpect
+						(
+							"DeclaratorRun"
+							, "void f()\n{\n\tauto p = (CFoo **)pValue;\n\tg((int * *)a, (CFoo *&)b);\n}\n"
+							, "void f()\n{\n\tauto p = (CFoo **)pValue;\n\tg((int **)a, (CFoo * &)b);\n}\n"
+						)
+					;
+					// A directive's trailing whitespace is layout, trimmed without counting as a
+					// change to the token stream.
+					fExpect("DirectiveTrailingSpace", "#pragma once\n#include \"x.h\" \n", "#pragma once\n#include \"x.h\"\n");
+				};
+
+				DMibTestCategory("Measure")
+				{
+					// A line is measured at the width the spacing rules leave it: 'X-1' at 189
+					// columns is 'X - 1' at 191, and the statement has to give.
+					fExpect
+						(
+							"SpacedWidth"
+							, "void f()\n{\n\tif (a)\n\t\tfg_Call(@, @, WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW-1);\n}\n"
+							, "void f()\n{\n\tif (a)\n\t{\n\t\tfg_Call\n\t\t\t(\n\t\t\t\t@\n\t\t\t\t, @\n"
+								"\t\t\t\t, WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW - 1\n\t\t\t)\n\t\t;\n\t}\n}\n"
+							, false
+						)
+					;
+					// A clause written tight against its parenthesis is opened like any other:
+					// the space the clause rule would write and the line break land on one
+					// offset, and the break is the one that counts.
+					fExpect
+						(
+							"OpenedTightClause"
+							, "void f()\n{\n\tif(g(@, @, @))\n\t\tx();\n}\n"
+							, "void f()\n{\n\tif\n\t(\n\t\tg\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t\t, @\n\t\t)\n\t)\n\t{\n\t\tx();\n\t}\n}\n"
+							, false
+						)
+					;
+				};
+
+				DMibTestCategory("Body")
+				{
+					// In a function's body a type in front of a name and a parenthesis defines a
+					// variable, never converted to a trailing return type; a comment in front of
+					// a statement's first token stays there; and a statement opening with an
+					// attribute on its clause's line is laid out at the clause's indentation.
+					fExpect
+						(
+							"VariableCommentAttribute"
+							, "void f()\n{\n\tTCUniquePointer<CTestCopyMove> TestMove10(fg_Construct(@, @, CCopyMove()));\n"
+								"\tif(DuplicateHandle(@, @, GetCurrentProcess()))\n\t{\n\t\tg();\n\t}\n"
+								"\t/*CResult &Result =*/ mp_Results.f_Insert(_Measure);\n\tif (bFlag) [[unlikely]]\n\t{\n\t\tif (a)\n\t\t{\n\t\t\tb();\n\t\t}\n\t\telse\n\t\t\tc();\n\t}\n}\n"
+							, "void f()\n{\n\tTCUniquePointer<CTestCopyMove> TestMove10\n\t\t(\n\t\t\tfg_Construct(@, @, CCopyMove())\n\t\t)\n\t;\n"
+								"\tif (DuplicateHandle(@, @, GetCurrentProcess()))\n\t\tg();\n"
+								"\t/*CResult &Result =*/ mp_Results.f_Insert(_Measure);\n\tif (bFlag) [[unlikely]]\n\t{\n\t\tif (a)\n\t\t\tb();\n\t\telse\n\t\t\tc();\n\t}\n}\n"
+							, false
+						)
+					;
+				};
+			};
+
 			DMibTestSuite("Directives")
 			{
 				DMibTestCategory("Disabled")

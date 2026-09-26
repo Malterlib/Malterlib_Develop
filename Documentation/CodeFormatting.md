@@ -95,12 +95,12 @@ formatter failure, not an edit.
 | `comma-space` | No space before a comma, one space after it on the same line. |
 | `operator-space` | One space around unambiguous binary operators. |
 | `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
-| `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon, a bit-field's width, and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. |
+| `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon, a bit-field's width, and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. A run of pointers is one declarator, `CFoo **`, while a reference to a pointer stands apart from it: `CFoo * &`. |
 | `block-blank-line` | Removes blank lines directly after an opening brace and directly in front of a closing one. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `blank-line` | Collapses a run of blank lines into one. |
 | `function-blank-line` | One blank line after a function's body, unless the scope the function stands in ends there. |
-| `access-blank-line` | One blank line in front of `public:`, `private:`, or `protected:`, and none after it. The first specifier in a class stands directly under the opening brace. |
+| `access-blank-line` | One blank line in front of `public:`, `private:`, or `protected:`, and none after it. The first specifier in a class stands directly under the opening brace, and two in a row stand together: `private:` directly above `public:` follows it the way a member does. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
 | `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |
 | `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source. |
@@ -172,8 +172,7 @@ body below them.
 stands between it and what is in front of it, since the blank line then belongs
 in front of that comment, if anywhere. A specifier still written on the line of
 a member gets its blank line from the layout, together with the line of its
-own. A specifier directly behind another, whose section is empty, stands under
-it with no blank line between. The blank-line rules never overlap: where none may stand, behind a brace
+own. The blank-line rules never overlap: where none may stand, behind a brace
 or a label, that rule takes the whole run, and `blank-line` only ever takes
 what is left of one behind its first.
 
@@ -379,8 +378,14 @@ way, `ch8 const * &o_pParse`, while a pointer to a pointer is written tight,
 
 `line-break` lays every statement out in two phases. The statement is first
 taken as if it were written on one line, with every gap at its inline spelling:
-a gap the source already writes on one line keeps its width, and one holding a
-line break is measured at the width joining it writes. A statement that fits at
+each gap is measured at the width the spacing rules leave it, so one the source
+writes wider or narrower than the standard counts as the standard spells it, and
+only a gap the standard does not settle keeps its own width. A gap holding a
+line break the standard does not settle cannot be measured at all, and a
+statement holding one is left as it stands. A gap the layout breaks belongs to
+the layout: the clause, comma and operator rules leave it alone, since a space
+and a line break written into one gap would land on the same offset. A
+statement that fits at
 its own indentation is written that way, whatever lines the source had. One
 that does not is split, outermost break first, and each resulting line is split
 further only while it is still too long:
@@ -436,7 +441,10 @@ converted signature fits on one line or the name would not fit otherwise and
 the type is wider than the `auto` that replaces it. The specifiers in front of
 the return type stay in front of `auto`, and are measured with it:
 `inline_small auto f_Get(...)`. An explicit instantiation
-is converted the same way. A variable constructed with arguments has the same
+is converted the same way. A statement in a function's body never is: a type
+in front of a name and a parenthesis defines a variable there,
+`TCUniquePointer<CFoo> pFoo(fg_Construct())`, and no function is declared inside
+another. A variable constructed with arguments elsewhere has the same
 shape, and is told by what its parenthesis holds: an element that opens with a
 function's name, a literal, a keyword that is a value, a unary operator or a
 brace is an argument, which no parameter list holds, so `TCSet<int>
@@ -450,9 +458,7 @@ plan writes are the lines a later pass sees.
 
 The decisions are kept per gap between tokens and written out once, so no
 decision depends on an edit already made, or on where the source happened to
-break its lines. A gap the standard settles is measured as it will be written,
-not as the source spells it, so a line measured to fit still fits once its
-gaps are respaced. A construct that contains a block comment, a multiline token,
+break its lines. A construct that contains a block comment, a multiline token,
 or a braced initializer written across lines keeps its lines; only its inner
 constructs are brought back to one line where they fit. A line comment only
 ends its line: a construct holding one never fits on a line and is split, and
@@ -513,7 +519,9 @@ themselves. A case written on its label's line stays there whole, as
 `case 1: return 1;` is written on purpose, and so do the `if` of an `else if`
 and an attribute on a clause's line. The `if` is laid out against the line the
 `else` starts, so a condition that does not fit behind both opens under the
-`else`, as it would under an `if` of its own. Behind a closing brace only a keyword
+`else`, as it would under an `if` of its own. A statement that opens with such an
+attribute, `if (x) [[unlikely]]` with the block below, is laid out at the
+clause's indentation, where its block opens. Behind a closing brace only a keyword
 starts a statement of its own, since a name there declares a variable of the
 type just defined. A lambda's terminator stands on a line of its own at the
 statement's indentation, wherever the source left it, on that line already or
@@ -632,6 +640,12 @@ the head is read from there: without stepping over `template <typename t_C>`,
 a class template whose body holds nothing but a function definition would be
 read as an initializer, and nothing inside it would be laid out or spaced as a
 declaration.
+
+A comment standing between a line break and the token it precedes is text,
+not indentation: the layout writes the indentation in front of the comment and
+leaves the comment where it was, `/*Result =*/ mp_Results.f_Insert(_Measure)`.
+A directive's trailing whitespace is layout, like a line comment's, and is
+trimmed without counting as a change to the token stream.
 
 ## Conditional directives
 

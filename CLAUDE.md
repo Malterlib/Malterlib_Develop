@@ -97,6 +97,15 @@ inside a template argument list, which spells a call, a construction and a
 function type alike. A type prefix is weaker evidence than it looks: the same
 name constructs a value as readily as it names a function type's return.
 
+A decision and the spelling it is measured against have to agree. Width is
+measured at the width the spacing rules write, never at the source's, and a
+spacing rule never writes into a gap the layout breaks. Every convergence
+failure the whole tree produced was one of those two disagreements, or a
+decision taken against the source's indentation before the layout moved the
+block it stood in: `fp_IsInFunctionBody` and the attribute statement's level
+came out of the same trial. Reproduce such a failure by dumping both passes
+from the stability check; the message alone names only the line that moved.
+
 Leaving a pair unsettled costs more than an unchanged gap. A line holding one
 has no single-line form to measure, so the layout cannot join it and, until the
 gap is settled, cannot break it up either: every statement split at its `=`

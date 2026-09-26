@@ -110,6 +110,7 @@ namespace NMib::NDevelop
 	// True when the ']' at _iToken closes a lambda's capture list rather than a subscript.
 	bool fg_IsCaptureList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose);
 	bool fg_HoldsArguments(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup);
+	bool fg_IsFunctionBody(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iBlock);
 
 	// True when the ')' at _iClose ends a parameter list rather than a call's arguments.
 	bool fg_ClosesParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose);

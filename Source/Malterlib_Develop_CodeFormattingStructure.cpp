@@ -1470,8 +1470,11 @@ namespace
 		if (iBefore >= 0 && iBefore < aint(Parent.m_iFirstToken))
 			iBefore = -1;
 
+		// In a function's body a type in front of the name defines a variable, whatever
+		// the parenthesis holds: 'TCUniquePointer<CFoo> pFoo(fg_Construct())'.
+		bool bFunctionBody = Parent.m_iParent < Nodes.f_GetLen() && fg_IsFunctionBody(_Tokens, _Structure, Parent.m_iParent);
 		if (iBefore >= 0 && fg_SpellsType(_Tokens, _Structure, Group.m_iParent, umint(iBefore)))
-			return true;
+			return !bFunctionBody;
 
 		// Behind a bare name only what follows the list can tell a constructor from a
 		// call: a body, an initializer list, a qualifier, or a defaulted or deleted
@@ -1897,6 +1900,27 @@ namespace
 
 namespace NMib::NDevelop
 {
+	// Whether the block holds a function's statements rather than a class's, a
+	// namespace's or an enumeration's members: it belongs to a function, a lambda, a
+	// control clause or a bare block. There a name behind a type in front of a parenthesis
+	// defines a variable, since no function is ever declared inside another.
+	bool fg_IsFunctionBody(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iBlock)
+	{
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto const &Tokens = _Tokens.f_GetTokens();
+		if (Nodes[_iBlock].m_Kind != ECodeNodeKind::mc_Block || Nodes[_iBlock].m_iParent >= Nodes.f_GetLen())
+			return false;
+
+		auto iOwner = Nodes[_iBlock].m_iParent;
+		auto const &Owner = Nodes[iOwner];
+		if (Owner.m_Kind != ECodeNodeKind::mc_Statement || fg_IsClassHead(_Tokens, _Structure, iOwner))
+			return false;
+
+		auto const &First = Tokens[Owner.m_iFirstToken];
+
+		return !_Tokens.f_IsText(First, "namespace") && !_Tokens.f_IsText(First, "extern") && !_Tokens.f_IsText(First, "enum");
+	}
+
 	// A capture list stands where an operand cannot: a subscript follows a name, a call, a
 	// template argument list, another subscript, or a literal.
 	// Whether an element of a parenthesis can only be an argument, which a parameter
@@ -2169,7 +2193,12 @@ namespace NMib::NDevelop
 		if (!bBehindTemplate && Previous.m_Kind != ECodeTokenKind::mc_Identifier)
 			return false;
 
+		// The declarators behind this one are part of the same declarator: 'CFoo **' and
+		// 'CFoo * &' end where the last of them does.
 		auto iNext = fg_NextCode(_Tokens, _iToken);
+		while (iNext >= 0 && fg_IsDeclaratorText(_Tokens, Tokens[umint(iNext)]))
+			iNext = fg_NextCode(_Tokens, umint(iNext));
+
 		if (iNext >= 0)
 		{
 			auto const &Next = Tokens[umint(iNext)];
