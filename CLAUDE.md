@@ -118,14 +118,18 @@ two.
 
 The engine's cost is almost all predicates run per gap, so keep them free of
 allocation and of scans over the node list. `f_IsText(Token, "...")` compares
-in place (the `CStr` overload built a heap string per question and was two
-thirds of the run), `CCodeStructure` indexes the node opening, closing and
-enclosing at each token, and the analyzer remembers each gap's canonical
-spacing. A pass that makes no edit is not verified against itself, which is
-what makes a check of an already formatted tree cheap. The whole tree of 4050
-files formats in about 0.7 s on ten cores when clean and 1.5 s when every file
-changes; a serial `-j 1` run is the number to compare an engine change
-against.
+in place and inline (the `CStr` overload built a heap string per question and
+was two thirds of the run), `CCodeStructure` indexes the node opening, closing
+and enclosing at each token and the statement ending there, and the analyzer
+remembers each gap's canonical and inline spacing and each token's width. A
+scan over the nodes per token is quadratic in one statement's size: a single
+14000-element table initializer took 0.75 s, longer than the rest of the tree
+on ten cores, until its requirement-brace check used the index. Rule names and
+explanations stay literals until an edit is made. A pass that makes no edit is
+not verified against itself, which is what makes a check of an already
+formatted tree cheap. `./mib format --check` on the whole tree of 4032 files
+takes about 0.55 s on ten cores, 0.18 s of it loading the build system; a serial
+`-j 1` run (about 2.1 s) is the number to compare an engine change against.
 
 Corpus trials are part of the work, not a final check. Every structural bug in
 the line-break rule so far was found by reading a diff of already-correct

@@ -118,8 +118,9 @@ namespace NMib::NDevelop
 		mp_iOpeningAt.f_SetLen(nTokens);
 		mp_iClosingAt.f_SetLen(nTokens);
 		mp_iEnclosing.f_SetLen(nTokens);
+		mp_iStatementEndingAt.f_SetLen(nTokens);
 		for (umint i = 0; i < nTokens; ++i)
-			mp_iOpeningAt[i] = mp_iClosingAt[i] = mp_iEnclosing[i] = nNodes;
+			mp_iOpeningAt[i] = mp_iClosingAt[i] = mp_iEnclosing[i] = mp_iStatementEndingAt[i] = nNodes;
 
 		for (umint iNode = 0; iNode < nNodes; ++iNode)
 		{
@@ -132,6 +133,8 @@ namespace NMib::NDevelop
 				mp_iOpeningAt[Node.m_iFirstToken] = iNode;
 				mp_iClosingAt[Node.m_iLastToken] = iNode;
 			}
+			else if (Node.m_Kind == ECodeNodeKind::mc_Statement)
+				mp_iStatementEndingAt[Node.m_iLastToken] = iNode;
 
 			for (auto i = Node.m_iFirstToken + 1; i < Node.m_iLastToken; ++i)
 				mp_iEnclosing[i] = iNode;
@@ -151,6 +154,11 @@ namespace NMib::NDevelop
 	umint CCodeStructure::f_FindEnclosingNode(umint _iToken) const
 	{
 		return _iToken < mp_iEnclosing.f_GetLen() ? mp_iEnclosing[_iToken] : mp_Nodes.f_GetLen();
+	}
+
+	umint CCodeStructure::f_FindStatementEndingAt(umint _iToken) const
+	{
+		return _iToken < mp_iStatementEndingAt.f_GetLen() ? mp_iStatementEndingAt[_iToken] : mp_Nodes.f_GetLen();
 	}
 
 	void CCodeStructure::fp_CollectSignificant()
@@ -1551,16 +1559,8 @@ namespace
 			auto iScope = fg_PreviousCode(_Tokens, umint(iBefore));
 			if (iScope >= 0 && _Structure.f_IsAngleBracket(umint(iScope)) && _Tokens.f_IsText(Tokens[umint(iScope)], ">"))
 			{
-				aint iOpen = -1;
-				for (auto const &Node : Nodes)
-				{
-					if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Angle && Node.m_iLastToken == umint(iScope))
-					{
-						iOpen = aint(Node.m_iFirstToken);
-
-						break;
-					}
-				}
+				auto iScopeGroup = fg_FindGroupClosingAt(_Structure, umint(iScope), ECodeBracket::mc_Angle);
+				aint iOpen = iScopeGroup >= 0 ? aint(Nodes[umint(iScopeGroup)].m_iFirstToken) : aint(-1);
 
 				iScope = iOpen >= 0 ? fg_PreviousCode(_Tokens, umint(iOpen)) : aint(-1);
 			}
@@ -1758,23 +1758,20 @@ namespace
 	bool fg_ClosesExpressionBody(CCodeStructure const &_Structure, umint _iBrace)
 	{
 		auto const &Nodes = _Structure.f_GetNodes();
-		for (auto const &Node : Nodes)
-		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Block || Node.m_iLastToken != _iBrace)
-				continue;
+		auto iNode = _Structure.f_FindNodeClosingAt(_iBrace);
+		if (iNode >= Nodes.f_GetLen() || Nodes[iNode].m_Kind != ECodeNodeKind::mc_Block)
+			return false;
 
-			if (Node.m_iParent >= Nodes.f_GetLen())
-				return false;
+		auto const &Node = Nodes[iNode];
+		if (Node.m_iParent >= Nodes.f_GetLen())
+			return false;
 
-			// One inside a group is a lambda's body wherever it stands.
-			auto const &Parent = Nodes[Node.m_iParent];
-			if (Parent.m_Kind == ECodeNodeKind::mc_Group)
-				return true;
+		// One inside a group is a lambda's body wherever it stands.
+		auto const &Parent = Nodes[Node.m_iParent];
+		if (Parent.m_Kind == ECodeNodeKind::mc_Group)
+			return true;
 
-			return Parent.m_Kind == ECodeNodeKind::mc_Statement && Parent.m_iLastToken > _iBrace;
-		}
-
-		return false;
+		return Parent.m_Kind == ECodeNodeKind::mc_Statement && Parent.m_iLastToken > _iBrace;
 	}
 
 	// A parenthesis that holds nothing but fundamental type words, and stands where no call
@@ -1790,42 +1787,39 @@ namespace
 				, "fp32", "fp64", "ch8", "ch16", "ch32", "uch8", "uch16", "uch32", "const", "volatile"
 			}
 		;
-		for (auto const &Node : _Structure.f_GetNodes())
+		auto iNode = fg_FindGroupClosingAt(_Structure, _iClose, ECodeBracket::mc_Paren);
+		if (iNode < 0)
+			return false;
+
+		auto const &Node = _Structure.f_GetNodes()[umint(iNode)];
+		auto iBefore = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+		if (iBefore >= 0)
 		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Paren || Node.m_iLastToken != _iClose)
-				continue;
-
-			auto iBefore = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
-			if (iBefore >= 0)
-			{
-				auto const &Before = Tokens[umint(iBefore)];
-				bool bCalled = (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
-					|| _Tokens.f_IsText(Before, "sizeof")
-					|| _Tokens.f_IsText(Before, "alignof")
-					|| _Tokens.f_IsText(Before, ")")
-					|| _Tokens.f_IsText(Before, "]")
-					|| _Structure.f_IsAngleBracket(umint(iBefore))
-				;
-				if (bCalled)
-					return false;
-			}
-
-			bool bType = false;
-			for (auto i = Node.m_iFirstToken + 1; i < Node.m_iLastToken; ++i)
-			{
-				if (!fg_IsSignificant(Tokens[i].m_Kind))
-					continue;
-
-				if (!fg_IsAnyText(_Tokens, Tokens[i], c_pFundamental))
-					return false;
-
-				bType = true;
-			}
-
-			return bType;
+			auto const &Before = Tokens[umint(iBefore)];
+			bool bCalled = (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
+				|| _Tokens.f_IsText(Before, "sizeof")
+				|| _Tokens.f_IsText(Before, "alignof")
+				|| _Tokens.f_IsText(Before, ")")
+				|| _Tokens.f_IsText(Before, "]")
+				|| _Structure.f_IsAngleBracket(umint(iBefore))
+			;
+			if (bCalled)
+				return false;
 		}
 
-		return false;
+		bool bType = false;
+		for (auto i = Node.m_iFirstToken + 1; i < Node.m_iLastToken; ++i)
+		{
+			if (!fg_IsSignificant(Tokens[i].m_Kind))
+				continue;
+
+			if (!fg_IsAnyText(_Tokens, Tokens[i], c_pFundamental))
+				return false;
+
+			bType = true;
+		}
+
+		return bType;
 	}
 
 	// Whether the parenthesis closing at the token spells a type and nothing else: it ends
@@ -2003,23 +1997,19 @@ namespace
 					"sizeof", "alignof", "typeid", "noexcept"
 				}
 			;
-			for (auto const &Group : Nodes)
-			{
-				if (Group.m_Kind != ECodeNodeKind::mc_Group || Group.m_iLastToken != umint(iBefore))
-					continue;
+			auto iGroup = fg_FindGroupClosingAt(_Structure, umint(iBefore), ECodeBracket::mc_None);
+			if (iGroup < 0)
+				return false;
 
-				auto iName = fg_PreviousCode(_Tokens, Group.m_iFirstToken);
-				if (iName < 0)
-					return false;
+			auto iName = fg_PreviousCode(_Tokens, Nodes[umint(iGroup)].m_iFirstToken);
+			if (iName < 0)
+				return false;
 
-				auto const &Name = Tokens[umint(iName)];
-				if (Name.m_Kind == ECodeTokenKind::mc_Identifier)
-					return !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords) || fg_IsAnyText(_Tokens, Name, c_pValueOperators);
+			auto const &Name = Tokens[umint(iName)];
+			if (Name.m_Kind == ECodeTokenKind::mc_Identifier)
+				return !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords) || fg_IsAnyText(_Tokens, Name, c_pValueOperators);
 
-				return _Tokens.f_IsText(Name, ")") || _Tokens.f_IsText(Name, "]");
-			}
-
-			return false;
+			return _Tokens.f_IsText(Name, ")") || _Tokens.f_IsText(Name, "]");
 		}
 
 		auto iNode = fg_FindEnclosingNode(_Structure, _iToken);
@@ -2209,17 +2199,13 @@ namespace NMib::NDevelop
 				if (_iToken < 0 || !_Tokens.f_IsText(Tokens[umint(_iToken)], ")"))
 					return _iToken;
 
-				for (auto const &Node : _Structure.f_GetNodes())
-				{
-					if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Paren || Node.m_iLastToken != umint(_iToken))
-						continue;
+				auto iNode = fg_FindGroupClosingAt(_Structure, umint(_iToken), ECodeBracket::mc_Paren);
+				if (iNode < 0)
+					return _iToken;
 
-					auto iKeyword = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
-					if (iKeyword >= 0 && _Tokens.f_IsText(Tokens[umint(iKeyword)], "noexcept"))
-						return iKeyword;
-
-					break;
-				}
+				auto iKeyword = fg_PreviousCode(_Tokens, _Structure.f_GetNodes()[umint(iNode)].m_iFirstToken);
+				if (iKeyword >= 0 && _Tokens.f_IsText(Tokens[umint(iKeyword)], "noexcept"))
+					return iKeyword;
 
 				return _iToken;
 			}
@@ -2229,11 +2215,7 @@ namespace NMib::NDevelop
 		auto iRequirement = fg_PreviousCode(_Tokens, _iArrow);
 		if (iRequirement >= 0 && _Tokens.f_IsText(Tokens[umint(iRequirement)], "}"))
 		{
-			for (auto const &Node : _Structure.f_GetNodes())
-			{
-				if (Node.m_iLastToken == umint(iRequirement))
-					return Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace;
-			}
+			return fg_FindGroupClosingAt(_Structure, umint(iRequirement), ECodeBracket::mc_Brace) >= 0;
 		}
 
 		auto iBefore = fSkipNoexceptCondition(fg_PreviousCode(_Tokens, _iArrow));
@@ -2263,48 +2245,44 @@ namespace NMib::NDevelop
 		// followed by the return type and the body the way a parameter list is:
 		// 'DMibTestSuite("Name") -> TCFuture<void> {'. A member access behind a macro's
 		// result, 'DEPTR(p)->m_Value', never reaches a body through a type alone.
-		for (auto const &Node : _Structure.f_GetNodes())
+		auto iMacroGroup = fg_FindGroupClosingAt(_Structure, umint(iBefore), ECodeBracket::mc_Paren);
+		if (iMacroGroup < 0)
+			return false;
+
+		auto iName = fg_PreviousCode(_Tokens, _Structure.f_GetNodes()[umint(iMacroGroup)].m_iFirstToken);
+		if (iName < 0 || Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
+			return false;
+
+		auto Name = _Tokens.f_GetText(Tokens[umint(iName)]);
+		if (Name.f_GetLen() < 2 || Name.f_GetStr()[0] != 'D' || Name.f_GetStr()[1] < 'A' || Name.f_GetStr()[1] > 'Z')
+			return false;
+
+		umint nAngle = 0;
+		for (auto iType = fg_NextCode(_Tokens, _iArrow); iType >= 0; iType = fg_NextCode(_Tokens, umint(iType)))
 		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Paren || Node.m_iLastToken != umint(iBefore))
-				continue;
-
-			auto iName = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
-			if (iName < 0 || Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
-				return false;
-
-			auto Name = _Tokens.f_GetText(Tokens[umint(iName)]);
-			if (Name.f_GetLen() < 2 || Name.f_GetStr()[0] != 'D' || Name.f_GetStr()[1] < 'A' || Name.f_GetStr()[1] > 'Z')
-				return false;
-
-			umint nAngle = 0;
-			for (auto iType = fg_NextCode(_Tokens, _iArrow); iType >= 0; iType = fg_NextCode(_Tokens, umint(iType)))
+			auto const &Type = Tokens[umint(iType)];
+			if (_Structure.f_IsAngleBracket(umint(iType)))
 			{
-				auto const &Type = Tokens[umint(iType)];
-				if (_Structure.f_IsAngleBracket(umint(iType)))
-				{
-					if (_Tokens.f_IsText(Type, "<"))
-						++nAngle;
-					else if (nAngle)
-						--nAngle;
+				if (_Tokens.f_IsText(Type, "<"))
+					++nAngle;
+				else if (nAngle)
+					--nAngle;
 
-					continue;
-				}
-
-				if (nAngle)
-					continue;
-
-				if (_Tokens.f_IsText(Type, "{"))
-					return true;
-
-				bool bTypePart = (Type.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Type, gc_pExpressionKeywords))
-					|| _Tokens.f_IsText(Type, "::")
-					|| fg_IsDeclaratorText(_Tokens, Type)
-				;
-				if (!bTypePart)
-					return false;
+				continue;
 			}
 
-			return false;
+			if (nAngle)
+				continue;
+
+			if (_Tokens.f_IsText(Type, "{"))
+				return true;
+
+			bool bTypePart = (Type.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Type, gc_pExpressionKeywords))
+				|| _Tokens.f_IsText(Type, "::")
+				|| fg_IsDeclaratorText(_Tokens, Type)
+			;
+			if (!bTypePart)
+				return false;
 		}
 
 		return false;
@@ -2523,20 +2501,21 @@ namespace NMib::NDevelop
 		// requirement is a brace group that opens a statement, which no initializer does.
 		auto fIsRequirement = [&](umint _iBrace)
 			{
-				for (auto const &Node : _Structure.f_GetNodes())
-				{
-					if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Brace || (Node.m_iFirstToken != _iBrace && Node.m_iLastToken != _iBrace))
-						continue;
+				auto const &Nodes = _Structure.f_GetNodes();
+				auto iNode = _Structure.f_FindNodeOpeningAt(_iBrace);
+				if (iNode >= Nodes.f_GetLen())
+					iNode = _Structure.f_FindNodeClosingAt(_iBrace);
 
-					if (Node.m_iParent >= _Structure.f_GetNodes().f_GetLen())
-						return false;
+				if (iNode >= Nodes.f_GetLen())
+					return false;
 
-					auto const &Parent = _Structure.f_GetNodes()[Node.m_iParent];
+				auto const &Node = Nodes[iNode];
+				if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Brace || Node.m_iParent >= Nodes.f_GetLen())
+					return false;
 
-					return Parent.m_Kind == ECodeNodeKind::mc_Statement && Parent.m_iFirstToken == Node.m_iFirstToken;
-				}
+				auto const &Parent = Nodes[Node.m_iParent];
 
-				return false;
+				return Parent.m_Kind == ECodeNodeKind::mc_Statement && Parent.m_iFirstToken == Node.m_iFirstToken;
 			}
 		;
 		if ((fLeft("{") && !fRight("}") && fIsRequirement(_iLeft)) || (fRight("}") && !fLeft("{") && fIsRequirement(_iRight)))
@@ -2935,11 +2914,9 @@ namespace NMib::NDevelop
 			if (fLeft("enum"))
 				return ECodeSpacing::mc_Preserve;
 
-			for (auto const &Node : _Structure.f_GetNodes())
-			{
-				if (Node.m_Kind == ECodeNodeKind::mc_Statement && Node.m_iLastToken == _iRight && Node.m_iFirstToken != _iRight)
-					return ECodeSpacing::mc_None;
-			}
+			auto iStatement = _Structure.f_FindStatementEndingAt(_iRight);
+			if (iStatement < _Structure.f_GetNodes().f_GetLen() && _Structure.f_GetNodes()[iStatement].m_iFirstToken != _iRight)
+				return ECodeSpacing::mc_None;
 		}
 
 		// A sign with no operand in front of it is unary and hugs its operand: '-1',

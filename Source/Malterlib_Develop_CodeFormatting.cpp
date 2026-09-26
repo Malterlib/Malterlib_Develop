@@ -664,6 +664,7 @@ namespace
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent, bool _bMustSplit = false);
 		bool fp_IsYieldedScope(umint _iOpen) const;
 		ECodeSpacing fp_GetInlineSpacing(umint _iLeft, umint _iRight) const;
+		ECodeSpacing fp_DecideInlineSpacing(umint _iLeft, umint _iRight) const;
 		ECodeSpacing fp_GetCanonicalSpacing(umint _iLeft, umint _iRight) const;
 		bool fp_IsInFunctionBody(umint _iStatement) const;
 		bool fp_LayoutMembers(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
@@ -710,9 +711,9 @@ namespace
 		bool fp_MeasureJoinedWidth(umint _iFirstToken, umint _iLastToken, umint &o_nColumns) const;
 		umint fp_GetTokenColumns(CCodeToken const &_Token) const;
 		void fp_DiagnoseLineLength(NContainer::TCVector<CCodeFormattingEdit> const &_Edits);
-		void fp_EnsureSingleSpace(umint _iToken, bool _bBefore, CStr const &_Rule, CStr const &_Explanation);
-		void fp_RemoveSpaceBefore(umint _iToken, CStr const &_Rule, CStr const &_Explanation);
-		void fp_RemoveFollowingBlankLines(umint _iToken, CStr const &_Rule, CStr const &_Explanation);
+		void fp_EnsureSingleSpace(umint _iToken, bool _bBefore, ch8 const *_pRule, ch8 const *_pExplanation);
+		void fp_RemoveSpaceBefore(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation);
+		void fp_RemoveFollowingBlankLines(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation);
 
 		CCodeFormattingRequest const &m_Request;
 		CCodeTokenStream m_Tokens;
@@ -733,6 +734,8 @@ namespace
 		NContainer::TCVector<CCodeFormattingRange> m_Conditionals;	// Source spans of the '#if' groups, for saying which one a structure was cut by.
 		NContainer::TCVector<uint8> m_GapState;					// Indexed by token: what the gap in front of it becomes.
 		mutable NContainer::TCVector<uint8> m_CanonicalSpacing;	// Indexed by token: the standard's spelling of the gap in front of it, plus one, or zero when not yet asked.
+		mutable NContainer::TCVector<uint8> m_InlineSpacing;		// Indexed by token: the spacing rules' spelling of the gap in front of it, plus one, or zero when not yet asked.
+		mutable NContainer::TCVector<umint> m_TokenColumns;		// Indexed by token: its width in columns, plus one, or zero when not yet measured.
 		NContainer::TCVector<umint> m_GapIndent;				// The indentation a break in front of the token takes.
 		NContainer::TCVector<uint8> m_bCommentMoved;			// Indexed by token: a comment on a line of its own that moves with the block around it.
 		NContainer::TCVector<uint8> m_bBlankBefore;			// A blank line stands in front of the token, which the layout writes where it writes the gap.
@@ -1285,7 +1288,7 @@ namespace
 		fp_AddEdit("final-newline", m_Request.m_Source.f_GetLen(), 0, fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding()), "file must end with a newline");
 	}
 
-	void CFormattingAnalyzer::fp_EnsureSingleSpace(umint _iToken, bool _bBefore, CStr const &_Rule, CStr const &_Explanation)
+	void CFormattingAnalyzer::fp_EnsureSingleSpace(umint _iToken, bool _bBefore, ch8 const *_pRule, ch8 const *_pExplanation)
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto const &Token = Tokens[_iToken];
@@ -1304,12 +1307,12 @@ namespace
 			if (Previous.m_Kind == ECodeTokenKind::mc_Whitespace)
 			{
 				if (Previous.m_nLength != 1 || m_Request.m_Source.f_GetStr()[Previous.m_iOffset] != ' ')
-					fp_AddEdit(_Rule, Previous.m_iOffset, Previous.m_nLength, " ", _Explanation);
+					fp_AddEdit(_pRule, Previous.m_iOffset, Previous.m_nLength, " ", _pExplanation);
 
 				return;
 			}
 
-			fp_AddEdit(_Rule, Token.m_iOffset, 0, " ", _Explanation);
+			fp_AddEdit(_pRule, Token.m_iOffset, 0, " ", _pExplanation);
 
 			return;
 		}
@@ -1321,15 +1324,15 @@ namespace
 		if (Next.m_Kind == ECodeTokenKind::mc_Whitespace)
 		{
 			if (Next.m_nLength != 1 || m_Request.m_Source.f_GetStr()[Next.m_iOffset] != ' ')
-				fp_AddEdit(_Rule, Next.m_iOffset, Next.m_nLength, " ", _Explanation);
+				fp_AddEdit(_pRule, Next.m_iOffset, Next.m_nLength, " ", _pExplanation);
 
 			return;
 		}
 
-		fp_AddEdit(_Rule, Token.f_GetEnd(), 0, " ", _Explanation);
+		fp_AddEdit(_pRule, Token.f_GetEnd(), 0, " ", _pExplanation);
 	}
 
-	void CFormattingAnalyzer::fp_RemoveSpaceBefore(umint _iToken, CStr const &_Rule, CStr const &_Explanation)
+	void CFormattingAnalyzer::fp_RemoveSpaceBefore(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation)
 	{
 		if (fp_IsFirstOnLine(_iToken) || fp_IsBreakGap(_iToken))
 			return;
@@ -1338,7 +1341,7 @@ namespace
 		if (Previous.m_Kind != ECodeTokenKind::mc_Whitespace)
 			return;
 
-		fp_AddEdit(_Rule, Previous.m_iOffset, Previous.m_nLength, {}, _Explanation);
+		fp_AddEdit(_pRule, Previous.m_iOffset, Previous.m_nLength, {}, _pExplanation);
 	}
 
 	// Whether the token is one of the operators 'operator-space' writes apart from both
@@ -1346,6 +1349,9 @@ namespace
 	// capture default and the trailing token of Malterlib's '_o=' and '_j=' DSL spellings.
 	bool fg_IsSpacedOperator(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
 	{
+		if (_Token.m_Kind != ECodeTokenKind::mc_Punctuator || _Token.m_nLength < 2)
+			return false;
+
 		constexpr ch8 const *c_pSpacedOperators[] =
 			{
 				"==", "!=", "<=", ">=", "<=>", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
@@ -1387,6 +1393,25 @@ namespace
 	// has to be the width those rules leave it with, or the first pass lays out a line the
 	// second measures differently.
 	ECodeSpacing CFormattingAnalyzer::fp_GetInlineSpacing(umint _iLeft, umint _iRight) const
+	{
+		auto nTokens = m_Tokens.f_GetTokens().f_GetLen();
+		if (m_InlineSpacing.f_GetLen() != nTokens)
+		{
+			m_InlineSpacing.f_SetLen(nTokens);
+			for (auto &Value : m_InlineSpacing)
+				Value = 0;
+		}
+
+		if (_iRight >= nTokens || fp_PreviousCode(_iRight) != aint(_iLeft))
+			return fp_DecideInlineSpacing(_iLeft, _iRight);
+
+		if (!m_InlineSpacing[_iRight])
+			m_InlineSpacing[_iRight] = uint8(fp_DecideInlineSpacing(_iLeft, _iRight)) + 1;
+
+		return ECodeSpacing(m_InlineSpacing[_iRight] - 1);
+	}
+
+	ECodeSpacing CFormattingAnalyzer::fp_DecideInlineSpacing(umint _iLeft, umint _iRight) const
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto const &Left = Tokens[_iLeft];
@@ -1542,7 +1567,7 @@ namespace
 		}
 	}
 
-	void CFormattingAnalyzer::fp_RemoveFollowingBlankLines(umint _iToken, CStr const &_Rule, CStr const &_Explanation)
+	void CFormattingAnalyzer::fp_RemoveFollowingBlankLines(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation)
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		umint i = _iToken + 1;
@@ -1574,7 +1599,7 @@ namespace
 		if (iBlankEnd == iBlankStart)
 			return;
 
-		fp_AddEdit(_Rule, iBlankStart, iBlankEnd - iBlankStart, {}, _Explanation);
+		fp_AddEdit(_pRule, iBlankStart, iBlankEnd - iBlankStart, {}, _pExplanation);
 	}
 
 	void CFormattingAnalyzer::fp_RuleBlankLines()
@@ -2138,6 +2163,29 @@ namespace
 {
 	umint CFormattingAnalyzer::fp_GetTokenColumns(CCodeToken const &_Token) const
 	{
+		// A token of this source is measured once; the width of its text never changes.
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto pFirst = Tokens.f_GetArray();
+		if (&_Token >= pFirst && &_Token < pFirst + Tokens.f_GetLen())
+		{
+			umint iToken = umint(&_Token - pFirst);
+			if (m_TokenColumns.f_GetLen() != Tokens.f_GetLen())
+			{
+				m_TokenColumns.f_SetLen(Tokens.f_GetLen());
+				for (auto &Value : m_TokenColumns)
+					Value = 0;
+			}
+
+			if (!m_TokenColumns[iToken])
+			{
+				umint nColumns = 0;
+				bool bMeasured = fg_MeasureTextColumns(m_Request.m_Source.f_GetStr() + _Token.m_iOffset, _Token.m_nLength, m_Request.m_Settings.m_nTabWidth, nColumns);
+				m_TokenColumns[iToken] = bMeasured && nColumns < TCLimitsInt<umint>::mc_Max ? nColumns + 1 : TCLimitsInt<umint>::mc_Max;
+			}
+
+			return m_TokenColumns[iToken] == TCLimitsInt<umint>::mc_Max ? TCLimitsInt<umint>::mc_Max : m_TokenColumns[iToken] - 1;
+		}
+
 		umint nColumns = 0;
 		if (!fg_MeasureTextColumns(m_Request.m_Source.f_GetStr() + _Token.m_iOffset, _Token.m_nLength, m_Request.m_Settings.m_nTabWidth, nColumns))
 			return TCLimitsInt<umint>::mc_Max;
@@ -5407,13 +5455,9 @@ namespace
 			return false;
 
 		auto const &Nodes = m_Structure.f_GetNodes();
-		for (umint iNode = 0; iNode < Nodes.f_GetLen(); ++iNode)
-		{
-			if (Nodes[iNode].m_Kind == ECodeNodeKind::mc_Group && Nodes[iNode].m_iLastToken == umint(iBefore))
-				return !fp_IsCastGroup(iNode);
-		}
+		auto iGroup = m_Structure.f_FindNodeClosingAt(umint(iBefore));
 
-		return true;
+		return iGroup >= Nodes.f_GetLen() || Nodes[iGroup].m_Kind != ECodeNodeKind::mc_Group || !fp_IsCastGroup(iGroup);
 	}
 
 	// The last resort for a line nothing else can shorten: every member access at the

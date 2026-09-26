@@ -74,3 +74,5 @@ namespace NMib::NDevelop
 		bool mp_bComplete = true;
 	};
 }
+
+#include "Malterlib_Develop_CodeFormattingLexer.hpp"

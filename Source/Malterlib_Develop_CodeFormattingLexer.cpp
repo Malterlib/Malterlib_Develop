@@ -292,8 +292,12 @@ namespace
 				, "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "##", ".*"
 			}
 		;
+		auto First = _Cursor.f_Peek();
 		for (auto pPunctuator : c_pPunctuators)
 		{
+			if (pPunctuator[0] != First)
+				continue;
+
 			umint nLength = 0;
 			while (pPunctuator[nLength])
 				++nLength;
@@ -366,19 +370,6 @@ namespace NMib::NDevelop
 
 	// A literal is compared in place: nearly every rule asks this of every token, and a
 	// string built for each question was most of the engine's time.
-	bool CCodeTokenStream::f_IsText(CCodeToken const &_Token, ch8 const *_pText) const
-	{
-		auto pToken = mp_Source.f_GetStr() + _Token.m_iOffset;
-		umint i = 0;
-		for (; i < _Token.m_nLength; ++i)
-		{
-			if (_pText[i] != pToken[i])
-				return false;
-		}
-
-		return _pText[i] == 0;
-	}
-
 	bool CCodeTokenStream::f_StartsWith(CCodeToken const &_Token, ch8 const *_pPrefix) const
 	{
 		auto pToken = mp_Source.f_GetStr() + _Token.m_iOffset;

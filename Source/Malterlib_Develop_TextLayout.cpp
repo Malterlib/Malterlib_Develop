@@ -127,6 +127,32 @@ namespace NMib::NDevelop
 
 	bool fg_MeasureTextColumns(ch8 const *_pText, umint _nLength, umint _nTabWidth, umint &o_nColumns)
 	{
+		// Nearly all text is ASCII, where every byte but a tab is one column; only text that
+		// holds a multibyte sequence needs the decoder.
+		{
+			umint nColumns = 0;
+			umint i = 0;
+			for (; i < _nLength; ++i)
+			{
+				auto Character = uch8(_pText[i]);
+				if (Character >= 0x80)
+					break;
+
+				umint nAdvance = Character == '\t' ? _nTabWidth - nColumns % _nTabWidth : 1;
+				if (nColumns > TCLimitsInt<umint>::mc_Max - nAdvance)
+					return false;
+
+				nColumns += nAdvance;
+			}
+
+			if (i == _nLength)
+			{
+				o_nColumns = nColumns;
+
+				return true;
+			}
+		}
+
 		// The iterator's character value may be NUL before the end of its input, so the
 		// loop is bounded by the iterator distance rather than by a terminator.
 		umint nColumns = 0;

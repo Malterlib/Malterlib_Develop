@@ -76,6 +76,8 @@ namespace NMib::NDevelop
 		umint f_FindNodeOpeningAt(umint _iToken) const;
 		umint f_FindNodeClosingAt(umint _iToken) const;
 		umint f_FindEnclosingNode(umint _iToken) const;
+		// The statement ending at the token, or the node count when none does.
+		umint f_FindStatementEndingAt(umint _iToken) const;
 
 	private:
 		void fp_CollectSignificant();
@@ -100,6 +102,7 @@ namespace NMib::NDevelop
 		NContainer::TCVector<umint> mp_iOpeningAt;		// Indexed by token: the node opening there, or the node count.
 		NContainer::TCVector<umint> mp_iClosingAt;		// Indexed by token: the node closing there, or the node count.
 		NContainer::TCVector<umint> mp_iEnclosing;		// Indexed by token: the innermost node around it, or the node count.
+		NContainer::TCVector<umint> mp_iStatementEndingAt;	// Indexed by token: the innermost statement ending there, or the node count.
 
 		void fp_BuildIndex();
 		bool mp_bComplete = true;
