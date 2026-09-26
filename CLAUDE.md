@@ -116,6 +116,17 @@ went unlaid out for that reason, overlong lines included. Settle what the
 sources really do spell one way, and keep `mc_Preserve` for what they spell
 two.
 
+The engine's cost is almost all predicates run per gap, so keep them free of
+allocation and of scans over the node list. `f_IsText(Token, "...")` compares
+in place (the `CStr` overload built a heap string per question and was two
+thirds of the run), `CCodeStructure` indexes the node opening, closing and
+enclosing at each token, and the analyzer remembers each gap's canonical
+spacing. A pass that makes no edit is not verified against itself, which is
+what makes a check of an already formatted tree cheap. The whole tree of 4050
+files formats in about 0.7 s on ten cores when clean and 1.5 s when every file
+changes; a serial `-j 1` run is the number to compare an engine change
+against.
+
 Corpus trials are part of the work, not a final check. Every structural bug in
 the line-break rule so far was found by reading a diff of already-correct
 sources, not by a unit test: a lambda body parsed as an initializer, a clause

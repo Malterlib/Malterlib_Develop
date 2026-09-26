@@ -71,6 +71,12 @@ namespace NMib::NDevelop
 		// rather than a comparison operator.
 		bool f_IsAngleBracket(umint _iToken) const;
 
+		// The group or block opening or closing at the token, and the innermost node the
+		// token stands strictly inside; each is the node count when there is none.
+		umint f_FindNodeOpeningAt(umint _iToken) const;
+		umint f_FindNodeClosingAt(umint _iToken) const;
+		umint f_FindEnclosingNode(umint _iToken) const;
+
 	private:
 		void fp_CollectSignificant();
 		bool fp_SplitSharedAngleClosers();
@@ -91,6 +97,11 @@ namespace NMib::NDevelop
 		NContainer::TCVector<uint8> mp_bAngleBracket;	// Indexed by token, set for resolved template brackets.
 		umint mp_iIncompleteOffset = 0;
 		NContainer::TCVector<CCodeNode> mp_Nodes;
+		NContainer::TCVector<umint> mp_iOpeningAt;		// Indexed by token: the node opening there, or the node count.
+		NContainer::TCVector<umint> mp_iClosingAt;		// Indexed by token: the node closing there, or the node count.
+		NContainer::TCVector<umint> mp_iEnclosing;		// Indexed by token: the innermost node around it, or the node count.
+
+		void fp_BuildIndex();
 		bool mp_bComplete = true;
 	};
 

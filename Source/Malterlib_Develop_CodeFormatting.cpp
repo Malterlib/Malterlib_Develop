@@ -517,17 +517,67 @@ namespace NMib::NDevelop
 		return "the token count changed from {} to {}"_f << First.f_GetLen() << Second.f_GetLen();
 	}
 
+	// A token's comparable text, as fg_NormalizeCodeTokens spells it, without building a
+	// string for it: a closer of two nested template argument lists counts as two, and the
+	// trailing space of a line comment or a directive as none.
+	struct CCodeTokenView
+	{
+		ECodeTokenKind m_Kind = ECodeTokenKind::mc_Unknown;
+		ch8 const *m_pText = nullptr;
+		umint m_nLength = 0;
+	};
+
+	static void fg_CollectCodeTokenViews(CCodeTokenStream const &_Stream, TCVector<CCodeTokenView> &o_Views)
+	{
+		for (auto const &Token : _Stream.f_GetTokens())
+		{
+			auto Kind = Token.m_Kind;
+			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice)
+				continue;
+
+			auto pText = _Stream.f_GetTextPointer(Token);
+			auto nLength = Token.m_nLength;
+			if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_Preprocessor)
+			{
+				while (nLength && (pText[nLength - 1] == ' ' || pText[nLength - 1] == '\t'))
+					--nLength;
+			}
+
+			if (Kind == ECodeTokenKind::mc_Punctuator && nLength >= 2 && pText[0] == '>' && pText[1] == '>' && (nLength == 2 || (nLength == 3 && pText[2] == '=')))
+			{
+				o_Views.f_Insert(CCodeTokenView{Kind, pText, 1});
+				o_Views.f_Insert(CCodeTokenView{Kind, pText + 1, nLength - 1});
+
+				continue;
+			}
+
+			o_Views.f_Insert(CCodeTokenView{Kind, pText, nLength});
+		}
+	}
+
 	bool fg_HasEquivalentCodeTokens(CStr const &_First, CStr const &_Second)
 	{
-		auto First = fg_NormalizeCodeTokens(_First);
-		auto Second = fg_NormalizeCodeTokens(_Second);
+		CCodeTokenStream FirstStream(_First);
+		CCodeTokenStream SecondStream(_Second);
+		TCVector<CCodeTokenView> First;
+		TCVector<CCodeTokenView> Second;
+		fg_CollectCodeTokenViews(FirstStream, First);
+		fg_CollectCodeTokenViews(SecondStream, Second);
 		if (First.f_GetLen() != Second.f_GetLen())
 			return false;
 
 		for (umint i = 0; i < First.f_GetLen(); ++i)
 		{
-			if (First[i] != Second[i])
+			auto const &Left = First[i];
+			auto const &Right = Second[i];
+			if (Left.m_Kind != Right.m_Kind || Left.m_nLength != Right.m_nLength)
 				return false;
+
+			for (umint j = 0; j < Left.m_nLength; ++j)
+			{
+				if (Left.m_pText[j] != Right.m_pText[j])
+					return false;
+			}
 		}
 
 		return true;
@@ -614,6 +664,7 @@ namespace
 		bool fp_LayoutScopes(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndent, bool _bMustSplit = false);
 		bool fp_IsYieldedScope(umint _iOpen) const;
 		ECodeSpacing fp_GetInlineSpacing(umint _iLeft, umint _iRight) const;
+		ECodeSpacing fp_GetCanonicalSpacing(umint _iLeft, umint _iRight) const;
 		bool fp_IsInFunctionBody(umint _iStatement) const;
 		bool fp_LayoutMembers(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
 		bool fp_BreakAtQualification(umint _iFirst, umint _iLast, umint _iIndent, umint _nContinuation);
@@ -681,6 +732,7 @@ namespace
 		NContainer::TCVector<uint8> m_bInConditional;			// Indexed by token: the token stands inside a conditional group's branches.
 		NContainer::TCVector<CCodeFormattingRange> m_Conditionals;	// Source spans of the '#if' groups, for saying which one a structure was cut by.
 		NContainer::TCVector<uint8> m_GapState;					// Indexed by token: what the gap in front of it becomes.
+		mutable NContainer::TCVector<uint8> m_CanonicalSpacing;	// Indexed by token: the standard's spelling of the gap in front of it, plus one, or zero when not yet asked.
 		NContainer::TCVector<umint> m_GapIndent;				// The indentation a break in front of the token takes.
 		NContainer::TCVector<uint8> m_bCommentMoved;			// Indexed by token: a comment on a line of its own that moves with the block around it.
 		NContainer::TCVector<uint8> m_bBlankBefore;			// A blank line stands in front of the token, which the layout writes where it writes the gap.
@@ -914,8 +966,28 @@ namespace
 	{
 		auto iLine = m_Lines.f_FindLine(_iOffset);
 		auto iStart = m_Lines.f_GetLineStart(iLine);
+		auto pSource = m_Request.m_Source.f_GetStr();
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		// Nearly every question is about the token that starts its line, whose column is
+		// the line's indentation: blanks alone, counted without decoding the text, and
+		// remembered per line since the layout asks for every statement's more than once.
+		umint nIndent = 0;
+		auto i = iStart;
+		for (; i < _iOffset; ++i)
+		{
+			if (pSource[i] == ' ')
+				++nIndent;
+			else if (pSource[i] == '\t')
+				nIndent = nTab ? (nIndent / nTab + 1) * nTab : nIndent;
+			else
+				break;
+		}
+
+		if (i == _iOffset)
+			return nIndent + 1;
+
 		umint nColumns = 0;
-		if (!fg_MeasureTextColumns(m_Request.m_Source.f_GetStr() + iStart, _iOffset - iStart, m_Request.m_Settings.m_nTabWidth, nColumns))
+		if (!fg_MeasureTextColumns(pSource + iStart, _iOffset - iStart, nTab, nColumns))
 			return 1;
 
 		return nColumns + 1;
@@ -1288,6 +1360,27 @@ namespace
 		return false;
 	}
 
+	// The standard's spelling of the gap in front of a code token, decided once: the layout
+	// asks for it every time it measures a line the gap stands in.
+	ECodeSpacing CFormattingAnalyzer::fp_GetCanonicalSpacing(umint _iLeft, umint _iRight) const
+	{
+		auto nTokens = m_Tokens.f_GetTokens().f_GetLen();
+		if (m_CanonicalSpacing.f_GetLen() != nTokens)
+		{
+			m_CanonicalSpacing.f_SetLen(nTokens);
+			for (auto &Value : m_CanonicalSpacing)
+				Value = 0;
+		}
+
+		if (_iRight >= nTokens || fp_PreviousCode(_iRight) != aint(_iLeft))
+			return fg_GetCanonicalSpacing(m_Tokens, m_Structure, _iLeft, _iRight);
+
+		if (!m_CanonicalSpacing[_iRight])
+			m_CanonicalSpacing[_iRight] = uint8(fg_GetCanonicalSpacing(m_Tokens, m_Structure, _iLeft, _iRight)) + 1;
+
+		return ECodeSpacing(m_CanonicalSpacing[_iRight] - 1);
+	}
+
 	// The separator the spacing rules write between two tokens on one line, in the order
 	// the rules are applied: the clause, angle, comma and operator rules first, and the
 	// standard's spelling of every other pair after them. The width a line is measured at
@@ -1335,7 +1428,7 @@ namespace
 		if (fSpacedOperator(_iRight) || fSpacedOperator(_iLeft))
 			return ECodeSpacing::mc_Space;
 
-		return fg_GetCanonicalSpacing(m_Tokens, m_Structure, _iLeft, _iRight);
+		return fp_GetCanonicalSpacing(_iLeft, _iRight);
 	}
 
 	// Whether the statement stands in a function's body, a lambda's or a control clause's,
@@ -1441,7 +1534,7 @@ namespace
 			if (!bOneLine)
 				continue;
 
-			auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iPrevious), i);
+			auto Spacing = fp_GetCanonicalSpacing(umint(iPrevious), i);
 			if (Spacing == ECodeSpacing::mc_Space)
 				fp_EnsureSingleSpace(i, true, "token-space", "these tokens are written with one space between them");
 			else if (Spacing == ECodeSpacing::mc_None)
@@ -1986,6 +2079,12 @@ namespace
 		if (!_bVerify)
 			return Result;
 
+		// A pass that changes nothing is its own proof: the source it would be analyzed
+		// against again is the very source it was analyzed on, and the analysis is a
+		// function of that source alone.
+		if (!Result.f_HasEdits() && m_Structural.f_IsEmpty())
+			return Result;
+
 		// Every rule but the conversion leaves the token stream alone, so the result has to
 		// match the converted source token for token.
 		auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, Result.m_Edits);
@@ -2173,7 +2272,7 @@ namespace
 
 				if (bNewline)
 				{
-					auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, iPrevious, i);
+					auto Spacing = fp_GetCanonicalSpacing(iPrevious, i);
 					auto iStart = Tokens[iPrevious].f_GetEnd();
 					fp_AddEdit("line-break", iStart, Tokens[i].m_iOffset - iStart, Spacing == ECodeSpacing::mc_Space ? " " : CStr(), "the construct fits on one line");
 				}
@@ -2549,7 +2648,7 @@ namespace
 				if (!bNewline || bKeepLines)
 					continue;
 
-				auto Spacing = fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iPrevious), i);
+				auto Spacing = fp_GetCanonicalSpacing(umint(iPrevious), i);
 				if (Spacing == ECodeSpacing::mc_Preserve)
 					continue;
 
@@ -5074,23 +5173,19 @@ namespace
 			return false;
 
 		auto const &Nodes = m_Structure.f_GetNodes();
-		for (auto const &Node : Nodes)
-		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_iFirstToken != umint(iNext))
-				continue;
+		auto iNode = m_Structure.f_FindNodeOpeningAt(umint(iNext));
+		if (iNode >= Nodes.f_GetLen() || Nodes[iNode].m_Kind != ECodeNodeKind::mc_Group)
+			return false;
 
-			auto iAfter = fp_NextCode(Node.m_iLastToken);
-			if (iAfter < 0)
-				return false;
+		auto iAfter = fp_NextCode(Nodes[iNode].m_iLastToken);
+		if (iAfter < 0)
+			return false;
 
-			// The capture list is followed by the parameter list, by the body, or by the
-			// lambda's own template parameter list.
-			auto const &After = m_Tokens.f_GetTokens()[umint(iAfter)];
+		// The capture list is followed by the parameter list, by the body, or by the
+		// lambda's own template parameter list.
+		auto const &After = m_Tokens.f_GetTokens()[umint(iAfter)];
 
-			return m_Tokens.f_IsText(After, "(") || m_Tokens.f_IsText(After, "{") || m_Tokens.f_IsText(After, "<");
-		}
-
-		return false;
+		return m_Tokens.f_IsText(After, "(") || m_Tokens.f_IsText(After, "{") || m_Tokens.f_IsText(After, "<");
 	}
 
 	// A template header is spelled 'template <...>'. The space in front of the list is what
@@ -5213,17 +5308,14 @@ namespace
 		if (!m_Structure.f_IsAngleBracket(_iToken))
 			return false;
 
-		for (auto const &Node : m_Structure.f_GetNodes())
-		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != _iToken)
-				continue;
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto iNode = m_Structure.f_FindNodeClosingAt(_iToken);
+		if (iNode >= Nodes.f_GetLen() || Nodes[iNode].m_Kind != ECodeNodeKind::mc_Group || Nodes[iNode].m_Bracket != ECodeBracket::mc_Angle)
+			return false;
 
-			auto iBefore = fp_PreviousCode(Node.m_iFirstToken);
+		auto iBefore = fp_PreviousCode(Nodes[iNode].m_iFirstToken);
 
-			return iBefore >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBefore)], "]");
-		}
-
-		return false;
+		return iBefore >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBefore)], "]");
 	}
 
 	// Whether the parenthesis opening at the token holds the operand of a named cast:
@@ -5235,12 +5327,11 @@ namespace
 		if (iClose < 0 || !m_Structure.f_IsAngleBracket(umint(iClose)) || !m_Tokens.f_IsText(Tokens[umint(iClose)], ">"))
 			return false;
 
-		for (auto const &Node : m_Structure.f_GetNodes())
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto iNode = m_Structure.f_FindNodeClosingAt(umint(iClose));
+		if (iNode < Nodes.f_GetLen() && Nodes[iNode].m_Kind == ECodeNodeKind::mc_Group && Nodes[iNode].m_Bracket == ECodeBracket::mc_Angle)
 		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Angle || Node.m_iLastToken != umint(iClose))
-				continue;
-
-			auto iKeyword = fp_PreviousCode(Node.m_iFirstToken);
+			auto iKeyword = fp_PreviousCode(Nodes[iNode].m_iFirstToken);
 			if (iKeyword < 0)
 				return false;
 
@@ -5570,7 +5661,7 @@ namespace
 			bool bSettled = iHeadEnd >= 0
 				&& umint(iHeadEnd) >= _iFirst
 				&& iAssign < _iLast
-				&& fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iHeadEnd), iAssign) == ECodeSpacing::mc_Space
+				&& fp_GetCanonicalSpacing(umint(iHeadEnd), iAssign) == ECodeSpacing::mc_Space
 			;
 			bool bHeadFits = bSettled && fp_FitsInline(_iFirst, umint(iHeadEnd), _iIndent);
 			if (bHeadFits && !bNamedScope && fp_FitsInline(iAssign, _iLast, nContinuation))
@@ -6031,7 +6122,7 @@ namespace
 		bool bMoves = iHeadEnd >= 0
 			&& umint(iHeadEnd) >= _iFirst
 			&& iOperandEnd > aint(iAssign)
-			&& fg_GetCanonicalSpacing(m_Tokens, m_Structure, umint(iHeadEnd), iAssign) == ECodeSpacing::mc_Space
+			&& fp_GetCanonicalSpacing(umint(iHeadEnd), iAssign) == ECodeSpacing::mc_Space
 			&& fp_FitsInline(_iFirst, umint(iHeadEnd), _iIndent)
 			&& fp_FitsInline(iAssign, umint(iOperandEnd), _nContinuation)
 		;

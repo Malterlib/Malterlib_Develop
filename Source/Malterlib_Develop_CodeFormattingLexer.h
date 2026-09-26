@@ -54,6 +54,10 @@ namespace NMib::NDevelop
 		umint f_FindToken(umint _iOffset) const;
 
 		bool f_IsText(CCodeToken const &_Token, NStr::CStr const &_Text) const;
+		bool f_IsText(CCodeToken const &_Token, ch8 const *_pText) const;
+		bool f_StartsWith(CCodeToken const &_Token, ch8 const *_pPrefix) const;
+		bool f_HasSameText(CCodeToken const &_Left, CCodeToken const &_Right) const;
+		ch8 const *f_GetTextPointer(CCodeToken const &_Token) const;
 		NStr::CStr f_GetText(CCodeToken const &_Token) const;
 		NStr::CStr const &f_GetSource() const;
 

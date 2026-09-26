@@ -364,6 +364,53 @@ namespace NMib::NDevelop
 		return iLow;
 	}
 
+	// A literal is compared in place: nearly every rule asks this of every token, and a
+	// string built for each question was most of the engine's time.
+	bool CCodeTokenStream::f_IsText(CCodeToken const &_Token, ch8 const *_pText) const
+	{
+		auto pToken = mp_Source.f_GetStr() + _Token.m_iOffset;
+		umint i = 0;
+		for (; i < _Token.m_nLength; ++i)
+		{
+			if (_pText[i] != pToken[i])
+				return false;
+		}
+
+		return _pText[i] == 0;
+	}
+
+	bool CCodeTokenStream::f_StartsWith(CCodeToken const &_Token, ch8 const *_pPrefix) const
+	{
+		auto pToken = mp_Source.f_GetStr() + _Token.m_iOffset;
+		for (umint i = 0; _pPrefix[i]; ++i)
+		{
+			if (i >= _Token.m_nLength || pToken[i] != _pPrefix[i])
+				return false;
+		}
+
+		return true;
+	}
+
+	bool CCodeTokenStream::f_HasSameText(CCodeToken const &_Left, CCodeToken const &_Right) const
+	{
+		if (_Left.m_nLength != _Right.m_nLength)
+			return false;
+
+		auto pSource = mp_Source.f_GetStr();
+		for (umint i = 0; i < _Left.m_nLength; ++i)
+		{
+			if (pSource[_Left.m_iOffset + i] != pSource[_Right.m_iOffset + i])
+				return false;
+		}
+
+		return true;
+	}
+
+	ch8 const *CCodeTokenStream::f_GetTextPointer(CCodeToken const &_Token) const
+	{
+		return mp_Source.f_GetStr() + _Token.m_iOffset;
+	}
+
 	bool CCodeTokenStream::f_IsText(CCodeToken const &_Token, CStr const &_Text) const
 	{
 		if (_Token.m_nLength != _Text.f_GetLen())
