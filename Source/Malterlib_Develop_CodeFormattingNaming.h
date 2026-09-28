@@ -26,10 +26,16 @@ namespace NMib::NDevelop
 	// One '.malterlib-format' as written, before the document it extends is applied under it.
 	struct CCodeFormattingNamingDocument
 	{
+		struct CListChange
+		{
+			NContainer::TCVector<NStr::CStr> m_Names;
+			bool m_bAppend = false;														// Adds to the list it extends instead of replacing it.
+		};
+
 		static CCodeFormattingNamingDocument fs_Parse(NStr::CStr const &_Yaml);
 
 		NStr::CStr m_Extends;															// Relative to the document's directory; empty when it extends nothing.
-		NStorage::TCOptional<NContainer::TCVector<NStr::CStr>> m_Lists[umint(ECodeNamingList::mc_Count)];	// Unset keeps what it extends.
+		NStorage::TCOptional<CListChange> m_Lists[umint(ECodeNamingList::mc_Count)];	// Unset keeps what it extends.
 	};
 
 	// The names a project gives its functions, types and macros, compiled for a lookup per identifier.

@@ -82,12 +82,23 @@ DSLMarkers:
 | Key | Meaning |
 | --- | --- |
 | `Version` | Required, and `1`. |
-| `Extends` | Another document, relative to this one's directory, applied first. A list this one holds replaces the one it extends; a list it leaves out keeps it. A cycle is an error. |
+| `Extends` | Another document, relative to this one's directory, applied first. A list this one leaves out keeps what it extends. A cycle is an error. |
 | `FunctionNames` | Names of functions. A name among them followed by a parenthesis is a call wherever it stands. |
 | `TypeNames` | Names of types beyond C++'s own. A parenthesis holding only one is a cast. |
 | `MacroNames` | Names of macros, which can expand to anything, so the layout around them is kept rather than read. |
 | `SpecifierMacros` | Macros that stand in front of a declaration the way `inline` does, and are part of a run of specifiers. |
 | `DSLMarkers` | User-defined literal suffixes of a DSL, which hug what they mark. |
+
+A list written as a sequence replaces the one extended. Written as a mapping
+holding `Append`, its sequence is added to the one extended instead:
+
+```yaml
+Version: 1
+Extends: ../Core/.malterlib-format
+TypeNames:
+  Append:
+    - 'CValue'
+```
 
 An entry is a name, or a pattern anchored at both ends in which `.` is any
 character, `[A-Z0-9_]` a class, and `*` repeats the atom in front of it. A name

@@ -46,9 +46,11 @@ namespace NMib::NDevelop
 		}
 	}
 
-	// Reads one document. A key the format does not have, a version it does not know, and a
-	// list that holds anything but strings are errors: a misspelt key would otherwise leave
-	// the names it meant to set with those of the document it extends.
+	// Reads one document. A list is written as a sequence, which replaces the one extended,
+	// or as a mapping holding 'Append', whose sequence adds to it. A key the format does not
+	// have, a version it does not know, and a list that holds anything but strings are
+	// errors: a misspelt key would otherwise leave the names it meant to set with those of
+	// the document it extends.
 	CCodeFormattingNamingDocument CCodeFormattingNamingDocument::fs_Parse(CStr const &_Yaml)
 	{
 		auto Document = NEncoding::CJsonSorted::fs_FromStringYaml(_Yaml);
@@ -88,16 +90,32 @@ namespace NMib::NDevelop
 			if (iList == umint(ECodeNamingList::mc_Count))
 				DMibError("Unknown key '{}'"_f << Key);
 
-			if (!Value.f_IsArray())
-				DMibError("{} must be a list"_f << Key);
+			auto &Change = Result.m_Lists[iList].f_CreateNew();
+			auto const *pNames = &Value;
+			if (Value.f_IsObject())
+			{
+				for (auto &Operation : Value.f_Object())
+				{
+					if (Operation.f_Name() != "Append")
+						DMibError("Unknown key '{}' in {}; a list is a sequence or a mapping holding Append"_f << Operation.f_Name() << Key);
+				}
 
-			auto &List = Result.m_Lists[iList].f_CreateNew();
-			for (auto const &Entry : Value.f_Array())
+				pNames = Value.f_GetMember("Append");
+				if (!pNames)
+					DMibError("{} must hold Append when it is a mapping"_f << Key);
+
+				Change.m_bAppend = true;
+			}
+
+			if (!pNames->f_IsArray())
+				DMibError("{} must be a list, or a mapping holding Append with a list"_f << Key);
+
+			for (auto const &Entry : pNames->f_Array())
 			{
 				if (!Entry.f_IsString() || Entry.f_String().f_IsEmpty())
 					DMibError("{} holds only non-empty strings"_f << Key);
 
-				List.f_Insert(Entry.f_String());
+				Change.m_Names.f_Insert(Entry.f_String());
 			}
 		}
 
@@ -107,13 +125,19 @@ namespace NMib::NDevelop
 		return Result;
 	}
 
-	// A list the document holds replaces the one it extends, which is applied first.
+	// A list the document holds replaces or adds to the one it extends, which is applied first.
 	void CCodeFormattingNaming::f_Apply(CCodeFormattingNamingDocument const &_Document)
 	{
 		for (umint iList = 0; iList < umint(ECodeNamingList::mc_Count); ++iList)
 		{
-			if (_Document.m_Lists[iList])
-				mp_Lists[iList] = *_Document.m_Lists[iList];
+			if (!_Document.m_Lists[iList])
+				continue;
+
+			auto const &Change = *_Document.m_Lists[iList];
+			if (Change.m_bAppend)
+				mp_Lists[iList].f_Insert(Change.m_Names);
+			else
+				mp_Lists[iList] = Change.m_Names;
 		}
 
 		fp_Compile();

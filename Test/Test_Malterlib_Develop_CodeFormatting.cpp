@@ -355,6 +355,42 @@ namespace
 					DMibExpectTrue(fRoles(Naming, "inline_small") == ECodeNameRole::mc_SpecifierMacro);
 				};
 
+				DMibTestCategory("Append")
+				{
+					CCodeFormattingNaming Naming = *fg_MalterlibNaming();
+					auto Document = CCodeFormattingNamingDocument::fs_Parse
+						(
+							"Version: 1\n"
+							"TypeNames:\n"
+							"  Append:\n"
+							"    - 'Foo'\n"
+							"    - 'x[0-9]*'\n"
+							"SpecifierMacros: {Append: []}\n"
+							"MacroNames: ['DOnly']\n"
+						)
+					;
+					DMibAssertTrue(bool(Document.m_Lists[umint(ECodeNamingList::mc_TypeNames)]));
+					DMibExpectTrue(Document.m_Lists[umint(ECodeNamingList::mc_TypeNames)]->m_bAppend);
+					DMibExpectFalse(Document.m_Lists[umint(ECodeNamingList::mc_MacroNames)]->m_bAppend);
+					Naming.f_Apply(Document);
+
+					DMibExpectTrue(fRoles(Naming, "Foo") == ECodeNameRole::mc_Type);
+					DMibExpectTrue(fRoles(Naming, "x12") == ECodeNameRole::mc_Type);
+					DMibExpectTrue(fRoles(Naming, "CStr") == ECodeNameRole::mc_Type);
+					DMibExpectTrue(fRoles(Naming, "umint") == ECodeNameRole::mc_Type);
+					DMibExpectTrue(fRoles(Naming, "inline_small") == ECodeNameRole::mc_SpecifierMacro);
+					DMibExpectTrue(fRoles(Naming, "DOnly") == ECodeNameRole::mc_Macro);
+					DMibExpectTrue(fRoles(Naming, "DMibCheck") == ECodeNameRole::mc_None);
+
+					{
+						// An append that repeats a name leaves one entry holding the role.
+						DMibTestPath("Repeated");
+						Naming.f_Apply(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nTypeNames: {Append: ['Foo', 'umint']}\n"));
+						DMibExpectTrue(fRoles(Naming, "Foo") == ECodeNameRole::mc_Type);
+						DMibExpectTrue(fRoles(Naming, "umint") == ECodeNameRole::mc_Type);
+					}
+				};
+
 				DMibTestCategory("Invalid")
 				{
 					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("FunctionNames: ['f_.*']\n"), NException::CException);
@@ -364,6 +400,10 @@ namespace
 					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nFunctionNames: [1]\n"), NException::CException);
 					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nExtends: ''\n"), NException::CException);
 					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("- 1\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nTypeNames: {Add: ['Foo']}\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nTypeNames: {Append: ['Foo'], Remove: ['C']}\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nTypeNames: {Append: 'Foo'}\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nTypeNames: {}\n"), NException::CException);
 					DMibExpectExceptionType(fNaming("Version: 1\nFunctionNames: ['f_[a-z']\n"), NException::CException);
 					DMibExpectExceptionType(fNaming("Version: 1\nFunctionNames: ['f_[]']\n"), NException::CException);
 					DMibExpectExceptionType(fNaming("Version: 1\nFunctionNames: ['*f']\n"), NException::CException);
