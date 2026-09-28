@@ -2141,6 +2141,16 @@ namespace
 							"\tg\n\t\t(\n\t\t\ta\n\t\t\t, bFlag\n\t\t\t? (@).f_Get()\n\t\t\t: (@).f_Get()\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A unary operator is no place to break: behind an operator, an opener or a keyword
+					// it starts its operand, so the '=' keeps it and the call behind it opens.
+					fSplit
+						(
+							"UnaryNotInfix"
+							, "void f()\n{\n\tpValue = &Internal.f_Queue(@, @);\n\tStr = CFormat(\"@\") << @ << &Serial;\n}\n"
+							, "void f()\n{\n\tpValue = &Internal.f_Queue\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t;\n"
+							"\tStr\n\t\t= CFormat(\"@\")\n\t\t<< @\n\t\t<< &Serial\n\t;\n}\n"
+						)
+					;
 					// An operand in parentheses with a member access behind it stays whole and gives at
 					// the access, whether it starts the operator chain's first line or follows an operator.
 					CStr Parenthesised = "(@ % SecondOperandWithAVeryLongNameThatMakesTheParenthesisWideEnoughForThisCase).f_Dispatch()";

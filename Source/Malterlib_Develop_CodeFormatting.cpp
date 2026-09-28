@@ -655,6 +655,7 @@ namespace
 		void fp_RuleFinalNewline();
 		void fp_RuleTokenSpacing();
 		bool fp_HasOperand(umint _iToken, bool _bBefore) const;
+		bool fp_EndsOperand(aint _iToken) const;
 		void fp_RuleBlankLines();
 		void fp_RuleLineBreaks();
 		void fp_LayoutNode(umint _iNode, umint _iIndent);
@@ -1207,6 +1208,46 @@ namespace
 			&& !m_Tokens.f_IsText(Previous, ",")
 			&& !m_Tokens.f_IsText(Previous, ";")
 		;
+	}
+
+	bool CFormattingAnalyzer::fp_EndsOperand(aint _iToken) const
+	{
+		if (_iToken < 0)
+			return false;
+
+		auto const &Token = m_Tokens.f_GetTokens()[umint(_iToken)];
+		switch (Token.m_Kind)
+		{
+		case ECodeTokenKind::mc_Number:
+		case ECodeTokenKind::mc_StringLiteral:
+		case ECodeTokenKind::mc_CharLiteral:
+			return true;
+		case ECodeTokenKind::mc_Identifier:
+			{
+				constexpr ch8 const *c_pLeadsOperand[] =
+					{
+						"return", "co_return", "co_await", "co_yield", "throw", "case", "new", "delete", "else", "do", "sizeof", "alignof"
+					}
+				;
+				for (auto pKeyword : c_pLeadsOperand)
+				{
+					if (m_Tokens.f_IsText(Token, pKeyword))
+						return false;
+				}
+
+				return true;
+			}
+		case ECodeTokenKind::mc_Punctuator:
+			return m_Tokens.f_IsText(Token, ")")
+				|| m_Tokens.f_IsText(Token, "]")
+				|| m_Tokens.f_IsText(Token, "}")
+				|| m_Tokens.f_IsText(Token, "++")
+				|| m_Tokens.f_IsText(Token, "--")
+				|| (m_Structure.f_IsAngleBracket(umint(_iToken)) && m_Tokens.f_IsText(Token, ">"))
+			;
+		default:
+			return false;
+		}
 	}
 
 	void CFormattingAnalyzer::fp_RuleIndentation()
@@ -5623,8 +5664,10 @@ namespace
 						nPrecedence = Operator.m_Level;
 				}
 
-				// Without operands on both sides the token is a declarator or a unary form.
-				if (!nPrecedence || i == _iFirst || !fp_HasOperand(i, true) || !fp_HasOperand(i, false))
+				// Without operands on both sides the token is a declarator or a unary form: what
+				// stands in front of an infix operator ends an operand, and an operator, an opener
+				// or a keyword such as 'return' ends none, so '= &Value' takes an address.
+				if (!nPrecedence || i == _iFirst || !fp_EndsOperand(fp_PreviousCode(i)) || !fp_HasOperand(i, false))
 					continue;
 
 				// A colon is the conditional's only behind the '?' it answers; any other one
