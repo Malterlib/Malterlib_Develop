@@ -49,14 +49,11 @@ standard properties take precedence:
 `m_nMaxColumns` stays zero when neither the profile nor `max_line_length`
 supplies a limit, which is how a consumer decides that no validator applies.
 
-The profile selects the language. `fg_GetCodeFormattingLanguage` gives it for a
-file: the build system profile formats every file it opts in as the build
-system's syntax, since the build system reads that syntax from files of any
-name, and the Malterlib profile asks `fg_DetectCodeLanguage`, which knows C and
-C++ sources and headers, including extensionless public include wrappers. The
-engine refuses a request whose language is not its profile's. Other languages
-have no syntax backend and are never rewritten; `MTool Format` holds a file of
-one that is opted in to its line length only.
+The profile selects the language, and `CCodeFormattingSettings::f_GetLanguage`
+gives it: C and C++ for `malterlib`, the build system's syntax for
+`malterlib-buildsystem`. A file's name plays no part; the `.editorconfig` that
+opts it in is authoritative, so its sections name which files are written in
+which language.
 
 ## Naming
 
@@ -126,7 +123,6 @@ module's document holds `Extends: ../Core/.malterlib-format`.
 NDevelop::CCodeFormattingRequest Request;
 Request.m_Source = Bytes;
 Request.m_Path = "Source/Example.cpp";
-Request.m_Language = NDevelop::fg_DetectCodeLanguage(Request.m_Path);
 Request.m_Settings = NDevelop::CCodeFormattingSettings(Properties);
 Request.m_pNaming = pNaming; // Optional; see Naming.
 
@@ -798,9 +794,9 @@ them and they keep what they have, a block moving around them included.
 A file opted in with `malterlib_format = malterlib-buildsystem` is
 `ECodeLanguage::mc_BuildSystem`. Malterlib opts in its hand-written
 `.MBuildSystem`, `.MConfig`, `.MGeneratorSettings`, `.MHeader`, `.MInclude`,
-`.MLBuildOptions`, `.MOptionalHeader`, `.MSettings` and `.MTarget` files; `.MRepo`
-is JSON, and `.MRepoState` and `.MGeneratorState` are written by the build
-system, so none of those is.
+`.MLBuildOptions`, `.MOptionalHeader`, `.MSettings`, `.MTarget` and `.MWorkspace`
+files; `.MRepo` is JSON, and `.MRepoState` and `.MGeneratorState` are written by
+the build system, so none of those is.
 
 Their rules change whitespace only, and every line keeps its breaks:
 

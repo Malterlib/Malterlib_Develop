@@ -116,7 +116,6 @@ namespace
 		CCodeFormattingRequest Request;
 		Request.m_Source = _Source;
 		Request.m_Path = "Source/Example.cpp";
-		Request.m_Language = ECodeLanguage::mc_Cpp;
 		Request.m_Settings = CCodeFormattingSettings(fg_MalterlibProperties());
 		Request.m_pNaming = fg_MalterlibNaming();
 
@@ -157,7 +156,6 @@ namespace
 		CCodeFormattingRequest Request;
 		Request.m_Source = _Source;
 		Request.m_Path = "Example.MHeader";
-		Request.m_Language = ECodeLanguage::mc_BuildSystem;
 		auto Properties = fg_MalterlibProperties();
 		Properties["malterlib_format"] = "malterlib-buildsystem";
 		Request.m_Settings = CCodeFormattingSettings(Properties);
@@ -259,23 +257,15 @@ namespace
 
 				DMibTestCategory("Language")
 				{
-					DMibExpectTrue(fg_DetectCodeLanguage("Source/Example.cpp") == ECodeLanguage::mc_Cpp);
-					DMibExpectTrue(fg_DetectCodeLanguage("Source/Example.imp.h") == ECodeLanguage::mc_Cpp);
-					DMibExpectTrue(fg_DetectCodeLanguage("Include/Mib/Develop/CodeFormatting") == ECodeLanguage::mc_Cpp);
-					DMibExpectTrue(fg_DetectCodeLanguage("Malterlib_Develop.MHeader") == ECodeLanguage::mc_Unknown);
-
-					// The profile says what a file is written in, and the build system's may be named anything.
+					// The profile says what a file is written in, whatever it is named.
 					CCodeFormattingSettings Cpp{CEditorConfigProperties{{"malterlib_format", "malterlib"}}};
 					CCodeFormattingSettings BuildSystem{CEditorConfigProperties{{"malterlib_format", "Malterlib-BuildSystem"}}};
 					CCodeFormattingSettings Disabled{CEditorConfigProperties{{"malterlib_format", "off"}}};
 					DMibExpectTrue(BuildSystem.f_IsFormattingEnabled());
 					DMibExpect(BuildSystem.m_nMaxColumns, ==, 190u);
-					DMibExpectTrue(fg_GetCodeFormattingLanguage(Cpp, "Source/Example.cpp") == ECodeLanguage::mc_Cpp);
-					DMibExpectTrue(fg_GetCodeFormattingLanguage(Cpp, "Malterlib_Develop.MHeader") == ECodeLanguage::mc_Unknown);
-					DMibExpectTrue(fg_GetCodeFormattingLanguage(BuildSystem, "Malterlib_Develop.MHeader") == ECodeLanguage::mc_BuildSystem);
-					DMibExpectTrue(fg_GetCodeFormattingLanguage(BuildSystem, "Imported.txt") == ECodeLanguage::mc_BuildSystem);
-					DMibExpectTrue(fg_GetCodeFormattingLanguage(Disabled, "Source/Example.cpp") == ECodeLanguage::mc_Unknown);
-					DMibExpectTrue(fg_DetectCodeLanguage("README.md") == ECodeLanguage::mc_Unknown);
+					DMibExpectTrue(Cpp.f_GetLanguage() == ECodeLanguage::mc_Cpp);
+					DMibExpectTrue(BuildSystem.f_GetLanguage() == ECodeLanguage::mc_BuildSystem);
+					DMibExpectTrue(Disabled.f_GetLanguage() == ECodeLanguage::mc_Unknown);
 				};
 			};
 
@@ -486,13 +476,6 @@ namespace
 					fExpectUnsupported("NeverClosed", "A\n{\n\tB [\n}\n", "never closed");
 					fExpectUnsupported("Unterminated", "A `b\n", "ends inside a comment or literal");
 
-					// Each profile formats its own language only.
-					auto Mismatched = fg_BuildSystemRequest("A\n{\n  B 1\n}\n");
-					Mismatched.m_Settings = CCodeFormattingSettings(fg_MalterlibProperties());
-					DMibExpectTrue(fg_AnalyzeCodeFormatting(Mismatched).m_Status == ECodeFormattingStatus::mc_Unsupported);
-					auto Cpp = fg_Request("int  a;\n");
-					Cpp.m_Settings = fg_BuildSystemRequest({}).m_Settings;
-					DMibExpectTrue(fg_AnalyzeCodeFormatting(Cpp).m_Status == ECodeFormattingStatus::mc_Unsupported);
 				};
 			};
 
@@ -2974,10 +2957,6 @@ namespace
 				auto Disabled = fg_Request("int a;   \n");
 				Disabled.m_Settings = CCodeFormattingSettings(CEditorConfigProperties{{"max_line_length", "190"}});
 				fExpectUnsupported("FormattingDisabled", Disabled);
-
-				auto Unknown = fg_Request("int a;   \n");
-				Unknown.m_Language = ECodeLanguage::mc_Unknown;
-				fExpectUnsupported("UnknownLanguage", Unknown);
 
 				auto Charset = fg_Request("int a;   \n");
 				Charset.m_Settings.m_Charset = "latin1";

@@ -5,14 +5,11 @@
 #include "Malterlib_Develop_CodeFormattingLexer.h"
 #include "Malterlib_Develop_CodeFormattingStructure.h"
 
-#include <Mib/File/File>
-
 namespace NMib::NDevelop
 {
 	using namespace NStr;
 	using namespace NContainer;
 	using namespace NStorage;
-	using namespace NFile;
 }
 
 namespace
@@ -400,33 +397,13 @@ namespace NMib::NDevelop
 		return m_Profile != ECodeFormattingProfile::mc_Disabled;
 	}
 
-	ECodeLanguage fg_DetectCodeLanguage(CStr const &_Path)
+	// The profile the .editorconfig opts a file in with says what the file is written in; its name says nothing.
+	ECodeLanguage CCodeFormattingSettings::f_GetLanguage() const
 	{
-		auto Name = CFile::fs_GetFile(_Path);
-		auto Extension = CFile::fs_GetExtension(Name).f_LowerCase();
-		if (!Extension)
-		{
-			// Public include wrappers have no extension; they are ordinary C++ headers.
-			return Name ? ECodeLanguage::mc_Cpp : ECodeLanguage::mc_Unknown;
-		}
-
-		for (auto pCandidate : {"c", "cc", "cpp", "cxx", "c++", "h", "hh", "hpp", "hxx", "h++", "inl", "ipp"})
-		{
-			if (Extension == pCandidate)
-				return ECodeLanguage::mc_Cpp;
-		}
-
-		return ECodeLanguage::mc_Unknown;
-	}
-
-	// The build system reads its syntax from files of any name, so its profile, not an
-	// extension, says a file is written in it.
-	ECodeLanguage fg_GetCodeFormattingLanguage(CCodeFormattingSettings const &_Settings, CStr const &_Path)
-	{
-		switch (_Settings.m_Profile)
+		switch (m_Profile)
 		{
 		case ECodeFormattingProfile::mc_Disabled: return ECodeLanguage::mc_Unknown;
-		case ECodeFormattingProfile::mc_Malterlib: return fg_DetectCodeLanguage(_Path);
+		case ECodeFormattingProfile::mc_Malterlib: return ECodeLanguage::mc_Cpp;
 		case ECodeFormattingProfile::mc_MalterlibBuildSystem: return ECodeLanguage::mc_BuildSystem;
 		}
 
@@ -630,8 +607,8 @@ namespace
 	{
 		explicit CFormattingAnalyzer(CCodeFormattingRequest const &_Request, bool _bAllowConversions = true, bool _bAllowQualifiers = true)
 			: m_Request(_Request)
-			, m_Tokens(_Request.m_Source, _Request.m_pNaming.f_Get(), _Request.m_Language)
-			, m_Structure(fg_BuildStructure(m_Tokens, _Request.m_Language))
+			, m_Tokens(_Request.m_Source, _Request.m_pNaming.f_Get(), _Request.m_Settings.f_GetLanguage())
+			, m_Structure(fg_BuildStructure(m_Tokens, _Request.m_Settings.f_GetLanguage()))
 			, m_Lines(_Request.m_Source)
 			, m_bAllowConversions(_bAllowConversions)
 			, m_bAllowQualifiers(_bAllowQualifiers)
@@ -1987,12 +1964,8 @@ namespace
 		if (!Settings.f_IsFormattingEnabled())
 			return fUnsupported("Malterlib formatting is not enabled for this file");
 
-		bool bBuildSystem = m_Request.m_Language == ECodeLanguage::mc_BuildSystem;
-		if (m_Request.m_Language != ECodeLanguage::mc_Cpp && !bBuildSystem)
-			return fUnsupported("Only C and C++ sources and build system files have a formatting backend");
-
-		if (bBuildSystem != (Settings.m_Profile == ECodeFormattingProfile::mc_MalterlibBuildSystem))
-			return fUnsupported("malterlib_format = malterlib formats C and C++, and malterlib-buildsystem the build system's files");
+		auto Language = Settings.f_GetLanguage();
+		bool bBuildSystem = Language == ECodeLanguage::mc_BuildSystem;
 
 		if (Settings.m_Charset && Settings.m_Charset != "utf-8" && Settings.m_Charset != "utf-8-bom")
 			return fUnsupported("charset = {} is not a supported formatting encoding"_f << Settings.m_Charset);
@@ -2182,12 +2155,12 @@ namespace
 		// Every rule but the conversion leaves the token stream alone, so the result has to
 		// match the converted source token for token.
 		auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, Result.m_Edits);
-		if (!fg_HasEquivalentCodeTokens(m_Baseline, Formatted, m_Request.m_Language))
+		if (!fg_HasEquivalentCodeTokens(m_Baseline, Formatted, Language))
 		{
 			return fFailed
 				(
 					"Formatting would change the token stream ({}); no edits were produced"_f
-					<< fg_DescribeCodeTokenDifference(m_Baseline, Formatted, m_Request.m_Language)
+					<< fg_DescribeCodeTokenDifference(m_Baseline, Formatted, Language)
 				)
 			;
 		}

@@ -44,9 +44,9 @@ and `<Mib/Develop/CodeFormattingStructure>`, in `NMib::NDevelop`. See
 matrix, line structure, protected regions, and range contract.
 
 The build system's `.M*` files are a second language, opted in with
-`malterlib_format = malterlib-buildsystem`: the profile, not the extension,
-selects the language, since the build system reads its syntax from files of any
-name. It has rules of its own
+`malterlib_format = malterlib-buildsystem`. The `.editorconfig` is
+authoritative: the profile alone selects the language, and nothing in the engine
+or MTool may infer one from a file's name. It has rules of its own
 (`fp_PrepareBuildSystemLines` and the `fp_RuleBuildSystem*` rules), sharing the
 lexer, ranges, protected regions, disabled regions and verification with C++.
 Its rules read brackets and lines alone and never build a `CCodeStructure`; keep

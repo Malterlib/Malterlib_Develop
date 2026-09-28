@@ -29,6 +29,7 @@ namespace NMib::NDevelop
 		explicit CCodeFormattingSettings(CEditorConfigProperties const &_Properties);
 
 		bool f_IsFormattingEnabled() const;
+		ECodeLanguage f_GetLanguage() const;
 
 		ECodeFormattingProfile m_Profile = ECodeFormattingProfile::mc_Disabled;
 		bool m_bIndentWithTabs = true;
@@ -41,11 +42,6 @@ namespace NMib::NDevelop
 		NStorage::TCOptional<ETextLineEnding> m_EndOfLine;			// Unset preserves the file's representation.
 		NStr::CStr m_Charset;										// Empty when unconstrained.
 	};
-
-	ECodeLanguage fg_DetectCodeLanguage(NStr::CStr const &_Path);
-
-	// The language the settings' profile formats the file as, or unknown when it has no backend for it.
-	ECodeLanguage fg_GetCodeFormattingLanguage(CCodeFormattingSettings const &_Settings, NStr::CStr const &_Path);
 
 	struct CCodeFormattingRange
 	{
@@ -65,7 +61,6 @@ namespace NMib::NDevelop
 	{
 		NStr::CStr m_Source;							// Immutable original bytes.
 		NStr::CStr m_Path;								// Diagnostics only; the engine performs no I/O.
-		ECodeLanguage m_Language = ECodeLanguage::mc_Unknown;
 		CCodeFormattingSettings m_Settings;
 		NContainer::TCVector<CCodeFormattingRange> m_Ranges;		// Empty selects the whole file.
 		ECodeRangePolicy m_RangePolicy = ECodeRangePolicy::mc_Expand;
