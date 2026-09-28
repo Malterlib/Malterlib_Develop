@@ -594,7 +594,7 @@ namespace
 	{
 		explicit CFormattingAnalyzer(CCodeFormattingRequest const &_Request, bool _bAllowConversions = true, bool _bAllowQualifiers = true)
 			: m_Request(_Request)
-			, m_Tokens(_Request.m_Source)
+			, m_Tokens(_Request.m_Source, _Request.m_pNaming.f_Get())
 			, m_Structure(m_Tokens)
 			, m_Lines(_Request.m_Source)
 			, m_bAllowConversions(_bAllowConversions)
@@ -1696,12 +1696,8 @@ namespace
 			// that implements the streaming of the type it was written for does.
 			if (Tokens[iNext].m_Kind == ECodeTokenKind::mc_Identifier)
 			{
-				auto Name = m_Tokens.f_GetText(Tokens[iNext]);
 				auto iOpen = fp_NextCode(iNext);
-				bool bMacro = Name.f_GetLen() > 1
-					&& Name.f_GetStr()[0] == 'D'
-					&& Name.f_GetStr()[1] >= 'A'
-					&& Name.f_GetStr()[1] <= 'Z'
+				bool bMacro = m_Tokens.f_HasRole(Tokens[iNext], ECodeNameRole::mc_Macro)
 					&& iOpen >= 0
 					&& m_Tokens.f_IsText(Tokens[umint(iOpen)], "(")
 				;
@@ -2800,7 +2796,7 @@ namespace
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		constexpr ch8 const *c_pSpecifiers[] =
 			{
-				"inline", "constinit", "extern", "virtual", "friend", "thread_local", "mutable", "explicit", "inline_always", "inline_never"
+				"inline", "constinit", "extern", "virtual", "friend", "thread_local", "mutable", "explicit"
 			}
 		;
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
@@ -2818,7 +2814,7 @@ namespace
 					break;
 				}
 
-				bool bSpecifier = false;
+				bool bSpecifier = m_Tokens.f_HasRole(Tokens[umint(iNext)], ECodeNameRole::mc_SpecifierMacro);
 				for (auto pSpecifier : c_pSpecifiers)
 					bSpecifier |= m_Tokens.f_IsText(Tokens[umint(iNext)], pSpecifier);
 
@@ -3302,11 +3298,7 @@ namespace
 		// Skip a template header and the declaration specifiers before the return type.
 		constexpr ch8 const *c_pSpecifiers[] =
 			{
-				"static", "virtual", "inline", "constexpr", "consteval", "constinit", "explicit", "friend", "extern"
-				, "mutable", "thread_local", "inline_always", "inline_never", "inline_small", "inline_medium"
-				, "inline_large", "inline_extralarge", "mark_nodebug", "inline_always_debug", "inline_always_lto", "inline_never_debug"
-				, "inline_never_coro_exception_workaround", "mark_artificial", "mark_no_coroutine_debug", "mark_no_stack_protector"
-				, "assure_used", "function_does_not_return", "malloc_like", "only_parameters_aliased", "return_not_aliased"
+				"static", "virtual", "inline", "constexpr", "consteval", "constinit", "explicit", "friend", "extern", "mutable", "thread_local"
 			}
 		;
 		umint iReturn = _iDeclFirst;
@@ -3314,7 +3306,7 @@ namespace
 		while (iReturn < iDeclarator)
 		{
 			auto const &Token = Tokens[iReturn];
-			bool bSkip = false;
+			bool bSkip = m_Tokens.f_HasRole(Token, ECodeNameRole::mc_SpecifierMacro);
 			for (auto pSpecifier : c_pSpecifiers)
 				bSkip |= m_Tokens.f_IsText(Token, pSpecifier);
 
@@ -3386,16 +3378,11 @@ namespace
 		if (iReturnLast < 0 || umint(iReturnLast) < iReturn)
 			return false;
 
-		// A macro, named 'D' and a capital by Malterlib's naming, can expand to specifiers as
-		// readily as to a type, and a specifier moved behind the parameter list is no type.
+		// A macro, by the project's naming, can expand to specifiers as readily as to a type,
+		// and a specifier moved behind the parameter list is no type.
 		for (auto i = iReturn; i <= umint(iReturnLast); ++i)
 		{
-			auto const &Token = Tokens[i];
-			if (Token.m_Kind != ECodeTokenKind::mc_Identifier)
-				continue;
-
-			auto Name = m_Tokens.f_GetText(Token);
-			if (Name.f_GetLen() >= 2 && Name.f_GetStr()[0] == 'D' && Name.f_GetStr()[1] >= 'A' && Name.f_GetStr()[1] <= 'Z')
+			if (m_Tokens.f_HasRole(Tokens[i], ECodeNameRole::mc_Macro))
 				return false;
 		}
 

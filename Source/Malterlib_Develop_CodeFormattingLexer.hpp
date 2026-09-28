@@ -18,4 +18,9 @@ namespace NMib::NDevelop
 
 		return _pText[i] == 0;
 	}
+
+	inline_always bool CCodeTokenStream::f_HasRole(CCodeToken const &_Token, ECodeNameRole _Role) const
+	{
+		return (_Token.m_Roles & _Role) != ECodeNameRole::mc_None;
+	}
 }

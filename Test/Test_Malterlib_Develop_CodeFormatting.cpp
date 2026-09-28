@@ -28,6 +28,89 @@ namespace
 		;
 	}
 
+	// The naming Malterlib/Core/.malterlib-format gives, which the golden cases are written in.
+	TCSharedPointer<CCodeFormattingNaming const> fg_MalterlibNaming()
+	{
+		static TCSharedPointer<CCodeFormattingNaming const> s_pNaming = []
+			{
+				CCodeFormattingNaming Naming;
+				Naming.f_Apply
+					(
+						CCodeFormattingNamingDocument::fs_Parse
+						(
+							"Version: 1\n"
+							"FunctionNames:\n"
+							"  - 'f_.*'\n"
+							"  - 'fp_.*'\n"
+							"  - 'fs_.*'\n"
+							"  - 'fsp_.*'\n"
+							"  - 'fg_.*'\n"
+							"  - 'fsg_.*'\n"
+							"TypeNames:\n"
+							"  - 'C[A-Z].*'\n"
+							"  - 'TC[A-Z].*'\n"
+							"  - 'IC[A-Z].*'\n"
+							"  - 'TIC[A-Z].*'\n"
+							"  - 'E[A-Z].*'\n"
+							"  - 'F[A-Z].*'\n"
+							"  - 'int8'\n"
+							"  - 'int16'\n"
+							"  - 'int32'\n"
+							"  - 'int64'\n"
+							"  - 'uint8'\n"
+							"  - 'uint16'\n"
+							"  - 'uint32'\n"
+							"  - 'uint64'\n"
+							"  - 'aint'\n"
+							"  - 'umint'\n"
+							"  - 'smint'\n"
+							"  - 'mint'\n"
+							"  - 'fp32'\n"
+							"  - 'fp64'\n"
+							"  - 'ch8'\n"
+							"  - 'ch16'\n"
+							"  - 'ch32'\n"
+							"  - 'uch8'\n"
+							"  - 'uch16'\n"
+							"  - 'uch32'\n"
+							"  - 'usize'\n"
+							"  - 'ssize'\n"
+							"MacroNames:\n"
+							"  - 'D[A-Z].*'\n"
+							"SpecifierMacros:\n"
+							"  - 'inline_always'\n"
+							"  - 'inline_always_debug'\n"
+							"  - 'inline_always_lto'\n"
+							"  - 'inline_never'\n"
+							"  - 'inline_never_debug'\n"
+							"  - 'inline_never_coro_exception_workaround'\n"
+							"  - 'inline_small'\n"
+							"  - 'inline_medium'\n"
+							"  - 'inline_large'\n"
+							"  - 'inline_extralarge'\n"
+							"  - 'mark_nodebug'\n"
+							"  - 'mark_artificial'\n"
+							"  - 'mark_no_coroutine_debug'\n"
+							"  - 'mark_no_stack_protector'\n"
+							"  - 'assure_used'\n"
+							"  - 'function_does_not_return'\n"
+							"  - 'malloc_like'\n"
+							"  - 'only_parameters_aliased'\n"
+							"  - 'return_not_aliased'\n"
+							"DSLMarkers:\n"
+							"  - '_[a-z]*'\n"
+						)
+					)
+				;
+
+				return TCSharedPointer<CCodeFormattingNaming const>(fg_Construct(fg_Move(Naming)));
+			}
+			()
+		;
+
+		return s_pNaming;
+	}
+
 	CCodeFormattingRequest fg_Request(CStr const &_Source)
 	{
 		CCodeFormattingRequest Request;
@@ -35,6 +118,7 @@ namespace
 		Request.m_Path = "Source/Example.cpp";
 		Request.m_Language = ECodeLanguage::mc_Cpp;
 		Request.m_Settings = CCodeFormattingSettings(fg_MalterlibProperties());
+		Request.m_pNaming = fg_MalterlibNaming();
 
 		return Request;
 	}
@@ -199,6 +283,122 @@ namespace
 				};
 			};
 
+			DMibTestSuite("Naming")
+			{
+				auto fNaming = [](CStr const &_Yaml)
+					{
+						CCodeFormattingNaming Naming;
+						Naming.f_Apply(CCodeFormattingNamingDocument::fs_Parse(_Yaml));
+
+						return Naming;
+					}
+				;
+
+				auto fRoles = [](CCodeFormattingNaming const &_Naming, CStr const &_Name)
+					{
+						return _Naming.f_GetRoles(_Name.f_GetStr(), _Name.f_GetLen());
+					}
+				;
+
+				DMibTestCategory("Roles")
+				{
+					auto const &Naming = *fg_MalterlibNaming();
+					DMibExpectTrue(fRoles(Naming, "f_Get") == ECodeNameRole::mc_Function);
+					DMibExpectTrue(fRoles(Naming, "fsg_Hash") == ECodeNameRole::mc_Function);
+					DMibExpectTrue(fRoles(Naming, "CStr") == ECodeNameRole::mc_Type);
+					DMibExpectTrue(fRoles(Naming, "TCVector") == ECodeNameRole::mc_Type);
+					DMibExpectTrue(fRoles(Naming, "umint") == ECodeNameRole::mc_Type);
+					DMibExpectTrue(fRoles(Naming, "DMibCheck") == ECodeNameRole::mc_Macro);
+					DMibExpectTrue(fRoles(Naming, "inline_small") == ECodeNameRole::mc_SpecifierMacro);
+					DMibExpectTrue(fRoles(Naming, "_j") == ECodeNameRole::mc_DSLMarker);
+					DMibExpectTrue(fRoles(Naming, "_") == ECodeNameRole::mc_DSLMarker);
+					DMibExpectTrue(fRoles(Naming, "Count") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "C") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "Ca") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "umint2") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "_J") == ECodeNameRole::mc_None);
+				};
+
+				DMibTestCategory("Patterns")
+				{
+					auto Naming = fNaming
+						(
+							"Version: 1\n"
+							"FunctionNames: ['x[0-9]*y', 'a.c', '[_a-c]*z']\n"
+							"TypeNames: ['xy', 'Both']\n"
+							"MacroNames: ['Both']\n"
+						)
+					;
+					DMibExpectTrue(fRoles(Naming, "xy") == (ECodeNameRole::mc_Function | ECodeNameRole::mc_Type));
+					DMibExpectTrue(fRoles(Naming, "x012y") == ECodeNameRole::mc_Function);
+					DMibExpectTrue(fRoles(Naming, "x0a2y") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "x1") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "abc") == ECodeNameRole::mc_Function);
+					DMibExpectTrue(fRoles(Naming, "abbc") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "z") == ECodeNameRole::mc_Function);
+					DMibExpectTrue(fRoles(Naming, "_cabz") == ECodeNameRole::mc_Function);
+					DMibExpectTrue(fRoles(Naming, "_dz") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "Both") == (ECodeNameRole::mc_Type | ECodeNameRole::mc_Macro));
+				};
+
+				DMibTestCategory("Extends")
+				{
+					CCodeFormattingNaming Naming = *fg_MalterlibNaming();
+					auto Document = CCodeFormattingNamingDocument::fs_Parse("Version: 1\nExtends: ../Core/.malterlib-format\nTypeNames: ['Foo']\nMacroNames: []\n");
+					DMibExpect(Document.m_Extends, ==, "../Core/.malterlib-format");
+					Naming.f_Apply(Document);
+
+					DMibExpectTrue(fRoles(Naming, "Foo") == ECodeNameRole::mc_Type);
+					DMibExpectTrue(fRoles(Naming, "CStr") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "DMibCheck") == ECodeNameRole::mc_None);
+					DMibExpectTrue(fRoles(Naming, "f_Get") == ECodeNameRole::mc_Function);
+					DMibExpectTrue(fRoles(Naming, "inline_small") == ECodeNameRole::mc_SpecifierMacro);
+				};
+
+				DMibTestCategory("Invalid")
+				{
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("FunctionNames: ['f_.*']\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 2\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nFunctionName: ['f_.*']\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nFunctionNames: 'f_.*'\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nFunctionNames: [1]\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("Version: 1\nExtends: ''\n"), NException::CException);
+					DMibExpectExceptionType(CCodeFormattingNamingDocument::fs_Parse("- 1\n"), NException::CException);
+					DMibExpectExceptionType(fNaming("Version: 1\nFunctionNames: ['f_[a-z']\n"), NException::CException);
+					DMibExpectExceptionType(fNaming("Version: 1\nFunctionNames: ['f_[]']\n"), NException::CException);
+					DMibExpectExceptionType(fNaming("Version: 1\nFunctionNames: ['*f']\n"), NException::CException);
+					DMibExpectExceptionType(fNaming("Version: 1\nFunctionNames: ['f**']\n"), NException::CException);
+				};
+
+				DMibTestCategory("Tokens")
+				{
+					CStr Source = "fg_Call(CStr, Count);";
+					CCodeTokenStream Named(Source, fg_MalterlibNaming().f_Get());
+					CCodeTokenStream Plain(Source);
+					auto const &NamedTokens = Named.f_GetTokens();
+					auto const &PlainTokens = Plain.f_GetTokens();
+					DMibAssertTrue(NamedTokens.f_GetLen() > 5);
+					DMibExpectTrue(Named.f_HasRole(NamedTokens[0], ECodeNameRole::mc_Function));
+					DMibExpectTrue(Named.f_HasRole(NamedTokens[2], ECodeNameRole::mc_Type));
+					DMibExpectFalse(Named.f_HasRole(NamedTokens[5], ECodeNameRole::mc_Type));
+					DMibExpectFalse(Plain.f_HasRole(PlainTokens[0], ECodeNameRole::mc_Function));
+					DMibExpectFalse(Plain.f_HasRole(PlainTokens[2], ECodeNameRole::mc_Type));
+				};
+
+				DMibTestCategory("Unnamed")
+				{
+					// Without a naming, a macro standing where 'inline' does is a word like any other, so no specifier moves past it.
+					CStr Source = "constexpr inline_small static int gc_Value = 1;\n";
+					auto Request = fg_Request(Source);
+					DMibExpect(fg_ApplyCodeFormattingEdits(Source, fg_AnalyzeCodeFormatting(Request).m_Edits), ==, "static constexpr inline_small int gc_Value = 1;\n");
+
+					Request.m_pNaming = nullptr;
+					auto Result = fg_AnalyzeCodeFormatting(Request);
+					DMibExpectTrue(Result.m_Status == ECodeFormattingStatus::mc_Complete);
+					DMibExpect(fg_ApplyCodeFormattingEdits(Source, Result.m_Edits), ==, Source);
+				};
+			};
+
 			DMibTestSuite("Rules")
 			{
 				DMibTestCategory("Indentation")
@@ -282,9 +482,9 @@ namespace
 						(
 							"OperatorName"
 							, "struct C\n{\n\tbool operator==(C const &_Other) const;\n\tint operator() (int _A);\n\tint operator [](umint _i);\n"
-								"\toperator NStr::CStr() const;\n\tusing CBase::operator=;\n};\n"
+							"\toperator NStr::CStr() const;\n\tusing CBase::operator=;\n};\n"
 							, "struct C\n{\n\tbool operator == (C const &_Other) const;\n\tint operator () (int _A);\n\tint operator [] (umint _i);\n"
-								"\toperator NStr::CStr () const;\n\tusing CBase::operator =;\n};\n"
+							"\toperator NStr::CStr () const;\n\tusing CBase::operator =;\n};\n"
 						)
 					;
 					// A pointer to function's declarator is followed by its parameter list and
@@ -330,9 +530,9 @@ namespace
 						(
 							"TemplatedCall"
 							, "constexpr auto gc_A = TCFoo<::NMib::fg_GetHash<t_pMember> (t_Hash)>::mc_Value;\nTCFunctor<TCFuture<void> (int _A)> g_B;\n"
-								"constexpr auto gc_C = TCFoo<CBindOptions(a, b)>::mc_Value;\n"
+							"constexpr auto gc_C = TCFoo<CBindOptions(a, b)>::mc_Value;\n"
 							, "constexpr auto gc_A = TCFoo<::NMib::fg_GetHash<t_pMember>(t_Hash)>::mc_Value;\nTCFunctor<TCFuture<void> (int _A)> g_B;\n"
-								"constexpr auto gc_C = TCFoo<CBindOptions(a, b)>::mc_Value;\n"
+							"constexpr auto gc_C = TCFoo<CBindOptions(a, b)>::mc_Value;\n"
 						)
 					;
 					// A cv-qualifier behind a pointer declarator qualifies the pointer and stands
@@ -352,9 +552,9 @@ namespace
 						(
 							"QualifiedCallOperand"
 							, "void f()\n{\n\tNMemory::fg_MemMove(&pA[i], &pB[i], nMove *sizeof(t_CKey));\n\tx = (i*8) / n;\n\tif (b)\n\t\t*this = {};\n}\n"
-								"void NMib::fg_Foo(CFoo *_pA);\n"
+							"void NMib::fg_Foo(CFoo *_pA);\n"
 							, "void f()\n{\n\tNMemory::fg_MemMove(&pA[i], &pB[i], nMove * sizeof(t_CKey));\n\tx = (i * 8) / n;\n\tif (b)\n\t\t*this = {};\n}\n\n"
-								"void NMib::fg_Foo(CFoo *_pA);\n"
+							"void NMib::fg_Foo(CFoo *_pA);\n"
 						)
 					;
 					// A parenthesis holding nothing but fundamental type words is a cast, and a sign
@@ -415,9 +615,9 @@ namespace
 						(
 							"PlacementNew"
 							, "void f()\n{\n\tauto *pA = new\n\t\t(\n\t\t\t_pMemory\n\t\t)\n\t\tNPrivate::TCData<t_C>\n\t\t(\n\t\t\t_A\n#if DSafe\n\t\t\t, _B\n#endif\n\t\t)\n\t;\n"
-								"\tauto *pB = new (_pMemory) CFoo(1);\n}\n"
+							"\tauto *pB = new (_pMemory) CFoo(1);\n}\n"
 							, "void f()\n{\n\tauto *pA = new(_pMemory) NPrivate::TCData<t_C>\n\t\t(\n\t\t\t_A\n#if DSafe\n\t\t\t, _B\n#endif\n\t\t)\n\t;\n"
-								"\tauto *pB = new(_pMemory) CFoo(1);\n}\n"
+							"\tauto *pB = new(_pMemory) CFoo(1);\n}\n"
 						)
 					;
 					// A ref-qualifier declares nothing, so what follows it is the rest of the
@@ -461,9 +661,9 @@ namespace
 						(
 							"Ellipsis"
 							, "template <typename... tp_CParams>\nauto fg_F(NTraits::TCDecay<tp_CParams>  ... p_Params) -> TCFuture<t_CResult>\n{\n"
-								"\tg(fg_Forward<tp_CParams>(p_Params)  ...);\n}\n"
+							"\tg(fg_Forward<tp_CParams>(p_Params)  ...);\n}\n"
 							, "template <typename ...tp_CParams>\nauto fg_F(NTraits::TCDecay<tp_CParams> ...p_Params) -> TCFuture<t_CResult>\n{\n"
-								"\tg(fg_Forward<tp_CParams>(p_Params)...);\n}\n"
+							"\tg(fg_Forward<tp_CParams>(p_Params)...);\n}\n"
 						)
 					;
 					fg_ExpectFormat
@@ -479,9 +679,9 @@ namespace
 						(
 							"EllipsisDeclarator"
 							, "template <typename ...tp_CParams>\nvoid fg_A(tp_CParams &&...p_Params, tp_CParams &&  ...p_Other, tp_CParams &&...);\n"
-								"\nTCTuple<tp_CParams &&...> g_A;\nCStr f_GetPath(tfp_C const &...p_Component) const;\n"
+							"\nTCTuple<tp_CParams &&...> g_A;\nCStr f_GetPath(tfp_C const &...p_Component) const;\n"
 							, "template <typename ...tp_CParams>\nvoid fg_A(tp_CParams && ...p_Params, tp_CParams && ...p_Other, tp_CParams && ...);\n"
-								"\nTCTuple<tp_CParams && ...> g_A;\nCStr f_GetPath(tfp_C const & ...p_Component) const;\n"
+							"\nTCTuple<tp_CParams && ...> g_A;\nCStr f_GetPath(tfp_C const & ...p_Component) const;\n"
 						)
 					;
 					// A lambda's body ends an operand like a closing parenthesis does, so the
@@ -490,9 +690,9 @@ namespace
 						(
 							"OperatorAfterBody"
 							, "void f()\n{\n\tauto [A, B] = co_await\n\t\t(\n\t\t\tg_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 1;\n\t\t\t}\n"
-								"\t\t\t+g_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 2;\n\t\t\t}\n\t\t)\n\t;\n\t{\n\t}\n\t-x;\n}\n"
+							"\t\t\t+g_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 2;\n\t\t\t}\n\t\t)\n\t;\n\t{\n\t}\n\t-x;\n}\n"
 							, "void f()\n{\n\tauto [A, B] = co_await\n\t\t(\n\t\t\tg_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 1;\n\t\t\t}\n"
-								"\t\t\t+ g_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 2;\n\t\t\t}\n\t\t)\n\t;\n\t{\n\t}\n\t-x;\n}\n"
+							"\t\t\t+ g_Dispatch / []\n\t\t\t{\n\t\t\t\treturn 2;\n\t\t\t}\n\t\t)\n\t;\n\t{\n\t}\n\t-x;\n}\n"
 						)
 					;
 					// Behind the call operator's name a '<' can only open a template argument
@@ -556,9 +756,9 @@ namespace
 						(
 							"BitField"
 							, "struct C : CBase\n{\n\tuint8 m_Priority : 2 = 0;\n\tuint8 : 3;\n\tuint32 m_Value:gc_Bits;\n"
-								"\tC(int _A) noexcept\n\t\t: m_A(_A)\n\t{\n\t}\n\n\tint m_A = 1 ? 2 : 3;\n};\n"
+							"\tC(int _A) noexcept\n\t\t: m_A(_A)\n\t{\n\t}\n\n\tint m_A = 1 ? 2 : 3;\n};\n"
 							, "struct C : CBase\n{\n\tuint8 m_Priority:2 = 0;\n\tuint8:3;\n\tuint32 m_Value:gc_Bits;\n"
-								"\tC(int _A) noexcept\n\t\t: m_A(_A)\n\t{\n\t}\n\n\tint m_A = 1 ? 2 : 3;\n};\n"
+							"\tC(int _A) noexcept\n\t\t: m_A(_A)\n\t{\n\t}\n\n\tint m_A = 1 ? 2 : 3;\n};\n"
 						)
 					;
 					// An enumeration's underlying type and a range-for's ':' are spelled apart.
@@ -605,9 +805,9 @@ namespace
 						(
 							"LambdaArrowNoParameters"
 							, "void f()\n{\n\tauto fA = [pA]->TCFuture<void>\n\t\t{\n\t\t\tco_return {};\n\t\t}\n\t;\n\tauto fB = [pA] mutable->int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t;\n"
-								"\tauto fC = [pA] mark_nodebug->int { return 1; };\n\tdelete [] pArray -> m_pData;\n\tx = a[0] -> m_p;\n}\n"
+							"\tauto fC = [pA] mark_nodebug->int { return 1; };\n\tdelete [] pArray -> m_pData;\n\tx = a[0] -> m_p;\n}\n"
 							, "void f()\n{\n\tauto fA = [pA] -> TCFuture<void>\n\t\t{\n\t\t\tco_return {};\n\t\t}\n\t;\n\tauto fB = [pA] mutable -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t;\n"
-								"\tauto fC = [pA] mark_nodebug -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t;\n\tdelete [] pArray->m_pData;\n\tx = a[0]->m_p;\n}\n"
+							"\tauto fC = [pA] mark_nodebug -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t;\n\tdelete [] pArray->m_pData;\n\tx = a[0]->m_p;\n}\n"
 						)
 					;
 					// An operator function's arrow is one too, whatever names it: a keyword an
@@ -647,9 +847,9 @@ namespace
 						(
 							"AfterFunction"
 							, "struct C\n{\n\tbool f_A() const\n\t{\n\t\treturn true;\n\t}\n\tC(int _A)\n\t\t: m_A(_A)\n\t{\n\t} // Comment\n\tint m_A;\n"
-								"\tvoid f_B()\n\t{\n\t}\n};\n"
+							"\tvoid f_B()\n\t{\n\t}\n};\n"
 							, "struct C\n{\n\tbool f_A() const\n\t{\n\t\treturn true;\n\t}\n\n\tC(int _A)\n\t\t: m_A(_A)\n\t{\n\t} // Comment\n\n\tint m_A;\n"
-								"\tvoid f_B()\n\t{\n\t}\n};\n"
+							"\tvoid f_B()\n\t{\n\t}\n};\n"
 						)
 					;
 					CStr AfterFunctionKept = "void f_A()\n{\n}\nDMibImplement(f_A);\n\nvoid f_B()\n{\n}\n#if 1\nint g_A;\n#endif\n\n"
@@ -816,7 +1016,7 @@ namespace
 							"EmptyLambdaBody"
 							, "void f()\n{\n\tfg_X([]{});\n\tint a[3]{};\n\tauto p = new int[3]{};\n\tif (b)\n\t\ty = g_S / [] {};\n}\n"
 							, "void f()\n{\n\tfg_X\n\t\t(\n\t\t\t[]\n\t\t\t{\n\t\t\t}\n\t\t)\n\t;\n\tint a[3]{};\n\tauto p = new int[3]{};\n"
-								"\tif (b)\n\t{\n\t\ty = g_S / []\n\t\t\t{\n\t\t\t}\n\t\t;\n\t}\n}\n"
+							"\tif (b)\n\t{\n\t\ty = g_S / []\n\t\t\t{\n\t\t\t}\n\t\t;\n\t}\n}\n"
 							, false
 						)
 					;
@@ -1032,9 +1232,9 @@ namespace
 						(
 							"AttributeMacro"
 							, "void f()\n{\n\tx =\n\t\t[\n\t\t\tpA\n\t\t] mark_nodebug\n\t\t() mutable -> int\n\t{\n\t\treturn [&] mark_nodebug (int _A) -> int\n\t\t\t{\n"
-								"\t\t\t\treturn _A;\n\t\t\t}\n\t\t\t\t(5)\n\t\t\t;\n\t}\n\t;\n}\n"
+							"\t\t\t\treturn _A;\n\t\t\t}\n\t\t\t\t(5)\n\t\t\t;\n\t}\n\t;\n}\n"
 							, "void f()\n{\n\tx = [pA] mark_nodebug () mutable -> int\n\t\t{\n\t\t\treturn [&] mark_nodebug (int _A) -> int\n\t\t\t\t{\n"
-								"\t\t\t\t\treturn _A;\n\t\t\t\t}\n\t\t\t\t(5)\n\t\t\t;\n\t\t}\n\t;\n}\n"
+							"\t\t\t\t\treturn _A;\n\t\t\t\t}\n\t\t\t\t(5)\n\t\t\t;\n\t\t}\n\t;\n}\n"
 						)
 					;
 					// A statement that opens with its lambda has no expression for the body to
@@ -1057,9 +1257,9 @@ namespace
 						(
 							"AfterOperatorSplit"
 							, CStr("void f()\n{\n\tReturn += g(@) + h(@);\n\t[&]() inline_never\n\t\t{\n\t\t\tg();\n\t\t}\n\t();\n"
-								"\t[[maybe_unused]] auto fA = [&]()\n\t{\n\t\treturn;\n\t}\n\t;\n}\n").f_Replace("@", Wide)
+							"\t[[maybe_unused]] auto fA = [&]()\n\t{\n\t\treturn;\n\t}\n\t;\n}\n").f_Replace("@", Wide)
 							, CStr("void f()\n{\n\tReturn += g(@)\n\t\t+ h(@)\n\t;\n\t[&]() inline_never\n\t{\n\t\tg();\n\t}\n\t();\n"
-								"\t[[maybe_unused]] auto fA = [&]()\n\t\t{\n\t\t\treturn;\n\t\t}\n\t;\n}\n").f_Replace("@", Wide)
+							"\t[[maybe_unused]] auto fA = [&]()\n\t\t{\n\t\t\treturn;\n\t\t}\n\t;\n}\n").f_Replace("@", Wide)
 						)
 					;
 					// With no continuation level for the call to stand at, the terminator ends
@@ -1112,9 +1312,9 @@ namespace
 						(
 							"LambdaBody"
 							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\t\tfor (auto &E : R)\n\t\t\t\t\t{\n"
-								"\t\t\t\t\t\tE.f_Go();\n\t\t\t\t\t\tE.f_Done();\n\t\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							"\t\t\t\t\t\tE.f_Go();\n\t\t\t\t\t\tE.f_Done();\n\t\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
 							, "void f()\n{\n\tg\n\t\t(\n\t\t\t[]() mutable\n\t\t\t{\n\t\t\t\tfor (auto &E : R)\n\t\t\t\t{\n"
-								"\t\t\t\t\tE.f_Go();\n\t\t\t\t\tE.f_Done();\n\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
+							"\t\t\t\t\tE.f_Go();\n\t\t\t\t\tE.f_Done();\n\t\t\t\t}\n\t\t\t}\n\t\t)\n\t;\n}\n"
 						)
 					;
 					// A statement whose own lines are fixed keeps the one it starts too: a
@@ -1278,7 +1478,7 @@ namespace
 						Params += "int _Last";
 						fg_ExpectFormat
 							(
-								"LambdaHeadInInitializer"
+							"LambdaHeadInInitializer"
 								, "CMap g_Map =\n\t{\n\t\tCFoo\n\t\t(\n\t\t\t[](" + Params + ") -> int\n\t\t\t{\n\t\t\t\treturn 1;\n\t\t\t}\n\t\t)\n\t\t, 5\n\t}\n;\n"
 								, "CMap g_Map =\n\t{\n\t\tCFoo\n\t\t(\n\t\t\t[]\n\t\t\t(\n\t\t\t\t" + CStr(Params).f_Replace(", ", "\n\t\t\t\t, ")
 									+ "\n\t\t\t)\n\t\t\t-> int\n\t\t\t{\n\t\t\t\treturn 1;\n\t\t\t}\n\t\t)\n\t\t, 5\n\t}\n;\n"
@@ -1291,10 +1491,10 @@ namespace
 						Captures += "this";
 						fg_ExpectFormat
 							(
-								"CaptureBelowOperatorInInitializer"
+							"CaptureBelowOperatorInInitializer"
 								, "void f()\n{\n\tco_return CFoo\n\t\t{\n\t\t\tg_ActorSubscription(Actor) / [" + Captures + "]() mutable\n\t\t\t{\n\t\t\t}\n\t\t\t, 5\n\t\t}\n\t;\n}\n"
 								, "void f()\n{\n\tco_return CFoo\n\t\t{\n\t\t\tg_ActorSubscription(Actor) /\n\t\t\t\t[" + Captures + "]() mutable\n"
-									"\t\t\t{\n\t\t\t}\n\t\t\t, 5\n\t\t}\n\t;\n}\n"
+								"\t\t\t{\n\t\t\t}\n\t\t\t, 5\n\t\t}\n\t;\n}\n"
 							)
 						;
 					}
@@ -1384,9 +1584,9 @@ namespace
 						(
 							"LeadingParenOperator"
 							, "void f()\n{\n\t(\n\t\tg_D / [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t)\n\t\t> g_Discard;\n"
-								"\tfg_X\n\t\t(\n\t\t\tg_D / [&]\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t)\n\t\t\t> g_Discard;\n}\n"
+							"\tfg_X\n\t\t(\n\t\t\tg_D / [&]\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t)\n\t\t\t> g_Discard;\n}\n"
 							, "void f()\n{\n\t(\n\t\tg_D / [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t)\n\t> g_Discard;\n"
-								"\tfg_X\n\t\t(\n\t\t\tg_D / [&]\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t)\n\t\t> g_Discard\n\t;\n}\n"
+							"\tfg_X\n\t\t(\n\t\t\tg_D / [&]\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t)\n\t\t> g_Discard\n\t;\n}\n"
 						)
 					;
 					// A statement split at the parenthesis it opens with has no continuation
@@ -1396,9 +1596,9 @@ namespace
 						(
 							"LeadingParen"
 							, "void f()\n{\n\t(\n\t\tg_Dispatch / []() -> int\n\t\t{\n\t\t\treturn 0;\n\t\t}\n\t)\n\t.f_CallSync()\n\t;\n"
-								"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
+							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 							, "void f()\n{\n\t(\n\t\tg_Dispatch / []() -> int\n\t\t{\n\t\t\treturn 0;\n\t\t}\n\t)\n\t.f_CallSync();\n"
-								"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
+							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
 					// A line comment ends the line it stands on, so what stands behind it is a
@@ -1515,8 +1715,8 @@ namespace
 							, CStr("void f()\n{\n\tauto Value = a_@ + b_@ + c_@ + d_@;\n\tauto Other = fg_Function(a_@, b_@, c_@) + d_@;\n}\n").f_Replace("@", Name)
 							, CStr
 								(
-									"void f()\n{\n\tauto Value\n\t\t= a_@\n\t\t+ b_@\n\t\t+ c_@\n\t\t+ d_@\n\t;\n"
-									"\tauto Other = fg_Function\n\t\t(\n\t\t\ta_@\n\t\t\t, b_@\n\t\t\t, c_@\n\t\t)\n\t\t+ d_@\n\t;\n}\n"
+								"void f()\n{\n\tauto Value\n\t\t= a_@\n\t\t+ b_@\n\t\t+ c_@\n\t\t+ d_@\n\t;\n"
+								"\tauto Other = fg_Function\n\t\t(\n\t\t\ta_@\n\t\t\t, b_@\n\t\t\t, c_@\n\t\t)\n\t\t+ d_@\n\t;\n}\n"
 								)
 								.f_Replace("@", Name)
 						)
@@ -1537,8 +1737,8 @@ namespace
 							, CStr("void f()\n{\n\tTCPointer<TCData<t_C>> pData = fg_Consume<t_C, a_@ | b_@ | c_Flag>(_A, _B);\n\tauto Value_@_@ = Other_@_@;\n}\n").f_Replace("@", Name)
 							, CStr
 								(
-									"void f()\n{\n\tTCPointer<TCData<t_C>> pData = fg_Consume<t_C, a_@ | b_@ | c_Flag>\n\t\t(\n\t\t\t_A\n\t\t\t, _B\n\t\t)\n\t;\n"
-									"\tauto Value_@_@\n\t\t= Other_@_@\n\t;\n}\n"
+								"void f()\n{\n\tTCPointer<TCData<t_C>> pData = fg_Consume<t_C, a_@ | b_@ | c_Flag>\n\t\t(\n\t\t\t_A\n\t\t\t, _B\n\t\t)\n\t;\n"
+								"\tauto Value_@_@\n\t\t= Other_@_@\n\t;\n}\n"
 								)
 								.f_Replace("@", Name)
 						)
@@ -1572,14 +1772,14 @@ namespace
 							"NamedCast"
 							, CStr
 								(
-									"void f()\n{\n\treturn reinterpret_cast<CCall>\n\t\t(\n\t\t\t_Actor\n\t\t)\n"
-									"\t\t.template f_Bind<&C::f_A_@, &C::f_B_@>(fg_Forward<tf_F>(_f), a_@);\n}\n"
+								"void f()\n{\n\treturn reinterpret_cast<CCall>\n\t\t(\n\t\t\t_Actor\n\t\t)\n"
+								"\t\t.template f_Bind<&C::f_A_@, &C::f_B_@>(fg_Forward<tf_F>(_f), a_@);\n}\n"
 								)
 								.f_Replace("@", Name)
 							, CStr
 								(
-									"void f()\n{\n\treturn reinterpret_cast<CCall>(_Actor).template f_Bind\n\t\t<\n\t\t\t&C::f_A_@\n\t\t\t, &C::f_B_@\n\t\t>\n"
-									"\t\t(fg_Forward<tf_F>(_f), a_@)\n\t;\n}\n"
+								"void f()\n{\n\treturn reinterpret_cast<CCall>(_Actor).template f_Bind\n\t\t<\n\t\t\t&C::f_A_@\n\t\t\t, &C::f_B_@\n\t\t>\n"
+								"\t\t(fg_Forward<tf_F>(_f), a_@)\n\t;\n}\n"
 								)
 								.f_Replace("@", Name)
 						)
@@ -1598,8 +1798,8 @@ namespace
 							, CStr("void f()\n{\n\tint x =\n\t\t(\n\t\t\t#\n\t\t\t+ #\n\t\t)\n\t;\n}\n").f_Replace("#", Element)
 							, CStr
 								(
-									"void f()\n{\n\tint x =\n\t\t(\n\t\t\t(\n\t\t\t\t@\n\t\t\t\t+ @\n\t\t\t)\n"
-									"\t\t\t+\n\t\t\t(\n\t\t\t\t@\n\t\t\t\t+ @\n\t\t\t)\n\t\t)\n\t;\n}\n"
+								"void f()\n{\n\tint x =\n\t\t(\n\t\t\t(\n\t\t\t\t@\n\t\t\t\t+ @\n\t\t\t)\n"
+								"\t\t\t+\n\t\t\t(\n\t\t\t\t@\n\t\t\t\t+ @\n\t\t\t)\n\t\t)\n\t;\n}\n"
 								)
 								.f_Replace("@", Half)
 						)
@@ -1691,7 +1891,7 @@ namespace
 							"Conditional"
 							, "void f()\n{\n\tauto Value = bFlag ? (@).f_Get() : (@).f_Get();\n\tg(a, bFlag ? (@).f_Get() : (@).f_Get());\n}\n"
 							, "void f()\n{\n\tauto Value\n\t\t= bFlag\n\t\t? (@).f_Get()\n\t\t: (@).f_Get()\n\t;\n"
-								"\tg\n\t\t(\n\t\t\ta\n\t\t\t, bFlag\n\t\t\t? (@).f_Get()\n\t\t\t: (@).f_Get()\n\t\t)\n\t;\n}\n"
+							"\tg\n\t\t(\n\t\t\ta\n\t\t\t, bFlag\n\t\t\t? (@).f_Get()\n\t\t\t: (@).f_Get()\n\t\t)\n\t;\n}\n"
 						)
 					;
 					// A parenthesised operand stands apart from the '?' and ':' like any other,
@@ -1761,7 +1961,7 @@ namespace
 							"OperatorAfterSharedCloser"
 							, "void f()\n{\n\tauto R = Left.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Start, Mid) + Right.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Mid, End);\n}\n"
 							, "void f()\n{\n\tauto R\n\t\t= Left.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Start, Mid)\n"
-								"\t\t+ Right.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Mid, End)\n\t;\n}\n"
+							"\t\t+ Right.f_Bind<&C::f_D<TCFuture<uint32>, @>>(_f, Mid, End)\n\t;\n}\n"
 						)
 					;
 					// An explicit instantiation moves its return type like any declaration: a
@@ -1921,7 +2121,7 @@ namespace
 							"OpenedParameters"
 							, (Head + "[this]" + LongParams + " -> TCFuture<void>" + Body).f_Replace("@", Filler)
 							, (Head + "[this]\n\t\t(\n\t\t\tNWeb::EWebSocketStatus _ReasonForTheClosure\n\t\t\t, NStr::CStr _Message@\n\t\t\t, NWeb::EWebSocketCloseOrigin _Origin@\n\t\t)"
-								"\n\t\t-> TCFuture<void>" + Body).f_Replace("@", Filler)
+							"\n\t\t-> TCFuture<void>" + Body).f_Replace("@", Filler)
 						)
 					;
 					// Only a capture list too long for the operator's line goes below it, opened.
@@ -1931,7 +2131,7 @@ namespace
 							"OpenedCaptures"
 							, (Head + LongCaptures + "() -> TCFuture<void>" + Body).f_Replace("@", Filler)
 							, (Split + "[\n\t\t\tthis\n\t\t\t, pConnectionWeak\n\t\t\t, Sequence\n\t\t\t, _bRetry\n\t\t\t, pThis@\n\t\t\t, _Last@\n\t\t]"
-								"\n\t\t() -> TCFuture<void>" + Body).f_Replace("@", Filler)
+							"\n\t\t() -> TCFuture<void>" + Body).f_Replace("@", Filler)
 						)
 					;
 					// A directive fixes the capture list's lines, and the parameter list behind
@@ -2124,7 +2324,7 @@ namespace
 						CStr Type = "NFunction::TCFunction<void (NFunction::TCFunction<void ()> const &_Functor)>";
 						fg_ExpectFormat
 							(
-								"DefaultArgumentBelow"
+							"DefaultArgumentBelow"
 								, "struct C\n{\n\tstatic C fs_Launch\n\t\t(\n\t\t\tint _Operation\n\t\t\t, " + Type + " const &_fDispatcherWithALongName = " + Type + "()\n\t\t)\n\t;\n};\n"
 								, "struct C\n{\n\tstatic C fs_Launch\n\t\t(\n\t\t\tint _Operation\n\t\t\t, " + Type + " const &_fDispatcherWithALongName\n\t\t\t= " + Type
 									+ "()\n\t\t)\n\t;\n};\n"
@@ -2141,7 +2341,7 @@ namespace
 						// The parenthesis of 'operator new' is its parameter list, not placement arguments.
 						fg_ExpectFormat
 							(
-								"OperatorNewParameters"
+							"OperatorNewParameters"
 								, "void *operator new (" + Params + ")\n{\n}\n"
 								, "void *operator new\n\t(\n\t\t" + Split + "\n\t)\n{\n}\n"
 							)
@@ -2149,7 +2349,7 @@ namespace
 						// The declarations in a linkage specification's braces are laid out as any others.
 						fg_ExpectFormat
 							(
-								"LinkageSpecification"
+							"LinkageSpecification"
 								, "extern \"C\"\n{\n\tvoid fg_Function(" + Params + ")\n\t{\n\t}\n}\n"
 								, "extern \"C\"\n{\n\tvoid fg_Function\n\t\t(\n\t\t\t" + CStr(Params).f_Replace(", ", "\n\t\t\t, ") + "\n\t\t)\n\t{\n\t}\n}\n"
 							)
@@ -2158,7 +2358,7 @@ namespace
 						// and the declaration is laid out as one that ends there.
 						fg_ExpectFormat
 							(
-								"TrailingRequiresClause"
+							"TrailingRequiresClause"
 								, "template <typename t_C>\nvoid fg_Function(" + Params + ")\n\trequires (cFoo<t_C>)\n{\n}\n"
 								, "template <typename t_C>\nvoid fg_Function\n\t(\n\t\t" + Split + "\n\t)\n\trequires (cFoo<t_C>)\n{\n}\n"
 							)
@@ -2173,17 +2373,17 @@ namespace
 
 						fg_ExpectFormat
 							(
-								"OperatorTrailingReturn"
+							"OperatorTrailingReturn"
 								, CStr
 									(
-										"mark_artificial mark_nodebug inline_always NFunction::TCBoundFunctor@<t_CMemberPtr, t_CType *> "
-										"TCReference@<t_CType>::operator ->* (t_CMemberPtr const &_MemberPtr) const\n{\n}\n"
+									"mark_artificial mark_nodebug inline_always NFunction::TCBoundFunctor@<t_CMemberPtr, t_CType *> "
+									"TCReference@<t_CType>::operator ->* (t_CMemberPtr const &_MemberPtr) const\n{\n}\n"
 									)
 									.f_Replace("@", Name)
 								, CStr
 									(
-										"mark_artificial mark_nodebug inline_always auto TCReference@<t_CType>::operator ->* (t_CMemberPtr const &_MemberPtr) const\n"
-										"\t-> NFunction::TCBoundFunctor@<t_CMemberPtr, t_CType *>\n{\n}\n"
+									"mark_artificial mark_nodebug inline_always auto TCReference@<t_CType>::operator ->* (t_CMemberPtr const &_MemberPtr) const\n"
+									"\t-> NFunction::TCBoundFunctor@<t_CMemberPtr, t_CType *>\n{\n}\n"
 									)
 									.f_Replace("@", Name)
 								, false
@@ -2199,7 +2399,7 @@ namespace
 
 						fg_ExpectFormat
 							(
-								"MacroKeepsPlace"
+							"MacroKeepsPlace"
 								, CStr("DMibConstexpr int TCFoo<t_CA@, t_CB@>::CInner::f_Get(TCFoo const &_Source)\n{\n}\n").f_Replace("@", Name)
 								, CStr("DMibConstexpr int TCFoo<t_CA@, t_CB@>::CInner::f_Get\n\t(\n\t\tTCFoo const &_Source\n\t)\n{\n}\n").f_Replace("@", Name)
 							)
@@ -2211,9 +2411,9 @@ namespace
 						(
 							"ConstructedVariable"
 							, "void f()\n{\n\tTCSet<int, CCompare, CDiffAllocator> Testing(CAllocatorConstructTag(), CCompareConstructTag(), "
-								"fg_Construct(&MemoryManagerWithAMuchLongerName), fg_Construct(CCompare{.m_bReverse = true}));\n}\n"
+							"fg_Construct(&MemoryManagerWithAMuchLongerName), fg_Construct(CCompare{.m_bReverse = true}));\n}\n"
 							, "void f()\n{\n\tTCSet<int, CCompare, CDiffAllocator> Testing\n\t\t(\n\t\t\tCAllocatorConstructTag()\n\t\t\t, CCompareConstructTag()\n"
-								"\t\t\t, fg_Construct(&MemoryManagerWithAMuchLongerName)\n\t\t\t, fg_Construct(CCompare{.m_bReverse = true})\n\t\t)\n\t;\n}\n"
+							"\t\t\t, fg_Construct(&MemoryManagerWithAMuchLongerName)\n\t\t\t, fg_Construct(CCompare{.m_bReverse = true})\n\t\t)\n\t;\n}\n"
 						)
 					;
 					// A requires clause behind a header keeps its line, and so does a member template's
@@ -2234,7 +2434,7 @@ namespace
 
 						fg_ExpectFormat
 							(
-								"LongHeader"
+							"LongHeader"
 								, CStr("template <typename t_CFirst@, typename t_CSecond@, template <umint t_n> class t_TCThird@>\nstruct TCFoo;\n").f_Replace("@", Name)
 								, CStr("template\n<\n\ttypename t_CFirst@\n\t, typename t_CSecond@\n\t, template <umint t_n> class t_TCThird@\n>\nstruct TCFoo;\n")
 									.f_Replace("@", Name)
@@ -2251,7 +2451,7 @@ namespace
 
 						fg_ExpectFormat
 							(
-								"SpecifiersCounted"
+							"SpecifiersCounted"
 								, CStr("template <typename t_C>\ninline_small void TCFoo<t_C>::f_@(t_C &&_Functor, umint _Start) const\n{\n}\n").f_Replace("@", Name)
 								, CStr("template <typename t_C>\ninline_small void TCFoo<t_C>::f_@\n\t(\n\t\tt_C &&_Functor\n\t\t, umint _Start\n\t)\n\tconst\n{\n}\n").f_Replace("@", Name)
 							)
@@ -2412,7 +2612,7 @@ namespace
 							"SpacedWidth"
 							, "void f()\n{\n\tif (a)\n\t\tfg_Call(@, @, WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW-1);\n}\n"
 							, "void f()\n{\n\tif (a)\n\t{\n\t\tfg_Call\n\t\t\t(\n\t\t\t\t@\n\t\t\t\t, @\n"
-								"\t\t\t\t, WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW - 1\n\t\t\t)\n\t\t;\n\t}\n}\n"
+							"\t\t\t\t, WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW - 1\n\t\t\t)\n\t\t;\n\t}\n}\n"
 							, false
 						)
 					;
@@ -2442,17 +2642,17 @@ namespace
 						(
 							"TreeCorrections"
 							, "struct C\n{\n\tauto operator = (C &&) noexcept(false)->C & = default;\n"
-								"\tvoid * (DMibCrossmoduleAPI * m_fFree)(void * _pMemory, umint _Size);\n"
-								"\tinline_always static void *DMibCrossmoduleAPI fs_Alloc(CMemoryManagerCrossModule *_pModule, umint &_Size, ch8 const *_pFile, aint _Line, "
-								"EHeapDebugFlag _Flags, EAllocationFlag _AllocFlags, ENumaNode _NumaNode);\n"
-								"};\nvoid f()\n{\n\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint) - 16324 + (smint)-1 + sizeof(void *)*4;\n"
-								"\tDMibTestSuite(\"Level {}\"_f << nLevel)->TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n}\n"
+							"\tvoid * (DMibCrossmoduleAPI * m_fFree)(void * _pMemory, umint _Size);\n"
+							"\tinline_always static void *DMibCrossmoduleAPI fs_Alloc(CMemoryManagerCrossModule *_pModule, umint &_Size, ch8 const *_pFile, aint _Line, "
+							"EHeapDebugFlag _Flags, EAllocationFlag _AllocFlags, ENumaNode _NumaNode);\n"
+							"};\nvoid f()\n{\n\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint) - 16324 + (smint)-1 + sizeof(void *)*4;\n"
+							"\tDMibTestSuite(\"Level {}\"_f << nLevel)->TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n}\n"
 							, "struct C\n{\n\tauto operator = (C &&) noexcept(false) -> C & = default;\n"
-								"\tvoid * (DMibCrossmoduleAPI * m_fFree)(void * _pMemory, umint _Size);\n\tinline_always static void * DMibCrossmoduleAPI fs_Alloc\n\t\t(\n"
-								"\t\t\tCMemoryManagerCrossModule *_pModule\n\t\t\t, umint &_Size\n\t\t\t, ch8 const *_pFile\n\t\t\t, aint _Line\n"
-								"\t\t\t, EHeapDebugFlag _Flags\n\t\t\t, EAllocationFlag _AllocFlags\n\t\t\t, ENumaNode _NumaNode\n\t\t)\n\t;\n};\nvoid f()\n{\n"
-								"\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint)-16324 + (smint)-1 + sizeof(void *) * 4;\n"
-								"\tDMibTestSuite(\"Level {}\"_f << nLevel) -> TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n}\n"
+							"\tvoid * (DMibCrossmoduleAPI * m_fFree)(void * _pMemory, umint _Size);\n\tinline_always static void * DMibCrossmoduleAPI fs_Alloc\n\t\t(\n"
+							"\t\t\tCMemoryManagerCrossModule *_pModule\n\t\t\t, umint &_Size\n\t\t\t, ch8 const *_pFile\n\t\t\t, aint _Line\n"
+							"\t\t\t, EHeapDebugFlag _Flags\n\t\t\t, EAllocationFlag _AllocFlags\n\t\t\t, ENumaNode _NumaNode\n\t\t)\n\t;\n};\nvoid f()\n{\n"
+							"\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint)-16324 + (smint)-1 + sizeof(void *) * 4;\n"
+							"\tDMibTestSuite(\"Level {}\"_f << nLevel) -> TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n}\n"
 							, false
 						)
 					;
@@ -2468,11 +2668,11 @@ namespace
 						(
 							"VariableCommentAttribute"
 							, "void f()\n{\n\tTCUniquePointer<CTestCopyMove> TestMove10(fg_Construct(@, @, CCopyMove()));\n"
-								"\tif(DuplicateHandle(@, @, GetCurrentProcess()))\n\t{\n\t\tg();\n\t}\n"
-								"\t/*CResult &Result =*/ mp_Results.f_Insert(_Measure);\n\tif (bFlag) [[unlikely]]\n\t{\n\t\tif (a)\n\t\t{\n\t\t\tb();\n\t\t}\n\t\telse\n\t\t\tc();\n\t}\n}\n"
+							"\tif(DuplicateHandle(@, @, GetCurrentProcess()))\n\t{\n\t\tg();\n\t}\n"
+							"\t/*CResult &Result =*/ mp_Results.f_Insert(_Measure);\n\tif (bFlag) [[unlikely]]\n\t{\n\t\tif (a)\n\t\t{\n\t\t\tb();\n\t\t}\n\t\telse\n\t\t\tc();\n\t}\n}\n"
 							, "void f()\n{\n\tTCUniquePointer<CTestCopyMove> TestMove10\n\t\t(\n\t\t\tfg_Construct(@, @, CCopyMove())\n\t\t)\n\t;\n"
-								"\tif (DuplicateHandle(@, @, GetCurrentProcess()))\n\t\tg();\n"
-								"\t/*CResult &Result =*/ mp_Results.f_Insert(_Measure);\n\tif (bFlag) [[unlikely]]\n\t{\n\t\tif (a)\n\t\t\tb();\n\t\telse\n\t\t\tc();\n\t}\n}\n"
+							"\tif (DuplicateHandle(@, @, GetCurrentProcess()))\n\t\tg();\n"
+							"\t/*CResult &Result =*/ mp_Results.f_Insert(_Measure);\n\tif (bFlag) [[unlikely]]\n\t{\n\t\tif (a)\n\t\t\tb();\n\t\telse\n\t\t\tc();\n\t}\n}\n"
 							, false
 						)
 					;

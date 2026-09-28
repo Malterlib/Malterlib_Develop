@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "Malterlib_Develop_CodeFormattingLexer.h"
+#include "Malterlib_Develop_CodeFormattingNaming.h"
 
 namespace NMib::NDevelop
 {
@@ -336,10 +337,20 @@ namespace NMib::NDevelop
 		return m_iOffset + m_nLength;
 	}
 
-	CCodeTokenStream::CCodeTokenStream(CStr const &_Source)
+	CCodeTokenStream::CCodeTokenStream(CStr const &_Source, CCodeFormattingNaming const *_pNaming)
 		: mp_Source(_Source)
 	{
 		fp_Lex();
+		if (!_pNaming)
+			return;
+
+		// Each identifier is looked up once, so the rules test a bit rather than a list.
+		auto pSource = mp_Source.f_GetStr();
+		for (auto &Token : mp_Tokens)
+		{
+			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
+				Token.m_Roles = _pNaming->f_GetRoles(pSource + Token.m_iOffset, Token.m_nLength);
+		}
 	}
 
 	TCVector<CCodeToken> const &CCodeTokenStream::f_GetTokens() const

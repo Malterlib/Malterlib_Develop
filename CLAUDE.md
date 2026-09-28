@@ -89,9 +89,13 @@ unclassified construct keeps its layout, and `fg_GetCanonicalSpacing` returns
 `mc_Preserve` for a pair the standard does not settle, which is what makes a
 relayout refuse rather than guess.
 
-Malterlib's naming is evidence the standard leaves: a file opts in with
-`malterlib_format = malterlib`, so a name carrying a function prefix names a
-function wherever it stands. Read it only where C++ itself settles nothing and
+A project's naming is evidence the standard leaves. It comes from
+`.malterlib-format` (see the documentation's Naming section) as roles the lexer
+gives each identifier, so a name the naming lists as a function's names a
+function wherever it stands. Never hardcode a name or prefix in the engine: ask
+`f_HasRole`, and add a list to the document when a new kind of name is needed.
+Resolving the document is I/O and belongs to MTool, which caches it per
+directory. Read the naming only where C++ itself settles nothing and
 the convention answers on its own, as `fg_NamesCall` does for a parenthesis
 inside a template argument list, which spells a call, a construction and a
 function type alike. A type prefix is weaker evidence than it looks: the same

@@ -1248,25 +1248,10 @@ namespace
 	// here.
 	bool fg_NamesFunction(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
 	{
-		if (_Token.m_Kind != ECodeTokenKind::mc_Identifier)
-			return false;
-
-		constexpr ch8 const *c_pFunctions[] =
-			{
-				"f_", "fp_", "fs_", "fsp_", "fg_", "fsg_"
-			}
-		;
-		for (auto pPrefix : c_pFunctions)
-		{
-			if (_Tokens.f_StartsWith(_Token, pPrefix))
-				return true;
-		}
-
-		return false;
+		return _Tokens.f_HasRole(_Token, ECodeNameRole::mc_Function);
 	}
 
-	// Whether the name is a type's by Malterlib's naming, a type prefix followed by a
-	// capital, or one of the fundamental types and the aliases Malterlib spells them with.
+	// Whether the name is a fundamental type's, or a type's by the project's naming.
 	bool fg_NamesType(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
 	{
 		if (_Token.m_Kind != ECodeTokenKind::mc_Identifier)
@@ -1275,34 +1260,10 @@ namespace
 		constexpr ch8 const *c_pFundamental[] =
 			{
 				"bool", "char", "short", "int", "long", "unsigned", "signed", "float", "double", "void", "wchar_t", "char8_t", "char16_t", "char32_t"
-				, "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "aint", "umint", "smint", "fp32", "fp64"
-				, "ch8", "ch16", "ch32", "uch8", "uch16", "uch32", "usize", "ssize"
 			}
 		;
-		if (fg_IsAnyText(_Tokens, _Token, c_pFundamental))
-			return true;
 
-		auto pText = _Tokens.f_GetTextPointer(_Token);
-		constexpr ch8 const *c_pPrefixes[] =
-			{
-				"C", "TC", "IC", "TIC", "E", "F"
-			}
-		;
-		for (auto pPrefix : c_pPrefixes)
-		{
-			umint nPrefix = 0;
-			while (pPrefix[nPrefix])
-				++nPrefix;
-
-			if (_Token.m_nLength <= nPrefix || !_Tokens.f_StartsWith(_Token, pPrefix))
-				continue;
-
-			auto Behind = pText[nPrefix];
-			if (Behind >= 'A' && Behind <= 'Z')
-				return true;
-		}
-
-		return false;
+		return fg_IsAnyText(_Tokens, _Token, c_pFundamental) || _Tokens.f_HasRole(_Token, ECodeNameRole::mc_Type);
 	}
 
 	// The name a parenthesis stands behind, read through the template argument list it may
@@ -1737,22 +1698,11 @@ namespace
 		return true;
 	}
 
-	// A name spelled as an underscore with nothing but lower case behind it, '_o', '_j' or
-	// '_' itself, is one of Malterlib's DSL markers rather than something declared: a
-	// parameter's underscore is followed by a capital, and nothing else takes one at all.
+	// A DSL marker, '_o', '_j' or '_' in Malterlib's naming, marks a key or an array rather
+	// than naming something declared.
 	bool fg_IsDSLMarker(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
 	{
-		auto pText = _Tokens.f_GetTextPointer(_Token);
-		if (!_Token.m_nLength || pText[0] != '_')
-			return false;
-
-		for (umint i = 1; i < _Token.m_nLength; ++i)
-		{
-			if (pText[i] < 'a' || pText[i] > 'z')
-				return false;
-		}
-
-		return true;
+		return _Tokens.f_HasRole(_Token, ECodeNameRole::mc_DSLMarker);
 	}
 
 	// A closing brace ends an operand where it closes a lambda's body inside an expression:
@@ -1784,9 +1734,7 @@ namespace
 		auto const &Tokens = _Tokens.f_GetTokens();
 		constexpr ch8 const *c_pFundamental[] =
 			{
-				"void", "bool", "char", "short", "int", "long", "unsigned", "signed", "float", "double"
-				, "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "smint", "umint", "aint", "mint"
-				, "fp32", "fp64", "ch8", "ch16", "ch32", "uch8", "uch16", "uch32", "const", "volatile"
+				"void", "bool", "char", "short", "int", "long", "unsigned", "signed", "float", "double", "const", "volatile"
 			}
 		;
 		auto iNode = fg_FindGroupClosingAt(_Structure, _iClose, ECodeBracket::mc_Paren);
@@ -1815,7 +1763,7 @@ namespace
 			if (!fg_IsSignificant(Tokens[i].m_Kind))
 				continue;
 
-			if (!fg_IsAnyText(_Tokens, Tokens[i], c_pFundamental))
+			if (!fg_IsAnyText(_Tokens, Tokens[i], c_pFundamental) && !_Tokens.f_HasRole(Tokens[i], ECodeNameRole::mc_Type))
 				return false;
 
 			bType = true;
@@ -2243,7 +2191,7 @@ namespace NMib::NDevelop
 		if (fg_ClosesParameterList(_Tokens, _Structure, umint(iBefore)))
 			return true;
 
-		// A macro that opens a function, named 'D' and a capital by Malterlib's naming, is
+		// A macro that opens a function, named as a macro by the project's naming, is
 		// followed by the return type and the body the way a parameter list is:
 		// 'DMibTestSuite("Name") -> TCFuture<void> {'. A member access behind a macro's
 		// result, 'DEPTR(p)->m_Value', never reaches a body through a type alone.
@@ -2255,8 +2203,7 @@ namespace NMib::NDevelop
 		if (iName < 0 || Tokens[umint(iName)].m_Kind != ECodeTokenKind::mc_Identifier)
 			return false;
 
-		auto Name = _Tokens.f_GetText(Tokens[umint(iName)]);
-		if (Name.f_GetLen() < 2 || Name.f_GetStr()[0] != 'D' || Name.f_GetStr()[1] < 'A' || Name.f_GetStr()[1] > 'Z')
+		if (!_Tokens.f_HasRole(Tokens[umint(iName)], ECodeNameRole::mc_Macro))
 			return false;
 
 		umint nAngle = 0;
@@ -2559,11 +2506,10 @@ namespace NMib::NDevelop
 				return ECodeSpacing::mc_Preserve;
 		}
 
-		// One of Malterlib's DSL markers hugs what it marks: the '=' that makes a key of the
+		// A DSL marker the naming lists hugs what it marks: the '=' that makes a key of the
 		// literal in front of it, '"Names"_o= 5', and the brackets of an array, '_o[1, 2]'.
 		// A marker with no key in front of it spells an object, and its '=' hugs the brace
-		// as well: '_o={"Key"_o= 5}'. A marker is told from every other name by its shape,
-		// an underscore with nothing but lower case behind it, which no declared name has.
+		// as well: '_o={"Key"_o= 5}'.
 		if (Left.m_Kind == ECodeTokenKind::mc_Identifier && fg_IsDSLMarker(_Tokens, Left) && (fRight("=") || fRight("[")))
 			return ECodeSpacing::mc_None;
 

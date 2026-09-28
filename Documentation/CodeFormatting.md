@@ -49,6 +49,57 @@ supplies a limit, which is how a consumer decides that no validator applies.
 headers are supported, including extensionless public include wrappers. Other
 languages have no syntax backend and are never rewritten.
 
+## Naming
+
+C++ leaves some spellings open that a project's naming settles: whether
+`(Name)` is a cast or a grouping, whether a parenthesis inside a template
+argument list is a call, and which macros stand where `inline` does. The engine
+reads that naming from `CCodeFormattingNaming`, which gives every identifier its
+roles once, when the source is lexed. A request without one reads C++ alone and
+refuses or keeps a layout where only the naming could decide.
+
+`MTool Format` reads it from a YAML file named `.malterlib-format`, the nearest
+one in the file's directory or above. Where there is none, it reads
+`Malterlib/Core/.malterlib-format` from the nearest directory above that holds
+one, and where there is none of those either, it formats without a naming.
+
+```yaml
+Version: 1
+Extends: ../Core/.malterlib-format
+FunctionNames:
+  - 'f_.*'
+TypeNames:
+  - 'C[A-Z].*'
+  - 'umint'
+MacroNames:
+  - 'D[A-Z].*'
+SpecifierMacros:
+  - 'inline_always'
+DSLMarkers:
+  - '_[a-z]*'
+```
+
+| Key | Meaning |
+| --- | --- |
+| `Version` | Required, and `1`. |
+| `Extends` | Another document, relative to this one's directory, applied first. A list this one holds replaces the one it extends; a list it leaves out keeps it. A cycle is an error. |
+| `FunctionNames` | Names of functions. A name among them followed by a parenthesis is a call wherever it stands. |
+| `TypeNames` | Names of types beyond C++'s own. A parenthesis holding only one is a cast. |
+| `MacroNames` | Names of macros, which can expand to anything, so the layout around them is kept rather than read. |
+| `SpecifierMacros` | Macros that stand in front of a declaration the way `inline` does, and are part of a run of specifiers. |
+| `DSLMarkers` | User-defined literal suffixes of a DSL, which hug what they mark. |
+
+An entry is a name, or a pattern anchored at both ends in which `.` is any
+character, `[A-Z0-9_]` a class, and `*` repeats the atom in front of it. A name
+is found by binary search and a pattern is tried only for names whose first
+character it can start with, so a naming costs no measurable time. A key the
+format does not have, a malformed pattern, or a list holding anything but
+strings is an error, since a misspelt key would otherwise leave the list it
+meant to set as the extended document has it.
+
+Malterlib's naming is in `Malterlib/Core/.malterlib-format`, and every other
+module's document holds `Extends: ../Core/.malterlib-format`.
+
 ## Requests and results
 
 ```cpp
@@ -57,6 +108,7 @@ Request.m_Source = Bytes;
 Request.m_Path = "Source/Example.cpp";
 Request.m_Language = NDevelop::fg_DetectCodeLanguage(Request.m_Path);
 Request.m_Settings = NDevelop::CCodeFormattingSettings(Properties);
+Request.m_pNaming = pNaming; // Optional; see Naming.
 
 auto Result = NDevelop::fg_AnalyzeCodeFormatting(Request);
 if (Result.m_Status == NDevelop::ECodeFormattingStatus::mc_Complete)
@@ -150,8 +202,8 @@ before and after, which is all that moving one may change.
 `specifier-order` writes a declaration's specifiers in one order where the
 sources have two, `static` in front of `constexpr`, which is the order two out
 of three declarations in the tree already have. Only what a run of specifiers
-is made of may stand between the two, `constexpr inline_always static` becoming
-`static constexpr inline_always`, with nothing but spaces and line breaks around
+is made of, C++'s specifiers and the naming's `SpecifierMacros`, may stand between
+the two, `constexpr inline_always static` becoming `static constexpr inline_always`, with nothing but spaces and line breaks around
 it; a comment in the run, and a disabled or unselected region, leave it as it
 is. It is made in the same stage as `east-qualifier`, whose proof it shares: the
 source reads the same with the moved words left out, and has as many of each.

@@ -5,9 +5,11 @@
 
 #include "Malterlib_Develop_EditorConfig.h"
 #include "Malterlib_Develop_TextLayout.h"
+#include "Malterlib_Develop_CodeFormattingNaming.h"
 
 #include <Mib/Container/Vector>
 #include <Mib/Storage/Optional>
+#include <Mib/Storage/SharedPointer>
 
 namespace NMib::NDevelop
 {
@@ -69,6 +71,7 @@ namespace NMib::NDevelop
 		CCodeFormattingSettings m_Settings;
 		NContainer::TCVector<CCodeFormattingRange> m_Ranges;		// Empty selects the whole file.
 		ECodeRangePolicy m_RangePolicy = ECodeRangePolicy::mc_Expand;
+		NStorage::TCSharedPointer<CCodeFormattingNaming const> m_pNaming;	// The project's naming; null reads no name as more than C++ does.
 	};
 
 	struct CCodeFormattingEdit

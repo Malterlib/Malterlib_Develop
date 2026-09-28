@@ -26,6 +26,20 @@ namespace NMib::NDevelop
 		, mc_Unknown			// A byte no C++ token can start with.
 	};
 
+	// What a project's naming says an identifier is. The roles come from its
+	// '.malterlib-format', so a token lexed without one has none.
+	enum class ECodeNameRole : uint8
+	{
+		mc_None = 0
+		, mc_Function = DMibBit(0)
+		, mc_Type = DMibBit(1)
+		, mc_Macro = DMibBit(2)
+		, mc_SpecifierMacro = DMibBit(3)
+		, mc_DSLMarker = DMibBit(4)
+	};
+
+	struct CCodeFormattingNaming;
+
 	struct CCodeToken
 	{
 		ECodeTokenKind m_Kind = ECodeTokenKind::mc_Unknown;
@@ -33,6 +47,7 @@ namespace NMib::NDevelop
 		umint m_nLength = 0;
 		bool m_bMultiLine = false;			// Contains a line terminator, so its interior layout is protected.
 		bool m_bUnterminated = false;		// The source ends inside the token.
+		ECodeNameRole m_Roles = ECodeNameRole::mc_None;
 
 		umint f_GetEnd() const;
 	};
@@ -42,7 +57,7 @@ namespace NMib::NDevelop
 	struct CCodeTokenStream
 	{
 		CCodeTokenStream() = default;
-		explicit CCodeTokenStream(NStr::CStr const &_Source);
+		explicit CCodeTokenStream(NStr::CStr const &_Source, CCodeFormattingNaming const *_pNaming = nullptr);
 
 		NContainer::TCVector<CCodeToken> const &f_GetTokens() const;
 
@@ -55,6 +70,7 @@ namespace NMib::NDevelop
 
 		bool f_IsText(CCodeToken const &_Token, NStr::CStr const &_Text) const;
 		bool f_IsText(CCodeToken const &_Token, ch8 const *_pText) const;
+		bool f_HasRole(CCodeToken const &_Token, ECodeNameRole _Role) const;
 		bool f_StartsWith(CCodeToken const &_Token, ch8 const *_pPrefix) const;
 		bool f_HasSameText(CCodeToken const &_Left, CCodeToken const &_Right) const;
 		ch8 const *f_GetTextPointer(CCodeToken const &_Token) const;
