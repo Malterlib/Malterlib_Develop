@@ -2130,6 +2130,17 @@ namespace
 							"\tg\n\t\t(\n\t\t\ta\n\t\t\t, bFlag\n\t\t\t? (@).f_Get()\n\t\t\t: (@).f_Get()\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A conditional groups to the right: one in a branch is a single operand of the
+					// outer one, whole where it fits, and set off a level deeper where it gives.
+					CStr Operand = "(@, Second, Third, Fourth, Fifth, Sixth, Seventh, Eighth, Ninth, Tenth).f_Get()";
+					fSplit
+						(
+							"NestedConditional"
+							, "void f()\n{\n\tauto Value = bFirst ? " + Operand + " : bSecond ? a : b;\n\tauto Other = bFirst ? (@).f_Get() : bSecond ? " + Operand + " : c;\n}\n"
+							, "void f()\n{\n\tauto Value\n\t\t= bFirst\n\t\t? " + Operand + "\n\t\t: bSecond ? a : b\n\t;\n"
+							"\tauto Other\n\t\t= bFirst\n\t\t? (@).f_Get()\n\t\t: bSecond\n\t\t\t? " + Operand + "\n\t\t\t: c\n\t;\n}\n"
+						)
+					;
 					// A parenthesised operand stands apart from the '?' and ':' like any other,
 					// which is what lets a conditional written across lines be joined. A range
 					// with an unsettled gap cannot be measured, and is not broken at its

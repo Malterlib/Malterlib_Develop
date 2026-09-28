@@ -483,7 +483,10 @@ further only while it is still too long:
    long for that line goes below the operator, opened. A
    conditional's `?` and `:` bind loosest of all, so a conditional gives at
    them before either of its operands is opened: the condition, `? a` and
-   `: b` each take a line. A range holding a gap the standard does not settle
+   `: b` each take a line. A conditional groups to the right, so one in a
+   branch, `: c ? d : e`, is a single operand of the outer one: whole where it
+   fits, and where it does not, its `? d` and `: e` stand a level deeper than
+   the `:` in front of it. A range holding a gap the standard does not settle
    has no single-line form to measure, and is left as it stands rather than
    broken at its operators.
 2. A scope standing behind another scope's closing marker, such as a lambda's

@@ -5602,6 +5602,25 @@ namespace
 			if (!nLoosest)
 				return;
 		}
+
+		// A conditional groups to the right, so only the first '?' and the ':' that answers it
+		// are this range's: a conditional in either branch is one operand of the outer one.
+		if (nLoosest != 16 || o_Operators.f_IsEmpty())
+			return;
+
+		umint nOpen = 0;
+		for (umint iOperator = 0; iOperator < o_Operators.f_GetLen(); ++iOperator)
+		{
+			if (m_Tokens.f_IsText(Tokens[o_Operators[iOperator]], "?"))
+				++nOpen;
+			else if (!--nOpen)
+			{
+				TCVector<umint> Outer{o_Operators[0], o_Operators[iOperator]};
+				o_Operators = fg_Move(Outer);
+
+				return;
+			}
+		}
 	}
 
 	// A lambda follows the operator at _iToken when the next thing is a capture list with
@@ -6842,8 +6861,12 @@ namespace
 				umint nJoined = 0;
 				if (fp_MeasureJoinedWidth(iStart, iEnd, nJoined))
 				{
+					// A conditional that is a branch of another binds no tighter than it, and is set
+					// off one level deeper instead: ': b' with its '? c' and ': d' indented under it.
+					bool bNestedConditional = m_Tokens.f_IsText(Tokens[Inner[0]], "?");
+					auto nInnerIndent = bNestedConditional ? nContinuation + nTab : nContinuation;
 					for (auto iInnerOperator : Inner)
-						fp_BreakBefore(iInnerOperator, nContinuation);
+						fp_BreakBefore(iInnerOperator, nInnerIndent);
 
 					for (umint iPart = 0; iPart <= Inner.f_GetLen(); ++iPart)
 					{
@@ -6852,7 +6875,7 @@ namespace
 						if (iPartEnd < iPartStart)
 							continue;
 
-						auto nPartIndent = iPart ? nContinuation : nSegmentIndent;
+						auto nPartIndent = iPart ? nInnerIndent : nSegmentIndent;
 						if (fp_FitsInline(iPartStart, iPartEnd, nPartIndent))
 							fp_MarkInline(iPartStart, iPartEnd);
 						else
