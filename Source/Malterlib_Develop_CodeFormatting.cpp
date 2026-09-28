@@ -6389,7 +6389,7 @@ namespace
 				auto const &Link = Nodes[Scopes[iScope]];
 				auto iInner = fp_NextCode(Link.m_iFirstToken);
 				auto iMember = fp_NextCode(Link.m_iLastToken);
-				bool bOpens = !Link.m_bHasBlock && iInner >= 0 && umint(iInner) != Link.m_iLastToken && Link.m_iFirstToken > iLineFirst;
+				bool bOpens = !Link.m_bHasBlock && iInner >= 0 && umint(iInner) != Link.m_iLastToken && Link.m_iFirstToken >= iLineFirst;
 				bool bMember = iMember >= 0
 					&& umint(iMember) <= _iLast
 					&& (m_Tokens.f_IsText(Tokens[umint(iMember)], ".") || m_Tokens.f_IsText(Tokens[umint(iMember)], "->"))

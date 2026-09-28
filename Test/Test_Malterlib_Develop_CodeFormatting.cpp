@@ -2130,6 +2130,17 @@ namespace
 							"\tg\n\t\t(\n\t\t\ta\n\t\t\t, bFlag\n\t\t\t? (@).f_Get()\n\t\t\t: (@).f_Get()\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// An operand in parentheses with a member access behind it stays whole and gives at
+					// the access, whether it starts the operator chain's first line or follows an operator.
+					CStr Parenthesised = "(@ % SecondOperandWithAVeryLongNameThatMakesTheParenthesisWideEnoughForThisCase).f_Dispatch()";
+					fSplit
+						(
+							"ParenthesisedOperands"
+							, "void f()\n{\n\tx = co_await\n\t\t(\n\t\t\t" + Parenthesised + "\n\t\t\t+ " + Parenthesised + "\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tx = co_await\n\t\t(\n\t\t\t" + Parenthesised.f_Replace(".f_Dispatch", "\n\t\t\t.f_Dispatch")
+							+ "\n\t\t\t+ " + Parenthesised.f_Replace(".f_Dispatch", "\n\t\t\t.f_Dispatch") + "\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// A conditional groups to the right: one in a branch is a single operand of the
 					// outer one, whole where it fits, and set off a level deeper where it gives.
 					CStr Operand = "(@, Second, Third, Fourth, Fifth, Sixth, Seventh, Eighth, Ninth, Tenth).f_Get()";
