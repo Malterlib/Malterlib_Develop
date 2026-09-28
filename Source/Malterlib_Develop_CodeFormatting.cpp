@@ -728,6 +728,7 @@ namespace
 		void fp_EnsureSingleSpace(umint _iToken, bool _bBefore, ch8 const *_pRule, ch8 const *_pExplanation);
 		void fp_RemoveSpaceBefore(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation);
 		void fp_RemoveFollowingBlankLines(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation);
+		void fp_AlignCommentContinuations();
 		bool fp_PrepareBuildSystemLines(CStr &o_Explanation);
 		void fp_RuleBuildSystemIndentation();
 		void fp_RuleBuildSystemBlankLines();
@@ -1593,6 +1594,85 @@ namespace
 			else if (Spacing == ECodeSpacing::mc_None)
 				fp_RemoveSpaceBefore(i, "token-space", "these tokens are written without a space between them");
 		}
+
+		// A comment trailing code stands one space behind it; columns aligned with tabs drift
+		// apart as soon as the code in front of them is respaced.
+		for (umint i = 1; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment && !fp_IsFirstOnLine(i))
+				fp_EnsureSingleSpace(i, true, "comment-space", "a trailing comment stands one space behind its code");
+		}
+	}
+
+	// A comment continued on the lines below the code it trails is aligned with it, and follows
+	// it to wherever it now stands, which only the plan says. A comment line at its code's own
+	// indentation, or at less, is a comment of its own rather than a continuation.
+	void CFormattingAnalyzer::fp_AlignCommentContinuations()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Source = m_Request.m_Source;
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		TCVector<CCodeFormattingEdit> Plan;
+		CStr Formatted;
+		bool bPlanned = false;
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind != ECodeTokenKind::mc_LineComment || fp_IsFirstOnLine(i))
+				continue;
+
+			auto nCodeIndent = fp_GetSourceLineIndent(i);
+			umint nTarget = TCLimitsInt<umint>::mc_Max;
+			for (auto iLine = m_Lines.f_FindLine(Tokens[i].m_iOffset) + 1; iLine < m_Lines.f_GetLineCount(); ++iLine)
+			{
+				auto iStart = m_Lines.f_GetLineStart(iLine);
+				auto iEnd = m_Lines.f_GetLineContentEnd(iLine);
+				auto iIndent = iStart;
+				while (iIndent < iEnd && fg_IsSpaceOrTab(Source.f_GetStr()[iIndent]))
+					++iIndent;
+
+				if (iIndent == iEnd || m_bProtectedStart[iLine])
+					break;
+
+				auto const &Comment = Tokens[m_Tokens.f_FindToken(iIndent)];
+				if (Comment.m_Kind != ECodeTokenKind::mc_LineComment || Comment.m_iOffset != iIndent)
+					break;
+
+				umint nColumns = 0;
+				if (!fg_MeasureTextColumns(Source.f_GetStr() + iStart, iIndent - iStart, nTab, nColumns) || nColumns <= nCodeIndent)
+					break;
+
+				if (nTarget == TCLimitsInt<umint>::mc_Max)
+				{
+					if (!bPlanned)
+					{
+						TCVector<umint> Sources;
+						fp_BuildPlan(Plan, Sources);
+						Formatted = fg_ApplyCodeFormattingEdits(Source, Plan);
+						bPlanned = true;
+					}
+
+					auto iMapped = fg_MapOffsetToConverted(Plan, Tokens[i].m_iOffset, false);
+					auto iFormattedStart = iMapped;
+					while (iFormattedStart && Formatted.f_GetStr()[iFormattedStart - 1] != '\n' && Formatted.f_GetStr()[iFormattedStart - 1] != '\r')
+						--iFormattedStart;
+
+					if (!fg_MeasureTextColumns(Formatted.f_GetStr() + iFormattedStart, iMapped - iFormattedStart, nTab, nTarget))
+						break;
+				}
+
+				// The layout's own placement of the line gives way to the alignment.
+				for (umint iEdit = 0; iEdit < m_Edits.f_GetLen(); ++iEdit)
+				{
+					auto const &Edit = m_Edits[iEdit];
+					if (Edit.m_iOffset >= iStart && Edit.f_GetEnd() <= iIndent)
+						m_bEditDropped[iEdit] = 1;
+				}
+
+				auto Replacement = fp_MakeIndent(nTarget);
+				if (Replacement != CStr(Source.f_GetStr() + iStart, iIndent - iStart))
+					fp_AddEdit("comment-space", iStart, iIndent - iStart, Replacement, "a comment continued below the code it trails aligns with it");
+			}
+		}
 	}
 
 	void CFormattingAnalyzer::fp_RemoveFollowingBlankLines(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation)
@@ -2105,6 +2185,7 @@ namespace
 				fp_RuleIndentation();
 
 				fp_LimitJoinedLines();
+				fp_AlignCommentContinuations();
 			}
 
 			NContainer::TCVector<umint> Sources;

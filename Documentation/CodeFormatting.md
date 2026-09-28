@@ -161,6 +161,7 @@ formatter failure, not an edit.
 | `line-ending` | Converts terminators to `end_of_line`. Whole-file requests only. |
 | `clause-space` | Exactly one space between `if`, `for`, `while`, `switch`, or `catch` and its `(` on the same line. |
 | `comma-space` | No space before a comma, one space after it on the same line. |
+| `comment-space` | A line comment trailing code stands one space behind it. The comment lines directly below that are indented past the code line's own indentation continue it, and are aligned with it wherever it lands; a comment line at the code's indentation is a comment of its own. |
 | `operator-space` | One space around unambiguous binary operators. |
 | `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
 | `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon, a bit-field's width, and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. A run of pointers is one declarator, `CFoo **`, while a reference to a pointer stands apart from it: `CFoo * &`. A declarator stands apart from a calling convention macro between it and the name, `void * DMibCrossmoduleAPI fs_Alloc`. A postfix `++` or `--` ends its operand, so `*pParse++ - '0'` subtracts. |

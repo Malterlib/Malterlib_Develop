@@ -1851,7 +1851,18 @@ namespace
 						(
 							"CommentMembers"
 							, "void f()\n{\n\tco_return co_await m_Promises\n.f_Insert()  // why\n\t\t\t\t\t\t.f_Future()\n\t\t;\n}\n"
-							, "void f()\n{\n\tco_return co_await m_Promises\n\t\t.f_Insert()  // why\n\t\t.f_Future()\n\t;\n}\n"
+							, "void f()\n{\n\tco_return co_await m_Promises\n\t\t.f_Insert() // why\n\t\t.f_Future()\n\t;\n}\n"
+						)
+					;
+					// A trailing comment stands one space behind its code, and the comment lines that
+					// continue it follow it there; one at the code's own indentation is its own.
+					fg_ExpectFormat
+						(
+							"TrailingComments"
+							, "enum EStatus\n{\n\tEStatus_A\t\t= 1\t/// First\n\t\t\t\t\t\t/// continued\n\t\t\t\t\t\t/// and again\n"
+							"\t, EStatus_Longer\t= 2// Second\n\t// Own comment\n\t, EStatus_C = 3\n};\n"
+							, "enum EStatus\n{\n\tEStatus_A = 1 /// First\n\t\t\t\t  /// continued\n\t\t\t\t  /// and again\n"
+							"\t, EStatus_Longer = 2 // Second\n\t// Own comment\n\t, EStatus_C = 3\n};\n"
 						)
 					;
 					fg_ExpectFormat("CommentParameter", "void fg_F\n\t(\n\t\t\tint _A // why\n\t\t, int _B\n\t)\n;\n", "void fg_F\n\t(\n\t\tint _A // why\n\t\t, int _B\n\t)\n;\n");
