@@ -152,6 +152,37 @@ namespace
 			DMibExpectTrue(fg_HasEquivalentCodeTokens(_Source, Formatted));
 	}
 
+	CCodeFormattingRequest fg_BuildSystemRequest(CStr const &_Source)
+	{
+		CCodeFormattingRequest Request;
+		Request.m_Source = _Source;
+		Request.m_Path = "Example.MHeader";
+		Request.m_Language = ECodeLanguage::mc_BuildSystem;
+		Request.m_Settings = CCodeFormattingSettings(fg_MalterlibProperties());
+
+		return Request;
+	}
+
+	CStr fg_FormatBuildSystem(CStr const &_Source, CStr const &_Stage)
+	{
+		DMibTestPath(_Stage);
+		auto Result = fg_AnalyzeCodeFormatting(fg_BuildSystemRequest(_Source));
+		DMibExpectTrue(Result.m_Status == ECodeFormattingStatus::mc_Complete);
+		if (Result.m_Status != ECodeFormattingStatus::mc_Complete)
+			return Result.m_Explanation;
+
+		return fg_ApplyCodeFormattingEdits(_Source, Result.m_Edits);
+	}
+
+	void fg_ExpectBuildSystemFormat(CStr const &_Case, CStr const &_Source, CStr const &_Expected)
+	{
+		DMibTestPath(_Case);
+		auto Formatted = fg_FormatBuildSystem(_Source, "First");
+		DMibExpect(Formatted, ==, _Expected);
+		DMibExpect(fg_FormatBuildSystem(Formatted, "Second"), ==, _Expected);
+		DMibExpectTrue(fg_HasEquivalentCodeTokens(_Source, Formatted, ECodeLanguage::mc_BuildSystem));
+	}
+
 	struct CCodeFormatting_Tests : CTest
 	{
 		void f_DoTests()
@@ -229,7 +260,11 @@ namespace
 					DMibExpectTrue(fg_DetectCodeLanguage("Source/Example.cpp") == ECodeLanguage::mc_Cpp);
 					DMibExpectTrue(fg_DetectCodeLanguage("Source/Example.imp.h") == ECodeLanguage::mc_Cpp);
 					DMibExpectTrue(fg_DetectCodeLanguage("Include/Mib/Develop/CodeFormatting") == ECodeLanguage::mc_Cpp);
-					DMibExpectTrue(fg_DetectCodeLanguage("Malterlib_Develop.MHeader") == ECodeLanguage::mc_Unknown);
+					DMibExpectTrue(fg_DetectCodeLanguage("Malterlib_Develop.MHeader") == ECodeLanguage::mc_BuildSystem);
+					DMibExpectTrue(fg_DetectCodeLanguage("Build/Shared.MSettings") == ECodeLanguage::mc_BuildSystem);
+					DMibExpectTrue(fg_DetectCodeLanguage("Build/Ninja.MGeneratorSettings") == ECodeLanguage::mc_BuildSystem);
+					DMibExpectTrue(fg_DetectCodeLanguage("Malterlib.MRepo") == ECodeLanguage::mc_Unknown);
+					DMibExpectTrue(fg_DetectCodeLanguage("Malterlib.MRepoState") == ECodeLanguage::mc_Unknown);
 					DMibExpectTrue(fg_DetectCodeLanguage("README.md") == ECodeLanguage::mc_Unknown);
 				};
 			};
@@ -280,6 +315,166 @@ namespace
 					DMibExpectFalse(CCodeTokenStream("/* unterminated").f_IsComplete());
 					DMibExpectFalse(CCodeTokenStream("auto x = \"open\n").f_IsComplete());
 					DMibExpectFalse(CCodeTokenStream("auto x = R\"d(open\n").f_IsComplete());
+				};
+			};
+
+			DMibTestSuite("BuildSystem")
+			{
+				DMibTestCategory("Lexer")
+				{
+					CStr Source = "Key `a @(F(`b)`, \"c)\")) d`\\\n\t'x{' /* { */ // }\n";
+					CCodeTokenStream Stream(Source, nullptr, ECodeLanguage::mc_BuildSystem);
+					DMibExpectTrue(Stream.f_IsComplete());
+					TCVector<CStr> Significant;
+					for (auto const &Token : Stream.f_GetTokens())
+					{
+						if (Token.m_Kind != ECodeTokenKind::mc_Whitespace && Token.m_Kind != ECodeTokenKind::mc_Newline)
+							Significant.f_Insert("{}:{}"_f << umint(Token.m_Kind) << Stream.f_GetText(Token));
+					}
+
+					TCVector<CStr> Expected =
+						{
+							"{}:Key"_f << umint(ECodeTokenKind::mc_Identifier)
+							, "{}:`a @(F(`b)`, \"c)\")) d`"_f << umint(ECodeTokenKind::mc_StringLiteral)
+							, "{}:\\"_f << umint(ECodeTokenKind::mc_LineSplice)
+							, "{}:'x{{'"_f << umint(ECodeTokenKind::mc_StringLiteral)
+							, "{}:/* {{ */"_f << umint(ECodeTokenKind::mc_BlockComment)
+							, "{}:// }"_f << umint(ECodeTokenKind::mc_LineComment)
+						}
+					;
+					DMibExpect(Significant, ==, Expected);
+
+					CStr Joined;
+					for (auto const &Token : Stream.f_GetTokens())
+						Joined += Stream.f_GetText(Token);
+
+					DMibExpect(Joined, ==, Source);
+					DMibExpectFalse(CCodeTokenStream("Key `a @(b`\n", nullptr, ECodeLanguage::mc_BuildSystem).f_IsComplete());
+					DMibExpectFalse(CCodeTokenStream("Key \"a\n", nullptr, ECodeLanguage::mc_BuildSystem).f_IsComplete());
+
+					// A backslash is part of the value unless it ends the line.
+					DMibExpectTrue(fg_HasEquivalentCodeTokens("A `a`\\\n\t`b`\n", "A `a`\\  \n`b`\n", ECodeLanguage::mc_BuildSystem));
+					DMibExpectFalse(fg_HasEquivalentCodeTokens("A `a`\\\n`b`\n", "A `a`\n`b`\n", ECodeLanguage::mc_BuildSystem));
+				};
+
+				DMibTestCategory("Scopes")
+				{
+					fg_ExpectBuildSystemFormat
+						(
+							"Nested"
+							, "Repository\n{\n    !!Name \"A\"\n\t\t%Group \"B\"\n\t{\n  Compile.Type \"C++\"\n\t\t\t{\n!!Enabled true\n}\n  }\n}\n"
+							, "Repository\n{\n\t!!Name \"A\"\n\t%Group \"B\"\n\t{\n\t\tCompile.Type \"C++\"\n\t\t{\n\t\t\t!!Enabled true\n\t\t}\n\t}\n}\n"
+						)
+					;
+					fg_ExpectBuildSystemFormat
+						(
+							"Conditions"
+							, "Property\n{\n\tA true\n\t{\n\t&\n\t{\n\tB 1\n\t|\n\t{\n\tC 2\n\t}\n\t}\n\t}\n}\n"
+							, "Property\n{\n\tA true\n\t{\n\t\t&\n\t\t{\n\t\t\tB 1\n\t\t\t|\n\t\t\t{\n\t\t\t\tC 2\n\t\t\t}\n\t\t}\n\t}\n}\n"
+						)
+					;
+					fg_ExpectBuildSystemFormat("BracesInText", "A \"{\" // {\nB `}` /* } */\n", "A \"{\" // {\nB `}` /* } */\n");
+				};
+
+				DMibTestCategory("Values")
+				{
+					fg_ExpectBuildSystemFormat
+						(
+							"Array"
+							, "P\n{\n\tPaths =+ [\n\"a\"\n        , \"b\"\n\t\t]\n}\n"
+							, "P\n{\n\tPaths =+ [\n\t\t\"a\"\n\t\t, \"b\"\n\t]\n}\n"
+						)
+					;
+					// Brackets that open on one line and close together take one level between them.
+					fg_ExpectBuildSystemFormat
+						(
+							"SharedLevel"
+							, "P\n{\n\tFiles: [\"a\", F(\n\t\t\t\"b\"\n\t\t\t, \"c\"\n\t\t)]\n}\n"
+							, "P\n{\n\tFiles: [\"a\", F(\n\t\t\"b\"\n\t\t, \"c\"\n\t)]\n}\n"
+						)
+					;
+					fg_ExpectBuildSystemFormat
+						(
+							"AdjacentClosers"
+							, "P\n{\n\tA !([\n\t\t\t\"a\"\n\t\t]->F(B\n\t\t))\n}\n"
+							, "P\n{\n\tA !([\n\t\t\"a\"\n\t]->F(B\n\t))\n}\n"
+						)
+					;
+					// An outer bracket that holds more behind the inner one nests them.
+					fg_ExpectBuildSystemFormat
+						(
+							"ObjectsInArray"
+							, "P\n{\n\tL =+ [{\n\t\tA: 1\n\t}\n\t, {\n\t\tB: 2\n\t}\n\t]\n}\n"
+							, "P\n{\n\tL =+ [{\n\t\t\tA: 1\n\t\t}\n\t\t, {\n\t\t\tB: 2\n\t\t}\n\t]\n}\n"
+						)
+					;
+				};
+
+				DMibTestCategory("Continuation")
+				{
+					fg_ExpectBuildSystemFormat
+						(
+							"ValueColumn"
+							, "A\n{\n\tB\n\t{\n\t\tContents\t`a\\n`\\\n\t\t`b @(`c`->F())\\n`\\\n            `d`\n\t}\n}\n"
+							, "A\n{\n\tB\n\t{\n\t\tContents\t`a\\n`\\\n\t\t\t\t\t`b @(`c`->F())\\n`\\\n\t\t\t\t\t`d`\n\t}\n}\n"
+						)
+					;
+					// A value off a tab stop is aligned with the stop in front of it.
+					fg_ExpectBuildSystemFormat
+						(
+							"OffTabStop"
+							, "P\n{\n\tScript =+ `a`\\\n\t\t`b`\n\t{\n\t\tC 1\n\t}\n}\n"
+							, "P\n{\n\tScript =+ `a`\\\n\t\t\t`b`\n\t{\n\t\tC 1\n\t}\n}\n"
+						)
+					;
+				};
+
+				DMibTestCategory("BlankLines")
+				{
+					fg_ExpectBuildSystemFormat
+						(
+							"Runs"
+							, "\n\nA\n{\n\n\tB 1\n\n\n\tC 2\n\t\n}\n\n\n"
+							, "A\n{\n\tB 1\n\n\tC 2\n}\n"
+						)
+					;
+					fg_ExpectBuildSystemFormat("UnterminatedEnd", "A 1\n\n  ", "A 1\n");
+					fg_ExpectBuildSystemFormat("CommentsSeparate", "A\n{\n\t// c\n\n\tB 1\n}\n", "A\n{\n\t// c\n\n\tB 1\n}\n");
+				};
+
+				DMibTestCategory("Comments")
+				{
+					// A comment at the start of a line comments out what it stands in front of.
+					fg_ExpectBuildSystemFormat
+						(
+							"CommentedOut"
+							, "A\n{\n//\tB 1\n  // Note\n/*\tC 1\n    D 2 */\n\t\t/* E\n    F */\n}\n"
+							, "A\n{\n//\tB 1\n\t// Note\n/*\tC 1\n    D 2 */\n\t/* E\n    F */\n}\n"
+						)
+					;
+					fg_ExpectBuildSystemFormat
+						(
+							"Disabled"
+							, "A\n{\n// malterlib-format off\n      B 1\n// malterlib-format on\n   C 1\n}\n"
+							, "A\n{\n// malterlib-format off\n      B 1\n// malterlib-format on\n\tC 1\n}\n"
+						)
+					;
+				};
+
+				DMibTestCategory("Unsupported")
+				{
+					auto fExpectUnsupported = [](CStr const &_Case, CStr const &_Source, CStr const &_Explanation)
+						{
+							DMibTestPath(_Case);
+							auto Result = fg_AnalyzeCodeFormatting(fg_BuildSystemRequest(_Source));
+							DMibExpectTrue(Result.m_Status == ECodeFormattingStatus::mc_Unsupported);
+							DMibExpect(Result.m_Explanation.f_Find(_Explanation), >=, 0);
+							DMibExpectTrue(Result.m_Edits.f_IsEmpty());
+						}
+					;
+					fExpectUnsupported("ExtraCloser", "A\n{\n}\n}\n", "'}' at line 4 closes no bracket");
+					fExpectUnsupported("NeverClosed", "A\n{\n\tB [\n}\n", "never closed");
+					fExpectUnsupported("Unterminated", "A `b\n", "ends inside a comment or literal");
 				};
 			};
 

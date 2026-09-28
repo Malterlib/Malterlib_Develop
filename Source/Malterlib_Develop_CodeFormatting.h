@@ -20,12 +20,6 @@ namespace NMib::NDevelop
 		, mc_Malterlib
 	};
 
-	enum class ECodeLanguage
-	{
-		mc_Unknown
-		, mc_Cpp
-	};
-
 	// Resolved and validated formatting configuration for one file. The constructor
 	// rejects invalid values; a missing opt-in property leaves formatting disabled.
 	struct CCodeFormattingSettings
@@ -130,8 +124,8 @@ namespace NMib::NDevelop
 	// True when the two sources have the same significant token sequence, ignoring layout.
 	// Every rule but the trailing return type conversion is whitespace-only, so this holds
 	// between a plan's result and the source with only those conversions applied.
-	bool fg_HasEquivalentCodeTokens(NStr::CStr const &_First, NStr::CStr const &_Second);
+	bool fg_HasEquivalentCodeTokens(NStr::CStr const &_First, NStr::CStr const &_Second, ECodeLanguage _Language = ECodeLanguage::mc_Cpp);
 
 	// Describes the first token difference between two sources, for formatter diagnostics.
-	NStr::CStr fg_DescribeCodeTokenDifference(NStr::CStr const &_First, NStr::CStr const &_Second);
+	NStr::CStr fg_DescribeCodeTokenDifference(NStr::CStr const &_First, NStr::CStr const &_Second, ECodeLanguage _Language = ECodeLanguage::mc_Cpp);
 }

@@ -9,6 +9,13 @@
 
 namespace NMib::NDevelop
 {
+	enum class ECodeLanguage
+	{
+		mc_Unknown
+		, mc_Cpp
+		, mc_BuildSystem		// The registry syntax of the build system's '.M*' files.
+	};
+
 	enum class ECodeTokenKind
 	{
 		mc_ByteOrderMark		// A leading UTF-8 signature.
@@ -52,12 +59,19 @@ namespace NMib::NDevelop
 		umint f_GetEnd() const;
 	};
 
-	// Lexes C and C++ source losslessly: concatenating every token reproduces the input.
-	// The lexer needs no compilation database and does not evaluate conditional branches.
+	// Lexes C and C++ source, or the build system's syntax, losslessly: concatenating every
+	// token reproduces the input. The lexer needs no compilation database and does not
+	// evaluate conditional branches.
 	struct CCodeTokenStream
 	{
 		CCodeTokenStream() = default;
-		explicit CCodeTokenStream(NStr::CStr const &_Source, CCodeFormattingNaming const *_pNaming = nullptr);
+		explicit CCodeTokenStream
+			(
+				NStr::CStr const &_Source
+				, CCodeFormattingNaming const *_pNaming = nullptr
+				, ECodeLanguage _Language = ECodeLanguage::mc_Cpp
+			)
+		;
 
 		NContainer::TCVector<CCodeToken> const &f_GetTokens() const;
 
@@ -84,6 +98,7 @@ namespace NMib::NDevelop
 
 	private:
 		void fp_Lex();
+		void fp_LexBuildSystem();
 
 		NStr::CStr mp_Source;
 		NContainer::TCVector<CCodeToken> mp_Tokens;

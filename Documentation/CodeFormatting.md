@@ -46,8 +46,10 @@ standard properties take precedence:
 supplies a limit, which is how a consumer decides that no validator applies.
 
 `fg_DetectCodeLanguage` maps a path to `ECodeLanguage`. C and C++ sources and
-headers are supported, including extensionless public include wrappers. Other
-languages have no syntax backend and are never rewritten.
+headers are supported, including extensionless public include wrappers, and so
+are the build system's hand-written files (see Build system files). Other
+languages have no syntax backend and are never rewritten; `MTool Format` holds a
+file of one that is opted in to its line length only.
 
 ## Naming
 
@@ -783,6 +785,58 @@ tighter than the boundary around it.
 Directive lines themselves are never rewritten. The sources spell them both at
 column one and indented by conditional depth, so the standard does not settle
 them and they keep what they have, a block moving around them included.
+
+## Build system files
+
+`.MBuildSystem`, `.MConfig`, `.MGeneratorSettings`, `.MHeader`, `.MInclude`,
+`.MLBuildOptions`, `.MOptionalHeader`, `.MSettings` and `.MTarget` files are
+`ECodeLanguage::mc_BuildSystem`. `.MRepo` is JSON, and `.MRepoState` and
+`.MGeneratorState` are written by the build system, so none of those is.
+
+Their rules change whitespace only, and every line keeps its breaks:
+
+| Rule | Effect |
+| --- | --- |
+| `indentation` | A line stands at the level of the innermost bracket open at its start, and a line that starts by closing it one level out. Registry scopes and the objects, arrays and calls of a value count alike. |
+| `blank-line` | One blank line at most, none right inside a bracket, and none at the start or end of the file. |
+| `trailing-whitespace`, `line-ending`, `final-newline` | As for C++. |
+| `line-length` | Reported only. |
+
+The brackets a line leaves open take one level more than that line, together:
+
+```
+	Files: ["Main.cpp", Platform->Switch(
+		"macOS", "Main.mm"
+	)]
+```
+
+unless the outer one holds lines of its own behind the inner one's, where each
+takes a level:
+
+```
+	License =+ [{
+			Path: "A"
+		}
+		, {
+			Path: "B"
+		}
+	]
+```
+
+A line a backslash continues aligns with the value it continues, the first string
+on the line the chain starts on, at the tab stop at or in front of it when tabs
+indent:
+
+```
+	Contents	`#include <Mib/Core/Core>\n`\
+				`namespace NMib\n`
+```
+
+A comment that starts its line at column one comments out what it stands in
+front of, as `//\tKey Value` does, and keeps that column. Strings, template
+strings with the expressions inside them, and block comments are single tokens,
+so a bracket inside one counts for nothing. A bracket that closes nothing, one
+that never closes, and a literal the file ends inside make the file unsupported.
 
 ## Protected regions
 

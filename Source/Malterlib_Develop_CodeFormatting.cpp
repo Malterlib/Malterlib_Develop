@@ -414,6 +414,17 @@ namespace NMib::NDevelop
 				return ECodeLanguage::mc_Cpp;
 		}
 
+		// The build system's hand-written files; '.MRepo' is JSON, and the state files are generated.
+		for
+		(
+			auto pCandidate
+			: {"mbuildsystem", "mconfig", "mgeneratorsettings", "mheader", "minclude", "mlbuildoptions", "moptionalheader", "msettings", "mtarget"}
+		)
+		{
+			if (Extension == pCandidate)
+				return ECodeLanguage::mc_BuildSystem;
+		}
+
 		return ECodeLanguage::mc_Unknown;
 	}
 
@@ -465,14 +476,15 @@ namespace NMib::NDevelop
 	// Normalizes a source into comparable token spellings. Closing a nested template
 	// argument list regroups '>' '>' into the single token '>>', the same ambiguity the
 	// language resolves by context, so both spellings normalize alike.
-	static TCVector<CStr> fg_NormalizeCodeTokens(CStr const &_Source)
+	static TCVector<CStr> fg_NormalizeCodeTokens(CStr const &_Source, ECodeLanguage _Language)
 	{
-		CCodeTokenStream Stream(_Source);
+		CCodeTokenStream Stream(_Source, nullptr, _Language);
+		bool bCpp = _Language != ECodeLanguage::mc_BuildSystem;
 		TCVector<CStr> Texts;
 		for (auto const &Token : Stream.f_GetTokens())
 		{
 			auto Kind = Token.m_Kind;
-			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice)
+			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || (bCpp && Kind == ECodeTokenKind::mc_LineSplice))
 				continue;
 
 			auto Text = Stream.f_GetText(Token);
@@ -485,7 +497,7 @@ namespace NMib::NDevelop
 					Texts.f_Insert("{}:{}"_f << umint(Kind) << _Text);
 				}
 			;
-			if (Kind == ECodeTokenKind::mc_Punctuator && (Text == ">>" || Text == ">>="))
+			if (bCpp && Kind == ECodeTokenKind::mc_Punctuator && (Text == ">>" || Text == ">>="))
 			{
 				fInsert(">");
 				fInsert(Text == ">>" ? ">" : ">=");
@@ -499,10 +511,10 @@ namespace NMib::NDevelop
 		return Texts;
 	}
 
-	CStr fg_DescribeCodeTokenDifference(CStr const &_First, CStr const &_Second)
+	CStr fg_DescribeCodeTokenDifference(CStr const &_First, CStr const &_Second, ECodeLanguage _Language)
 	{
-		auto First = fg_NormalizeCodeTokens(_First);
-		auto Second = fg_NormalizeCodeTokens(_Second);
+		auto First = fg_NormalizeCodeTokens(_First, _Language);
+		auto Second = fg_NormalizeCodeTokens(_Second, _Language);
 		for (umint i = 0; i < fg_Min(First.f_GetLen(), Second.f_GetLen()); ++i)
 		{
 			if (First[i] == Second[i])
@@ -527,12 +539,14 @@ namespace NMib::NDevelop
 		umint m_nLength = 0;
 	};
 
-	static void fg_CollectCodeTokenViews(CCodeTokenStream const &_Stream, TCVector<CCodeTokenView> &o_Views)
+	// A splice is layout in C++, but in the build system's syntax it is what continues a value.
+	static void fg_CollectCodeTokenViews(CCodeTokenStream const &_Stream, ECodeLanguage _Language, TCVector<CCodeTokenView> &o_Views)
 	{
+		bool bCpp = _Language != ECodeLanguage::mc_BuildSystem;
 		for (auto const &Token : _Stream.f_GetTokens())
 		{
 			auto Kind = Token.m_Kind;
-			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineSplice)
+			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || (bCpp && Kind == ECodeTokenKind::mc_LineSplice))
 				continue;
 
 			auto pText = _Stream.f_GetTextPointer(Token);
@@ -543,7 +557,15 @@ namespace NMib::NDevelop
 					--nLength;
 			}
 
-			if (Kind == ECodeTokenKind::mc_Punctuator && nLength >= 2 && pText[0] == '>' && pText[1] == '>' && (nLength == 2 || (nLength == 3 && pText[2] == '=')))
+			if
+			(
+				bCpp
+				&& Kind == ECodeTokenKind::mc_Punctuator
+				&& nLength >= 2
+				&& pText[0] == '>'
+				&& pText[1] == '>'
+				&& (nLength == 2 || (nLength == 3 && pText[2] == '='))
+			)
 			{
 				o_Views.f_Insert(CCodeTokenView{Kind, pText, 1});
 				o_Views.f_Insert(CCodeTokenView{Kind, pText + 1, nLength - 1});
@@ -555,14 +577,14 @@ namespace NMib::NDevelop
 		}
 	}
 
-	bool fg_HasEquivalentCodeTokens(CStr const &_First, CStr const &_Second)
+	bool fg_HasEquivalentCodeTokens(CStr const &_First, CStr const &_Second, ECodeLanguage _Language)
 	{
-		CCodeTokenStream FirstStream(_First);
-		CCodeTokenStream SecondStream(_Second);
+		CCodeTokenStream FirstStream(_First, nullptr, _Language);
+		CCodeTokenStream SecondStream(_Second, nullptr, _Language);
 		TCVector<CCodeTokenView> First;
 		TCVector<CCodeTokenView> Second;
-		fg_CollectCodeTokenViews(FirstStream, First);
-		fg_CollectCodeTokenViews(SecondStream, Second);
+		fg_CollectCodeTokenViews(FirstStream, _Language, First);
+		fg_CollectCodeTokenViews(SecondStream, _Language, Second);
 		if (First.f_GetLen() != Second.f_GetLen())
 			return false;
 
@@ -590,12 +612,21 @@ namespace
 	// one line, and then split, outermost break first, only where that line is too long. The
 	// decisions are kept per gap between tokens and written out once, so no decision can
 	// depend on an edit already made, or on where the source happened to break its lines.
+	// The build system's syntax has no C++ structure; its rules read brackets and lines alone.
+	CCodeStructure fg_BuildStructure(CCodeTokenStream &_Tokens, ECodeLanguage _Language)
+	{
+		if (_Language == ECodeLanguage::mc_BuildSystem)
+			return {};
+
+		return CCodeStructure(_Tokens);
+	}
+
 	struct CFormattingAnalyzer
 	{
 		explicit CFormattingAnalyzer(CCodeFormattingRequest const &_Request, bool _bAllowConversions = true, bool _bAllowQualifiers = true)
 			: m_Request(_Request)
-			, m_Tokens(_Request.m_Source, _Request.m_pNaming.f_Get())
-			, m_Structure(m_Tokens)
+			, m_Tokens(_Request.m_Source, _Request.m_pNaming.f_Get(), _Request.m_Language)
+			, m_Structure(fg_BuildStructure(m_Tokens, _Request.m_Language))
 			, m_Lines(_Request.m_Source)
 			, m_bAllowConversions(_bAllowConversions)
 			, m_bAllowQualifiers(_bAllowQualifiers)
@@ -715,6 +746,9 @@ namespace
 		void fp_EnsureSingleSpace(umint _iToken, bool _bBefore, ch8 const *_pRule, ch8 const *_pExplanation);
 		void fp_RemoveSpaceBefore(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation);
 		void fp_RemoveFollowingBlankLines(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation);
+		bool fp_PrepareBuildSystemLines(CStr &o_Explanation);
+		void fp_RuleBuildSystemIndentation();
+		void fp_RuleBuildSystemBlankLines();
 
 		CCodeFormattingRequest const &m_Request;
 		CCodeTokenStream m_Tokens;
@@ -758,6 +792,17 @@ namespace
 		NContainer::TCVector<uint8> m_bEditDropped;
 		NContainer::TCVector<CJoinCandidate> m_JoinCandidates;
 		NContainer::TCVector<CCodeFormattingDiagnostic> m_Diagnostics;
+		// Per line of a build system source: where its first and last significant tokens are,
+		// the tab levels its brackets settle, and the column a continued value aligns to.
+		struct CBuildSystemLine
+		{
+			aint m_iFirst = -1;									// Token index; -1 for a blank line.
+			aint m_iLast = -1;
+			umint m_Level = 0;
+			umint m_nContinuationColumns = 0;					// Set on a line a backslash continues.
+			bool m_bContinued = false;
+		};
+		NContainer::TCVector<CBuildSystemLine> m_BuildSystemLines;
 		bool m_bWholeFile = false;
 	};
 
@@ -1937,8 +1982,9 @@ namespace
 		if (!Settings.f_IsFormattingEnabled())
 			return fUnsupported("Malterlib formatting is not enabled for this file");
 
-		if (m_Request.m_Language != ECodeLanguage::mc_Cpp)
-			return fUnsupported("Only C and C++ sources have a formatting backend");
+		bool bBuildSystem = m_Request.m_Language == ECodeLanguage::mc_BuildSystem;
+		if (m_Request.m_Language != ECodeLanguage::mc_Cpp && !bBuildSystem)
+			return fUnsupported("Only C and C++ sources and build system files have a formatting backend");
 
 		if (Settings.m_Charset && Settings.m_Charset != "utf-8" && Settings.m_Charset != "utf-8-bom")
 			return fUnsupported("charset = {} is not a supported formatting encoding"_f << Settings.m_Charset);
@@ -1956,9 +2002,18 @@ namespace
 		}
 
 		fp_PrepareLineProtection();
-		fp_PrepareTokenDepth();
-		fp_PrepareDirectives();
 		CStr Explanation;
+		if (bBuildSystem)
+		{
+			if (!fp_PrepareBuildSystemLines(Explanation))
+				return fUnsupported(Explanation);
+		}
+		else
+		{
+			fp_PrepareTokenDepth();
+			fp_PrepareDirectives();
+		}
+
 		if (!fp_CollectDisabledRegions(Explanation))
 			return fFailed(Explanation);
 
@@ -1974,7 +2029,7 @@ namespace
 		// qualifier can stand in, a return type above all, and count the statements a
 		// block holds, so they are made on the source this stage leaves, in one of their own.
 		m_Baseline = m_Request.m_Source;
-		if (m_bAllowQualifiers)
+		if (m_bAllowQualifiers && !bBuildSystem)
 		{
 			fp_ConvertQualifiers();
 			fp_ConvertSpecifiers();
@@ -1982,7 +2037,7 @@ namespace
 		}
 
 		bool bQualifierStage = !m_Structural.f_IsEmpty();
-		if (!bQualifierStage && m_bAllowConversions)
+		if (!bQualifierStage && m_bAllowConversions && !bBuildSystem)
 		{
 			m_bProbing = true;
 			fp_RuleLineBreaks();
@@ -2053,15 +2108,23 @@ namespace
 			fp_RuleTrailingWhitespace();
 			fp_RuleLineEndings();
 			fp_RuleFinalNewline();
-			fp_RuleBlankLines();
-			fp_RuleLineBreaks();
-			fp_RuleTokenSpacing();
-			fp_EmitLayout();
-			// The layout writes the indentation of every line it places, so what this rule
-			// is left to spell is only the lines it did not.
-			fp_RuleIndentation();
+			if (bBuildSystem)
+			{
+				fp_RuleBuildSystemBlankLines();
+				fp_RuleBuildSystemIndentation();
+			}
+			else
+			{
+				fp_RuleBlankLines();
+				fp_RuleLineBreaks();
+				fp_RuleTokenSpacing();
+				fp_EmitLayout();
+				// The layout writes the indentation of every line it places, so what this rule
+				// is left to spell is only the lines it did not.
+				fp_RuleIndentation();
 
-			fp_LimitJoinedLines();
+				fp_LimitJoinedLines();
+			}
 
 			NContainer::TCVector<umint> Sources;
 			fp_BuildPlan(Result.m_Edits, Sources);
@@ -2111,8 +2174,15 @@ namespace
 		// Every rule but the conversion leaves the token stream alone, so the result has to
 		// match the converted source token for token.
 		auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, Result.m_Edits);
-		if (!fg_HasEquivalentCodeTokens(m_Baseline, Formatted))
-			return fFailed("Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(m_Baseline, Formatted));
+		if (!fg_HasEquivalentCodeTokens(m_Baseline, Formatted, m_Request.m_Language))
+		{
+			return fFailed
+				(
+					"Formatting would change the token stream ({}); no edits were produced"_f
+					<< fg_DescribeCodeTokenDifference(m_Baseline, Formatted, m_Request.m_Language)
+				)
+			;
+		}
 
 		if (m_bWholeFile)
 		{
@@ -2144,6 +2214,247 @@ namespace
 		}
 
 		return Result;
+	}
+}
+
+namespace
+{
+	bool fg_IsBuildSystemOpener(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
+	{
+		return _Token.m_Kind == ECodeTokenKind::mc_Punctuator && (_Tokens.f_IsText(_Token, "{") || _Tokens.f_IsText(_Token, "[") || _Tokens.f_IsText(_Token, "("));
+	}
+
+	bool fg_IsBuildSystemCloser(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
+	{
+		return _Token.m_Kind == ECodeTokenKind::mc_Punctuator && (_Tokens.f_IsText(_Token, "}") || _Tokens.f_IsText(_Token, "]") || _Tokens.f_IsText(_Token, ")"));
+	}
+
+	// A build system file is indented by its brackets alone, the scopes of the registry and
+	// the objects, arrays and calls of a value alike: a line stands at the level of the
+	// innermost bracket open at its start, and a line that starts by closing it one level
+	// out. The brackets a line leaves open take one level more than the line, together,
+	// unless the outer one holds lines of its own behind the inner one's, as the objects of
+	// '[{ ... }, { ... }]' do, where each takes a level. A line a backslash continues aligns
+	// with the value it continues, at the tab stop at or in front of it when tabs indent.
+	bool CFormattingAnalyzer::fp_PrepareBuildSystemLines(CStr &o_Explanation)
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Settings = m_Request.m_Settings;
+		auto nTab = Settings.m_nTabWidth;
+		auto nLines = m_Lines.f_GetLineCount();
+		m_BuildSystemLines.f_SetLen(nLines);
+
+		// The line each opener's bracket closes on, indexed by token.
+		TCVector<umint> CloseLine;
+		CloseLine.f_SetLen(Tokens.f_GetLen());
+		TCVector<umint> Pending;
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
+		{
+			auto const &Token = Tokens[iToken];
+			auto Kind = Token.m_Kind;
+			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_ByteOrderMark)
+				continue;
+
+			auto iLine = m_Lines.f_FindLine(Token.m_iOffset);
+			auto &Line = m_BuildSystemLines[iLine];
+			if (Line.m_iFirst < 0)
+				Line.m_iFirst = iToken;
+
+			Line.m_iLast = iToken;
+			if (fg_IsBuildSystemOpener(m_Tokens, Token))
+				Pending.f_Insert(iToken);
+			else if (fg_IsBuildSystemCloser(m_Tokens, Token))
+			{
+				if (Pending.f_IsEmpty())
+				{
+					o_Explanation = "'{}' at line {} closes no bracket"_f << m_Tokens.f_GetText(Token) << iLine + 1;
+
+					return false;
+				}
+
+				CloseLine[Pending.f_GetLast()] = iLine;
+				Pending.f_Remove(Pending.f_GetLen() - 1);
+			}
+		}
+
+		if (!Pending.f_IsEmpty())
+		{
+			o_Explanation = "The bracket opened at line {} is never closed"_f << m_Lines.f_FindLine(Tokens[Pending.f_GetLast()].m_iOffset) + 1;
+
+			return false;
+		}
+
+		struct COpen
+		{
+			umint m_Level = 0;									// The level of the lines inside the bracket.
+			umint m_iCloseLine = 0;
+		};
+
+		TCVector<COpen> Open;
+		bool bContinued = false;
+		umint nChainColumns = 0;
+		for (umint iLine = 0; iLine < nLines; ++iLine)
+		{
+			auto &Line = m_BuildSystemLines[iLine];
+			if (Line.m_iFirst < 0)
+				continue;
+
+			bool bCloses = fg_IsBuildSystemCloser(m_Tokens, Tokens[umint(Line.m_iFirst)]);
+			Line.m_Level = Open.f_IsEmpty() ? 0 : Open.f_GetLast().m_Level - (bCloses ? 1 : 0);
+			Line.m_bContinued = bContinued;
+			Line.m_nContinuationColumns = nChainColumns;
+
+			auto nOpenAtStart = Open.f_GetLen();
+			for (auto iToken = umint(Line.m_iFirst); iToken <= umint(Line.m_iLast); ++iToken)
+			{
+				if (fg_IsBuildSystemOpener(m_Tokens, Tokens[iToken]))
+					Open.f_Insert(COpen{0, CloseLine[iToken]});
+				else if (fg_IsBuildSystemCloser(m_Tokens, Tokens[iToken]))
+				{
+					Open.f_Remove(Open.f_GetLen() - 1);
+					nOpenAtStart = fg_Min(nOpenAtStart, Open.f_GetLen());
+				}
+			}
+
+			for (auto iOpen = nOpenAtStart; iOpen < Open.f_GetLen(); ++iOpen)
+			{
+				auto &Opened = Open[iOpen];
+				if (iOpen == nOpenAtStart)
+					Opened.m_Level = Line.m_Level + 1;
+				else
+				{
+					auto const &Outer = Open[iOpen - 1];
+					bool bOuterHoldsMore = false;
+					for (auto iBetween = Opened.m_iCloseLine + 1; iBetween < Outer.m_iCloseLine && !bOuterHoldsMore; ++iBetween)
+						bOuterHoldsMore = m_BuildSystemLines[iBetween].m_iFirst >= 0;
+
+					Opened.m_Level = Outer.m_Level + (bOuterHoldsMore ? 1 : 0);
+				}
+			}
+
+			bool bSplices = Tokens[umint(Line.m_iLast)].m_Kind == ECodeTokenKind::mc_LineSplice;
+			if (bSplices && !bContinued)
+			{
+				nChainColumns = (Line.m_Level + 1) * nTab;
+				auto iFirstOffset = Tokens[umint(Line.m_iFirst)].m_iOffset;
+				for (auto iToken = umint(Line.m_iFirst); iToken <= umint(Line.m_iLast); ++iToken)
+				{
+					if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_StringLiteral)
+						continue;
+
+					// The line is measured as it will be indented, which starts on a tab stop.
+					umint nColumns = 0;
+					if (fg_MeasureTextColumns(m_Request.m_Source.f_GetStr() + iFirstOffset, Tokens[iToken].m_iOffset - iFirstOffset, nTab, nColumns))
+						nChainColumns = Line.m_Level * nTab + (Settings.m_bIndentWithTabs ? nColumns - nColumns % nTab : nColumns);
+
+					break;
+				}
+			}
+
+			bContinued = bSplices;
+		}
+
+		return true;
+	}
+
+	void CFormattingAnalyzer::fp_RuleBuildSystemIndentation()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Source = m_Request.m_Source;
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		for (umint iLine = 0; iLine < m_Lines.f_GetLineCount(); ++iLine)
+		{
+			auto const &Line = m_BuildSystemLines[iLine];
+			if (Line.m_iFirst < 0 || m_bProtectedStart[iLine] || !fp_IsLineSelected(iLine))
+				continue;
+
+			auto iStart = m_Lines.f_GetLineStart(iLine);
+			if (!iLine)
+				iStart += fg_GetTextBomLength(Source);
+
+			auto const &First = Tokens[umint(Line.m_iFirst)];
+			// A comment at the very start of a line comments out what it stands in front of.
+			bool bComment = First.m_Kind == ECodeTokenKind::mc_LineComment || First.m_Kind == ECodeTokenKind::mc_BlockComment;
+			if (bComment && First.m_iOffset == iStart)
+				continue;
+
+			auto Canonical = fp_MakeIndent(Line.m_bContinued ? Line.m_nContinuationColumns : Line.m_Level * nTab);
+			if (Canonical == CStr(Source.f_GetStr() + iStart, First.m_iOffset - iStart))
+				continue;
+
+			fp_AddEdit
+				(
+					"indentation"
+					, iStart
+					, First.m_iOffset - iStart
+					, Canonical
+					, Line.m_bContinued ? "a continued value aligns with the value it continues" : "a line stands one level deeper than the bracket open around it"
+				)
+			;
+		}
+	}
+
+	// A blank line separates what it separates; a second adds nothing, and none belongs at
+	// the start or end of the file or right inside a bracket.
+	void CFormattingAnalyzer::fp_RuleBuildSystemBlankLines()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto nLines = m_Lines.f_GetLineCount();
+		// The empty line behind the final line terminator is where the file ends, not a line.
+		auto nContentLines = nLines;
+		if (nLines && !m_Lines.f_GetLine(nLines - 1).m_nLength && m_Lines.f_GetLine(nLines - 1).m_Ending == ETextLineEnding::mc_None)
+			--nContentLines;
+
+		auto fIsBlank = [&](umint _iLine)
+			{
+				return m_BuildSystemLines[_iLine].m_iFirst < 0 && !m_bProtectedStart[_iLine];
+			}
+		;
+
+		umint iLine = 0;
+		while (iLine < nContentLines)
+		{
+			if (!fIsBlank(iLine))
+			{
+				++iLine;
+
+				continue;
+			}
+
+			auto iRunEnd = iLine;
+			while (iRunEnd < nContentLines && fIsBlank(iRunEnd))
+				++iRunEnd;
+
+			bool bAfterOpen = iLine && m_BuildSystemLines[iLine - 1].m_iLast >= 0
+				&& fg_IsBuildSystemOpener(m_Tokens, Tokens[umint(m_BuildSystemLines[iLine - 1].m_iLast)])
+			;
+			bool bBeforeClose = iRunEnd < nContentLines && m_BuildSystemLines[iRunEnd].m_iFirst >= 0
+				&& fg_IsBuildSystemCloser(m_Tokens, Tokens[umint(m_BuildSystemLines[iRunEnd].m_iFirst)])
+			;
+			bool bKeep = iLine && iRunEnd < nContentLines && !bAfterOpen && !bBeforeClose;
+			auto iRemove = iLine + (bKeep ? 1 : 0);
+			if (iRemove < iRunEnd)
+			{
+				auto iRemoveStart = m_Lines.f_GetLineStart(iRemove);
+				auto iRemoveEnd = m_Request.m_Source.f_GetLen();
+				if (iRunEnd < nLines)
+					iRemoveEnd = m_Lines.f_GetLineStart(iRunEnd);
+				else if (iLine)
+				{
+					// The file ends without a terminator on a blank line, so the terminator in front
+					// of the run goes with it, and the final newline rule writes the file's last one.
+					iRemoveStart = m_Lines.f_GetLineContentEnd(iLine - 1);
+				}
+
+				CStr Explanation = bKeep ? "one blank line separates, and a second adds nothing"
+					: bAfterOpen || bBeforeClose ? "no blank line stands right inside a bracket"
+					: "no blank line starts or ends the file"
+				;
+				fp_AddEdit("blank-line", iRemoveStart, iRemoveEnd - iRemoveStart, {}, Explanation);
+			}
+
+			iLine = iRunEnd;
+		}
 	}
 }
 

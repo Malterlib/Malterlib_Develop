@@ -43,6 +43,13 @@ and `<Mib/Develop/CodeFormattingStructure>`, in `NMib::NDevelop`. See
 `Documentation/CodeFormatting.md` for the opt-in property, settings, rule
 matrix, line structure, protected regions, and range contract.
 
+The build system's `.M*` files are a second language with rules of their own
+(`fp_PrepareBuildSystemLines` and the `fp_RuleBuildSystem*` rules), sharing the
+lexer, ranges, protected regions, disabled regions and verification with C++.
+Its rules read brackets and lines alone and never build a `CCodeStructure`; keep
+them whitespace-only, and settle a new rule against the whole tree's `.M*` files
+before enabling it, since nearly every line there already follows one convention.
+
 `fg_AnalyzeCodeFormatting` is pure: it takes immutable source bytes and returns
 an ordered, non-overlapping edit plan plus diagnostics. Introduce no filesystem
 operations, Git access, or console output in the engine; those belong in the

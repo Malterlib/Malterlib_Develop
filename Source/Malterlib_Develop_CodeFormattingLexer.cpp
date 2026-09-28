@@ -239,6 +239,64 @@ namespace
 		return true;
 	}
 
+	// A template string, '`a @(b) c`', holds expressions between '@(' and the matching ')',
+	// and an expression can hold strings and template strings of its own. Returns true when
+	// the source ends inside it.
+	bool fg_LexTemplateString(CLexerCursor &_Cursor)
+	{
+		// Zero is a template string; an expression is the depth of its parentheses.
+		TCVector<umint> Open;
+		Open.f_Insert(umint(0));
+		++_Cursor.m_iOffset;
+		while (!_Cursor.f_AtEnd())
+		{
+			auto Char = _Cursor.f_Peek();
+			auto &Top = Open.f_GetLast();
+			if (!Top)
+			{
+				if (Char == '`')
+				{
+					++_Cursor.m_iOffset;
+					Open.f_Remove(Open.f_GetLen() - 1);
+					if (Open.f_IsEmpty())
+						return false;
+
+					continue;
+				}
+
+				if (Char == '\\' && _Cursor.f_Peek(1))
+					_Cursor.m_iOffset += 2;
+				else if (Char == '@' && _Cursor.f_Peek(1) == '(')
+				{
+					_Cursor.m_iOffset += 2;
+					Open.f_Insert(umint(1));
+				}
+				else
+					++_Cursor.m_iOffset;
+
+				continue;
+			}
+
+			if (Char == '"' || Char == '\'')
+			{
+				if (fg_LexQuoted(_Cursor, Char))
+					return true;
+
+				continue;
+			}
+
+			++_Cursor.m_iOffset;
+			if (Char == '`')
+				Open.f_Insert(umint(0));
+			else if (Char == '(')
+				++Top;
+			else if (Char == ')' && !--Top)
+				Open.f_Remove(Open.f_GetLen() - 1);
+		}
+
+		return true;
+	}
+
 	// A directive runs to the first line terminator that is neither spliced nor inside a
 	// block comment. Conditional branches are not evaluated; every branch is lexed as text.
 	bool fg_LexPreprocessor(CLexerCursor &_Cursor)
@@ -337,9 +395,16 @@ namespace NMib::NDevelop
 		return m_iOffset + m_nLength;
 	}
 
-	CCodeTokenStream::CCodeTokenStream(CStr const &_Source, CCodeFormattingNaming const *_pNaming)
+	CCodeTokenStream::CCodeTokenStream(CStr const &_Source, CCodeFormattingNaming const *_pNaming, ECodeLanguage _Language)
 		: mp_Source(_Source)
 	{
+		if (_Language == ECodeLanguage::mc_BuildSystem)
+		{
+			fp_LexBuildSystem();
+
+			return;
+		}
+
 		fp_Lex();
 		if (!_pNaming)
 			return;
@@ -594,6 +659,126 @@ namespace NMib::NDevelop
 
 			++Cursor.m_iOffset;
 			fEmit(ECodeTokenKind::mc_Unknown, iStart, false);
+		}
+	}
+}
+
+namespace NMib::NDevelop
+{
+	// A backslash that ends a line continues the value on the next line, as it does in the
+	// registry parser; only the backslash is the splice, so the space around it stays layout.
+	void CCodeTokenStream::fp_LexBuildSystem()
+	{
+		CLexerCursor Cursor{mp_Source.f_GetStr(), umint(mp_Source.f_GetLen()), 0};
+		auto fEmit = [&](ECodeTokenKind _Kind, umint _iStart, bool _bUnterminated)
+			{
+				auto &Token = mp_Tokens.f_Insert();
+				Token.m_Kind = _Kind;
+				Token.m_iOffset = _iStart;
+				Token.m_nLength = Cursor.m_iOffset - _iStart;
+				Token.m_bUnterminated = _bUnterminated;
+				for (umint i = _iStart; i < Cursor.m_iOffset; ++i)
+				{
+					if (fg_IsLineBreak(Cursor.m_pStart[i]))
+					{
+						Token.m_bMultiLine = true;
+
+						break;
+					}
+				}
+
+				mp_bComplete &= !_bUnterminated;
+			}
+		;
+
+		if (Cursor.f_Peek() == ch8(0xEF) && Cursor.f_Peek(1) == ch8(0xBB) && Cursor.f_Peek(2) == ch8(0xBF))
+		{
+			Cursor.m_iOffset += 3;
+			fEmit(ECodeTokenKind::mc_ByteOrderMark, 0, false);
+		}
+
+		while (!Cursor.f_AtEnd())
+		{
+			auto iStart = Cursor.m_iOffset;
+			auto Char = Cursor.f_Peek();
+			if (fg_IsLineBreak(Char))
+			{
+				Cursor.f_SkipLineBreak();
+				fEmit(ECodeTokenKind::mc_Newline, iStart, false);
+
+				continue;
+			}
+
+			if (fg_IsHorizontalSpace(Char))
+			{
+				while (fg_IsHorizontalSpace(Cursor.f_Peek()))
+					++Cursor.m_iOffset;
+
+				fEmit(ECodeTokenKind::mc_Whitespace, iStart, false);
+
+				continue;
+			}
+
+			if (Char == '/' && Cursor.f_Peek(1) == '/')
+			{
+				Cursor.m_iOffset += 2;
+				while (!Cursor.f_AtEnd() && !fg_IsLineBreak(Cursor.f_Peek()))
+					++Cursor.m_iOffset;
+
+				fEmit(ECodeTokenKind::mc_LineComment, iStart, false);
+
+				continue;
+			}
+
+			if (Char == '/' && Cursor.f_Peek(1) == '*')
+			{
+				auto bUnterminated = fg_LexBlockComment(Cursor);
+				fEmit(ECodeTokenKind::mc_BlockComment, iStart, bUnterminated);
+
+				continue;
+			}
+
+			if (Char == '"' || Char == '\'')
+			{
+				auto bUnterminated = fg_LexQuoted(Cursor, Char);
+				fEmit(ECodeTokenKind::mc_StringLiteral, iStart, bUnterminated);
+
+				continue;
+			}
+
+			if (Char == '`')
+			{
+				auto bUnterminated = fg_LexTemplateString(Cursor);
+				fEmit(ECodeTokenKind::mc_StringLiteral, iStart, bUnterminated);
+
+				continue;
+			}
+
+			if (Char == '\\')
+			{
+				umint iAhead = 1;
+				while (fg_IsHorizontalSpace(Cursor.f_Peek(iAhead)))
+					++iAhead;
+
+				++Cursor.m_iOffset;
+				auto Next = Cursor.f_Peek(iAhead - 1);
+				fEmit(!Next || fg_IsLineBreak(Next) ? ECodeTokenKind::mc_LineSplice : ECodeTokenKind::mc_Punctuator, iStart, false);
+
+				continue;
+			}
+
+			if (fg_IsIdentifierChar(Char) || Char == '.')
+			{
+				while (fg_IsIdentifierChar(Cursor.f_Peek()) || Cursor.f_Peek() == '.')
+					++Cursor.m_iOffset;
+
+				fEmit(ECodeTokenKind::mc_Identifier, iStart, false);
+
+				continue;
+			}
+
+			++Cursor.m_iOffset;
+			fEmit(uch8(Char) < 0x20 || Char == 0x7F ? ECodeTokenKind::mc_Unknown : ECodeTokenKind::mc_Punctuator, iStart, false);
 		}
 	}
 }
