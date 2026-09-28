@@ -2163,6 +2163,17 @@ namespace
 
 				DMibTestCategory("Templates")
 				{
+					// A '<' behind a name the naming lists as a type's or a function's opens a list
+					// however it is spaced, so a spaced list, and one an earlier pass spaced as a
+					// comparison, both hug again; a spaced '<' behind any other name compares.
+					fg_ExpectFormat
+						(
+							"SpacedAfterTypeOrFunction"
+							, "NContainer::TCVector< CStr > g_A;\nTCVector < NContainer::TCVector<int> > g_B;\nauto X = Array.f_Get < CStr > ();\nbool Y = i < n;\nbool Z = j< k;\n"
+							, "NContainer::TCVector<CStr> g_A;\nTCVector<NContainer::TCVector<int>> g_B;\nauto X = Array.f_Get<CStr>();\nbool Y = i < n;\nbool Z = j < k;\n"
+						)
+					;
+
 					CStr Wide;
 					for (umint i = 0; i < 80; ++i)
 						Wide += "W";

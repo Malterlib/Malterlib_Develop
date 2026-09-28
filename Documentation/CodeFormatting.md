@@ -388,7 +388,10 @@ terminators is spelled, such as the enumerators of an `enum` body.
 
 A `<` opens a template argument list only when it is written tight against the
 name before it, or across a line break; Malterlib spells a comparison with
-spaces, so the loose spelling stays an operator. A `>>` that ends a template
+spaces, so the loose spelling stays an operator. Behind a name the naming lists
+as a type's or a function's, which no comparison has for an operand, it opens a
+list however it is spaced, so `TCVector< CStr >` and `TCVector < CStr >` both
+become `TCVector<CStr>`. A `>>` that ends a template
 argument list is read the way C++ reads it, as two `>` tokens, so that each list
 has a closing marker of its own, and two closers written apart are joined back
 into one `>>` unless the layout gives the second a line of its own. A brace

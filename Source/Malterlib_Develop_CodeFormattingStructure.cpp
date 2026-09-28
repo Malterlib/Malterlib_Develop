@@ -343,9 +343,10 @@ namespace NMib::NDevelop
 
 namespace NMib::NDevelop
 {
-	// A '<' opens a template argument list only when it is written tight against the name
-	// before it and a matching '>' exists before the enclosing construct ends. Malterlib
-	// spells comparisons with spaces, so the tight spelling is a reliable discriminator.
+	// A '<' opens a template argument list only when a matching '>' exists before the
+	// enclosing construct ends, and it is written tight against the name before it or that
+	// name is one the naming lists as a type's or a function's. Malterlib spells comparisons
+	// with spaces, so the tight spelling is a reliable discriminator where the name is not.
 	umint CCodeStructure::fp_MatchAngleGroup(umint _iToken) const
 	{
 		auto const &Tokens = mp_pTokens->f_GetTokens();
@@ -370,8 +371,14 @@ namespace NMib::NDevelop
 			return 0;
 
 		// A template header's list can only be one, however it is spaced, and so can the
-		// one behind the call operator's name.
-		bool bHeader = mp_pTokens->f_IsText(Previous, "template") || bCallOperator;
+		// one behind the call operator's name, and the one behind a type or a function,
+		// which is no operand of a comparison: 'TCVector< CStr >' is a list, and so is the
+		// 'TCVector < CStr >' an earlier pass made of it.
+		bool bHeader = mp_pTokens->f_IsText(Previous, "template")
+			|| bCallOperator
+			|| mp_pTokens->f_HasRole(Previous, ECodeNameRole::mc_Type)
+			|| mp_pTokens->f_HasRole(Previous, ECodeNameRole::mc_Function)
+		;
 
 		// Malterlib writes a comparison with spaces and a template argument list tight
 		// against its name, so a gap that is neither empty nor a line break is a comparison.
