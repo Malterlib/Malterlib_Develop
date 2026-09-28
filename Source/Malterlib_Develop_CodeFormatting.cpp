@@ -335,8 +335,10 @@ namespace NMib::NDevelop
 			auto Value = pValue->f_LowerCase();
 			if (Value == "malterlib")
 				m_Profile = ECodeFormattingProfile::mc_Malterlib;
+			else if (Value == "malterlib-buildsystem")
+				m_Profile = ECodeFormattingProfile::mc_MalterlibBuildSystem;
 			else if (Value != "off")
-				DMibError("Invalid malterlib_format: '{}' (expected malterlib, off, or unset)"_f << *pValue);
+				DMibError("Invalid malterlib_format: '{}' (expected malterlib, malterlib-buildsystem, off, or unset)"_f << *pValue);
 		}
 
 		if (auto pValue = fg_FindProperty(_Properties, "indent_style"))
@@ -414,15 +416,18 @@ namespace NMib::NDevelop
 				return ECodeLanguage::mc_Cpp;
 		}
 
-		// The build system's hand-written files; '.MRepo' is JSON, and the state files are generated.
-		for
-		(
-			auto pCandidate
-			: {"mbuildsystem", "mconfig", "mgeneratorsettings", "mheader", "minclude", "mlbuildoptions", "moptionalheader", "msettings", "mtarget"}
-		)
+		return ECodeLanguage::mc_Unknown;
+	}
+
+	// The build system reads its syntax from files of any name, so its profile, not an
+	// extension, says a file is written in it.
+	ECodeLanguage fg_GetCodeFormattingLanguage(CCodeFormattingSettings const &_Settings, CStr const &_Path)
+	{
+		switch (_Settings.m_Profile)
 		{
-			if (Extension == pCandidate)
-				return ECodeLanguage::mc_BuildSystem;
+		case ECodeFormattingProfile::mc_Disabled: return ECodeLanguage::mc_Unknown;
+		case ECodeFormattingProfile::mc_Malterlib: return fg_DetectCodeLanguage(_Path);
+		case ECodeFormattingProfile::mc_MalterlibBuildSystem: return ECodeLanguage::mc_BuildSystem;
 		}
 
 		return ECodeLanguage::mc_Unknown;
@@ -1985,6 +1990,9 @@ namespace
 		bool bBuildSystem = m_Request.m_Language == ECodeLanguage::mc_BuildSystem;
 		if (m_Request.m_Language != ECodeLanguage::mc_Cpp && !bBuildSystem)
 			return fUnsupported("Only C and C++ sources and build system files have a formatting backend");
+
+		if (bBuildSystem != (Settings.m_Profile == ECodeFormattingProfile::mc_MalterlibBuildSystem))
+			return fUnsupported("malterlib_format = malterlib formats C and C++, and malterlib-buildsystem the build system's files");
 
 		if (Settings.m_Charset && Settings.m_Charset != "utf-8" && Settings.m_Charset != "utf-8-bom")
 			return fUnsupported("charset = {} is not a supported formatting encoding"_f << Settings.m_Charset);

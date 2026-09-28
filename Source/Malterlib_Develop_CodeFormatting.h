@@ -13,11 +13,12 @@
 
 namespace NMib::NDevelop
 {
-	// The opt-in property selects a formatter profile, not a language.
+	// The opt-in property selects a formatter profile, and the profile the language it formats.
 	enum class ECodeFormattingProfile
 	{
 		mc_Disabled
-		, mc_Malterlib
+		, mc_Malterlib				// C and C++.
+		, mc_MalterlibBuildSystem	// The build system's '.M*' syntax.
 	};
 
 	// Resolved and validated formatting configuration for one file. The constructor
@@ -42,6 +43,9 @@ namespace NMib::NDevelop
 	};
 
 	ECodeLanguage fg_DetectCodeLanguage(NStr::CStr const &_Path);
+
+	// The language the settings' profile formats the file as, or unknown when it has no backend for it.
+	ECodeLanguage fg_GetCodeFormattingLanguage(CCodeFormattingSettings const &_Settings, NStr::CStr const &_Path);
 
 	struct CCodeFormattingRange
 	{

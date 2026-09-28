@@ -158,7 +158,9 @@ namespace
 		Request.m_Source = _Source;
 		Request.m_Path = "Example.MHeader";
 		Request.m_Language = ECodeLanguage::mc_BuildSystem;
-		Request.m_Settings = CCodeFormattingSettings(fg_MalterlibProperties());
+		auto Properties = fg_MalterlibProperties();
+		Properties["malterlib_format"] = "malterlib-buildsystem";
+		Request.m_Settings = CCodeFormattingSettings(Properties);
 
 		return Request;
 	}
@@ -260,11 +262,19 @@ namespace
 					DMibExpectTrue(fg_DetectCodeLanguage("Source/Example.cpp") == ECodeLanguage::mc_Cpp);
 					DMibExpectTrue(fg_DetectCodeLanguage("Source/Example.imp.h") == ECodeLanguage::mc_Cpp);
 					DMibExpectTrue(fg_DetectCodeLanguage("Include/Mib/Develop/CodeFormatting") == ECodeLanguage::mc_Cpp);
-					DMibExpectTrue(fg_DetectCodeLanguage("Malterlib_Develop.MHeader") == ECodeLanguage::mc_BuildSystem);
-					DMibExpectTrue(fg_DetectCodeLanguage("Build/Shared.MSettings") == ECodeLanguage::mc_BuildSystem);
-					DMibExpectTrue(fg_DetectCodeLanguage("Build/Ninja.MGeneratorSettings") == ECodeLanguage::mc_BuildSystem);
-					DMibExpectTrue(fg_DetectCodeLanguage("Malterlib.MRepo") == ECodeLanguage::mc_Unknown);
-					DMibExpectTrue(fg_DetectCodeLanguage("Malterlib.MRepoState") == ECodeLanguage::mc_Unknown);
+					DMibExpectTrue(fg_DetectCodeLanguage("Malterlib_Develop.MHeader") == ECodeLanguage::mc_Unknown);
+
+					// The profile says what a file is written in, and the build system's may be named anything.
+					CCodeFormattingSettings Cpp{CEditorConfigProperties{{"malterlib_format", "malterlib"}}};
+					CCodeFormattingSettings BuildSystem{CEditorConfigProperties{{"malterlib_format", "Malterlib-BuildSystem"}}};
+					CCodeFormattingSettings Disabled{CEditorConfigProperties{{"malterlib_format", "off"}}};
+					DMibExpectTrue(BuildSystem.f_IsFormattingEnabled());
+					DMibExpect(BuildSystem.m_nMaxColumns, ==, 190u);
+					DMibExpectTrue(fg_GetCodeFormattingLanguage(Cpp, "Source/Example.cpp") == ECodeLanguage::mc_Cpp);
+					DMibExpectTrue(fg_GetCodeFormattingLanguage(Cpp, "Malterlib_Develop.MHeader") == ECodeLanguage::mc_Unknown);
+					DMibExpectTrue(fg_GetCodeFormattingLanguage(BuildSystem, "Malterlib_Develop.MHeader") == ECodeLanguage::mc_BuildSystem);
+					DMibExpectTrue(fg_GetCodeFormattingLanguage(BuildSystem, "Imported.txt") == ECodeLanguage::mc_BuildSystem);
+					DMibExpectTrue(fg_GetCodeFormattingLanguage(Disabled, "Source/Example.cpp") == ECodeLanguage::mc_Unknown);
 					DMibExpectTrue(fg_DetectCodeLanguage("README.md") == ECodeLanguage::mc_Unknown);
 				};
 			};
@@ -475,6 +485,14 @@ namespace
 					fExpectUnsupported("ExtraCloser", "A\n{\n}\n}\n", "'}' at line 4 closes no bracket");
 					fExpectUnsupported("NeverClosed", "A\n{\n\tB [\n}\n", "never closed");
 					fExpectUnsupported("Unterminated", "A `b\n", "ends inside a comment or literal");
+
+					// Each profile formats its own language only.
+					auto Mismatched = fg_BuildSystemRequest("A\n{\n  B 1\n}\n");
+					Mismatched.m_Settings = CCodeFormattingSettings(fg_MalterlibProperties());
+					DMibExpectTrue(fg_AnalyzeCodeFormatting(Mismatched).m_Status == ECodeFormattingStatus::mc_Unsupported);
+					auto Cpp = fg_Request("int  a;\n");
+					Cpp.m_Settings = fg_BuildSystemRequest({}).m_Settings;
+					DMibExpectTrue(fg_AnalyzeCodeFormatting(Cpp).m_Status == ECodeFormattingStatus::mc_Unsupported);
 				};
 			};
 

@@ -43,7 +43,10 @@ and `<Mib/Develop/CodeFormattingStructure>`, in `NMib::NDevelop`. See
 `Documentation/CodeFormatting.md` for the opt-in property, settings, rule
 matrix, line structure, protected regions, and range contract.
 
-The build system's `.M*` files are a second language with rules of their own
+The build system's `.M*` files are a second language, opted in with
+`malterlib_format = malterlib-buildsystem`: the profile, not the extension,
+selects the language, since the build system reads its syntax from files of any
+name. It has rules of its own
 (`fp_PrepareBuildSystemLines` and the `fp_RuleBuildSystem*` rules), sharing the
 lexer, ranges, protected regions, disabled regions and verification with C++.
 Its rules read brackets and lines alone and never build a `CCodeStructure`; keep

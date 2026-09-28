@@ -15,11 +15,15 @@ Formatting is selected by the consumer-owned EditorConfig property
 [*.{c,cc,cpp,cxx,h,hh,hpp,hxx}]
 malterlib_format = malterlib
 
+[*.{MHeader,MSettings,MTarget}]
+malterlib_format = malterlib-buildsystem
+
 [Vendor/**]
 malterlib_format = off
 ```
 
-`malterlib` selects the Malterlib profile, `off` disables formatting, and the
+`malterlib` selects the Malterlib profile for C and C++, `malterlib-buildsystem`
+the profile for the build system's syntax, `off` disables formatting, and the
 generic `unset` removes an inherited value. A missing property also disables
 formatting. Any other value is rejected, so a typo cannot read as "disabled".
 
@@ -45,11 +49,14 @@ standard properties take precedence:
 `m_nMaxColumns` stays zero when neither the profile nor `max_line_length`
 supplies a limit, which is how a consumer decides that no validator applies.
 
-`fg_DetectCodeLanguage` maps a path to `ECodeLanguage`. C and C++ sources and
-headers are supported, including extensionless public include wrappers, and so
-are the build system's hand-written files (see Build system files). Other
-languages have no syntax backend and are never rewritten; `MTool Format` holds a
-file of one that is opted in to its line length only.
+The profile selects the language. `fg_GetCodeFormattingLanguage` gives it for a
+file: the build system profile formats every file it opts in as the build
+system's syntax, since the build system reads that syntax from files of any
+name, and the Malterlib profile asks `fg_DetectCodeLanguage`, which knows C and
+C++ sources and headers, including extensionless public include wrappers. The
+engine refuses a request whose language is not its profile's. Other languages
+have no syntax backend and are never rewritten; `MTool Format` holds a file of
+one that is opted in to its line length only.
 
 ## Naming
 
@@ -788,10 +795,12 @@ them and they keep what they have, a block moving around them included.
 
 ## Build system files
 
+A file opted in with `malterlib_format = malterlib-buildsystem` is
+`ECodeLanguage::mc_BuildSystem`. Malterlib opts in its hand-written
 `.MBuildSystem`, `.MConfig`, `.MGeneratorSettings`, `.MHeader`, `.MInclude`,
-`.MLBuildOptions`, `.MOptionalHeader`, `.MSettings` and `.MTarget` files are
-`ECodeLanguage::mc_BuildSystem`. `.MRepo` is JSON, and `.MRepoState` and
-`.MGeneratorState` are written by the build system, so none of those is.
+`.MLBuildOptions`, `.MOptionalHeader`, `.MSettings` and `.MTarget` files; `.MRepo`
+is JSON, and `.MRepoState` and `.MGeneratorState` are written by the build
+system, so none of those is.
 
 Their rules change whitespace only, and every line keeps its breaks:
 
