@@ -1900,8 +1900,9 @@ namespace
 
 			// Several lines of the result can come from one line of the source, which is
 			// then named once.
+			// A region the formatter is turned off for keeps its lines as written, long ones too.
 			auto iSource = m_Lines.f_FindLine(fg_MapOffsetToOriginal(_Edits, Lines.f_GetLineStart(iLine)));
-			if (iSource == iReported || !fp_IsLineSelected(iSource))
+			if (iSource == iReported || !fp_IsLineSelected(iSource) || fp_IsDisabled(m_Lines.f_GetLineStart(iSource), m_Lines.f_GetLine(iSource).m_nLength))
 				continue;
 
 			iReported = iSource;

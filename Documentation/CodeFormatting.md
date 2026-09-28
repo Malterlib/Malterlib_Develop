@@ -736,8 +736,10 @@ A paired directive disables the engine for a region:
 // malterlib-format on
 ```
 
-Both lines are excluded along with everything between them. An unmatched or
-nested directive is a failure, not a silently ignored comment.
+Both lines are excluded along with everything between them, and none of them is
+reported for its length: data written to a width of its own, such as a raw
+string's test input, is what the region is for. An unmatched or nested
+directive is a failure, not a silently ignored comment.
 
 A source that ends inside a comment or literal, contains a byte that cannot
 start a token, or is not valid UTF-8 is reported as unsupported and left

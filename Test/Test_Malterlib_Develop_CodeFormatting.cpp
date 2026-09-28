@@ -2685,6 +2685,13 @@ namespace
 					DMibExpectTrue(Broken.m_Status == ECodeFormattingStatus::mc_Complete);
 					DMibExpectFalse(Broken.m_Edits.f_IsEmpty());
 					DMibExpectFalse(Broken.f_HasUnfixableDiagnostics());
+
+					// A region the formatter is turned off for keeps its long lines as written.
+					{
+						DMibTestPath("Protected");
+						auto Protected = fg_Analyze("// malterlib-format off\n" + Long + "// malterlib-format on\n");
+						DMibExpectTrue(Protected.m_Diagnostics.f_IsEmpty());
+					}
 				};
 			};
 
