@@ -707,6 +707,7 @@ namespace
 		void fp_LimitJoinedLines();
 		void fp_BuildPlan(NContainer::TCVector<CCodeFormattingEdit> &o_Edits, NContainer::TCVector<umint> &o_Sources) const;
 		void fp_JoinNode(umint _iNode);
+		void fp_LayoutLambdaHead(umint _iNode, umint _iBody);
 		bool fp_TryJoin(umint _iFirstToken, umint _iLastToken, umint _iStartColumn);
 		bool fp_MeasureJoinedWidth(umint _iFirstToken, umint _iLastToken, umint &o_nColumns) const;
 		umint fp_GetTokenColumns(CCodeToken const &_Token) const;
@@ -3256,7 +3257,18 @@ namespace
 			iDeclarator = umint(iName);
 		}
 		else if (Tokens[iDeclarator].m_Kind != ECodeTokenKind::mc_Identifier)
-			return false;
+		{
+			// An operator function is named by the keyword and its symbol, or by the call
+			// operator's own parentheses: 'operator ->* (', 'operator () ('.
+			auto iOperator = fp_PreviousCode(iDeclarator);
+			if (iOperator >= 0 && m_Tokens.f_IsText(Tokens[iDeclarator], ")") && m_Tokens.f_IsText(Tokens[umint(iOperator)], "("))
+				iOperator = fp_PreviousCode(umint(iOperator));
+
+			if (iOperator < 0 || !m_Tokens.f_IsText(Tokens[umint(iOperator)], "operator"))
+				return false;
+
+			iDeclarator = umint(iOperator);
+		}
 
 		auto iWalk = fp_PreviousCode(iDeclarator);
 		if (iWalk >= 0 && m_Tokens.f_IsText(Tokens[umint(iWalk)], "~"))
@@ -3291,7 +3303,9 @@ namespace
 			{
 				"static", "virtual", "inline", "constexpr", "consteval", "constinit", "explicit", "friend", "extern"
 				, "mutable", "thread_local", "inline_always", "inline_never", "inline_small", "inline_medium"
-				, "inline_large", "inline_extralarge", "mark_nodebug"
+				, "inline_large", "inline_extralarge", "mark_nodebug", "inline_always_debug", "inline_always_lto", "inline_never_debug"
+				, "inline_never_coro_exception_workaround", "mark_artificial", "mark_no_coroutine_debug", "mark_no_stack_protector"
+				, "assure_used", "function_does_not_return", "malloc_like", "only_parameters_aliased", "return_not_aliased"
 			}
 		;
 		umint iReturn = _iDeclFirst;
@@ -3623,10 +3637,69 @@ namespace
 		for (auto iChild : Node.m_Children)
 		{
 			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Block)
+			{
+				fp_LayoutLambdaHead(_iNode, iChild);
 				fp_LayoutNode(iChild, fp_GetStatementIndent(Nodes[iChild].m_iFirstToken));
+			}
 			else
 				fp_JoinNode(iChild);
 		}
+	}
+
+	// A lambda standing in a construct whose own lines are kept still has a head of its
+	// own: one that does not fit on its line is split as it would be in any statement.
+	void CFormattingAnalyzer::fp_LayoutLambdaHead(umint _iNode, umint _iBody)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto iBrace = Nodes[_iBody].m_iFirstToken;
+		auto iHeadLast = fp_PreviousCode(iBrace);
+		if (iHeadLast < 0)
+			return;
+
+		umint iHeadFirst = TCLimitsInt<umint>::mc_Max;
+		for (auto iChild : Nodes[_iNode].m_Children)
+		{
+			auto const &Child = Nodes[iChild];
+			if (Child.m_iLastToken >= iBrace)
+				break;
+
+			if (Child.m_Kind == ECodeNodeKind::mc_Group && Child.m_Bracket == ECodeBracket::mc_Square && fp_ClosesLambdaIntroducer(Child.m_iLastToken))
+				iHeadFirst = Child.m_iFirstToken;
+		}
+
+		if (iHeadFirst == TCLimitsInt<umint>::mc_Max)
+			return;
+
+		// The expression the lambda is an operand of starts the line, as in
+		// 'g_ActorSubscription(Actor) / [...]', and is laid out with it.
+		auto iLineFirst = iHeadFirst;
+		while (!fp_IsFirstOnLine(iLineFirst))
+		{
+			auto iPrevious = fp_PreviousCode(iLineFirst);
+			if (iPrevious < 0 || umint(iPrevious) <= Nodes[_iNode].m_iFirstToken)
+				return;
+
+			// A group in front is stepped over whole: 'g_ActorSubscription(Actor) / [...]'.
+			auto iGroup = m_Structure.f_FindNodeClosingAt(umint(iPrevious));
+			if (iGroup < Nodes.f_GetLen() && Nodes[iGroup].m_Kind == ECodeNodeKind::mc_Group)
+				iPrevious = aint(Nodes[iGroup].m_iFirstToken);
+
+			if (umint(iPrevious) <= Nodes[_iNode].m_iFirstToken || m_TokenDepth[umint(iPrevious)] != m_TokenDepth[iHeadFirst])
+				return;
+
+			iLineFirst = umint(iPrevious);
+		}
+
+		auto nIndent = fp_GetStatementIndent(iLineFirst);
+		if (!fp_IsRangeJoinable(_iNode, iLineFirst, umint(iHeadLast)) || fp_FitsInline(iLineFirst, umint(iHeadLast), nIndent))
+			return;
+
+		// The capture list stays on the operator's line where it fits there, and the parts
+		// behind it follow at that line's level. One too long for it goes below the operator
+		// as the statement's continuation.
+		umint iCaptureLast = Nodes[m_Structure.f_FindNodeOpeningAt(iHeadFirst)].m_iLastToken;
+		bool bCaptureBelow = iLineFirst != iHeadFirst && !fp_FitsInline(iLineFirst, iCaptureLast, nIndent);
+		fp_LayoutRange(_iNode, iLineFirst, umint(iHeadLast), nIndent, false, bCaptureBelow);
 	}
 
 	// A member initializer list is its own line structure: one entry per line, each split
@@ -3959,6 +4032,42 @@ namespace
 			{
 				if (m_Tokens.f_IsText(Tokens[iRest], "requires"))
 					bFixedLineBreaks = true;
+			}
+		}
+
+		// A requires clause behind the declaration keeps the line it starts, and the
+		// declaration in front of it is laid out as any other that ends there.
+		if (bFixedLineBreaks)
+		{
+			aint iClause = -1;
+			bool bElsewhere = false;
+			for (auto i = fp_NextCode(iDeclFirst); i >= 0 && umint(i) <= iHeadLast; i = fp_NextCode(umint(i)))
+			{
+				if (!m_Tokens.f_IsText(Tokens[umint(i)], "requires"))
+					continue;
+
+				if (m_TokenDepth[umint(i)] == m_TokenDepth[iDeclFirst] && fp_IsFirstOnLine(umint(i)))
+				{
+					iClause = i;
+
+					break;
+				}
+
+				bElsewhere = true;
+			}
+
+			// Only a clause written on one line is left alone whole; one holding a requires
+			// expression, whose braces the head can end in, keeps the statement's lines.
+			bool bOneLineClause = iClause >= 0 && !m_Tokens.f_IsText(Tokens[iHeadLast], "requires");
+			for (auto i = iClause >= 0 ? fp_NextCode(umint(iClause)) : aint(-1); bOneLineClause && i >= 0 && umint(i) <= iHeadLast; i = fp_NextCode(umint(i)))
+				bOneLineClause = !fp_IsFirstOnLine(umint(i));
+
+			auto iBeforeClause = iClause >= 0 ? fp_PreviousCode(umint(iClause)) : aint(-1);
+			if (bOneLineClause && iBeforeClause >= 0 && umint(iBeforeClause) >= iDeclFirst && !bElsewhere && iInitializerList == TCLimitsInt<umint>::mc_Max)
+			{
+				iSignatureLast = umint(iBeforeClause);
+				iHeadLast = iSignatureLast;
+				bFixedLineBreaks = false;
 			}
 		}
 
@@ -5605,8 +5714,10 @@ namespace
 		// explicit instantiation has neither, and then its argument list is the only scope
 		// it has, so that is where it breaks.
 		bool bNamedScope = false;
+		// A parameter's default argument is given to it the way a statement's value is.
+		bool bElement = Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Paren && _iFirst > Node.m_iFirstToken;
 		umint iAssign = 0;
-		for (umint i = _iFirst; bStatement && i <= _iLast && !iAssign; ++i)
+		for (umint i = _iFirst; (bStatement || bElement) && i <= _iLast && !iAssign; ++i)
 		{
 			if (m_TokenDepth[i] == m_TokenDepth[_iFirst] && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "="))
 				iAssign = i;
@@ -5614,7 +5725,7 @@ namespace
 
 		// Behind a declaration's parameter list the '=' makes it pure, defaulted or deleted,
 		// and gives nothing a value.
-		if (m_iSplitFirstParen && iAssign > m_iSplitFirstParen)
+		if (bStatement && m_iSplitFirstParen && iAssign > m_iSplitFirstParen)
 			iAssign = 0;
 
 		TCVector<umint> Scopes;
@@ -5639,8 +5750,14 @@ namespace
 				// A cast converts what follows it, so its parentheses belong to that operand
 				// rather than being a scope of their own, and so do the placement arguments
 				// of a 'new', which stand in front of the type it constructs.
+				// Behind 'operator' the 'new' names the function, whose parenthesis is its parameter list.
 				auto iBeforeScope = fp_PreviousCode(Child.m_iFirstToken);
-				bool bPlacement = Child.m_Bracket == ECodeBracket::mc_Paren && iBeforeScope >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBeforeScope)], "new");
+				auto iBeforeNew = iBeforeScope >= 0 ? fp_PreviousCode(umint(iBeforeScope)) : aint(-1);
+				bool bPlacement = Child.m_Bracket == ECodeBracket::mc_Paren
+					&& iBeforeScope >= 0
+					&& m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBeforeScope)], "new")
+					&& !(iBeforeNew >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBeforeNew)], "operator"))
+				;
 				if (bPlacement && fp_FitsInline(umint(iBeforeScope), Child.m_iLastToken, _iIndent))
 					fp_MarkInline(umint(iBeforeScope), Child.m_iLastToken);
 
@@ -5649,7 +5766,7 @@ namespace
 
 				// What stands in front of a statement's '=' declares what the value is given
 				// to, and is no more a place to break than what stands in front of a name.
-				bool bBeforeName = bStatement && (Child.m_iLastToken < m_iSplitFirstParen || Child.m_iLastToken < iAssign);
+				bool bBeforeName = (bStatement && Child.m_iLastToken < m_iSplitFirstParen) || Child.m_iLastToken < iAssign;
 				// The template arguments of a class a name is qualified with stand in front of
 				// that name too: 'TCFoo<CBar>::f_Function'.
 				auto iQualifies = fp_NextCode(Child.m_iLastToken);
@@ -5701,7 +5818,7 @@ namespace
 		// that makes the statement fit, rather than the type in front of the name giving.
 		// Where the type and the name do not fit on one line to begin with, the name goes
 		// down with its value, and the type stays whole on the line above them.
-		if (iAssign && !_bClause && _bIndent && !fp_FitsInline(_iFirst, _iLast, _iIndent))
+		if (iAssign && !_bClause && (_bIndent || bElement) && !fp_FitsInline(_iFirst, _iLast, _iIndent))
 		{
 			auto const &AllTokens = m_Tokens.f_GetTokens();
 			auto iHeadEnd = fp_PreviousCode(iAssign);
@@ -5711,7 +5828,7 @@ namespace
 				&& fp_GetCanonicalSpacing(umint(iHeadEnd), iAssign) == ECodeSpacing::mc_Space
 			;
 			bool bHeadFits = bSettled && fp_FitsInline(_iFirst, umint(iHeadEnd), _iIndent);
-			if (bHeadFits && !bNamedScope && fp_FitsInline(iAssign, _iLast, nContinuation))
+			if (bHeadFits && (!bNamedScope || bElement) && fp_FitsInline(iAssign, _iLast, nContinuation))
 			{
 				fp_MarkInline(_iFirst, umint(iHeadEnd));
 				fp_BreakBefore(iAssign, nContinuation);
@@ -5722,10 +5839,18 @@ namespace
 
 			if (bSettled && !bHeadFits && AllTokens[umint(iHeadEnd)].m_Kind == ECodeTokenKind::mc_Identifier)
 			{
-				// A declarator hugs the name, and goes where the name goes.
+				// A declarator hugs the name, and goes where the name goes, and so does the
+				// cv-qualifier the declarators stand behind: 'CFoo<...>' over 'const &_Name'.
 				auto iNameFirst = umint(iHeadEnd);
 				for (auto iBefore = fp_PreviousCode(iNameFirst); iBefore >= 0 && fg_IsDeclaratorToken(m_Tokens, m_Structure, umint(iBefore)); iBefore = fp_PreviousCode(iNameFirst))
 					iNameFirst = umint(iBefore);
+
+				auto iQualifier = fp_PreviousCode(iNameFirst);
+				if (iNameFirst != umint(iHeadEnd) && iQualifier >= 0 && (AllTokens[umint(iQualifier)].m_Kind == ECodeTokenKind::mc_Identifier)
+					&& (m_Tokens.f_IsText(AllTokens[umint(iQualifier)], "const") || m_Tokens.f_IsText(AllTokens[umint(iQualifier)], "volatile")))
+				{
+					iNameFirst = umint(iQualifier);
+				}
 
 				auto iTypeEnd = fp_PreviousCode(iNameFirst);
 				bool bNameDown = iTypeEnd >= 0

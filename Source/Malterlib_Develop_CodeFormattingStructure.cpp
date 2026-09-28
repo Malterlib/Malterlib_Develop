@@ -822,6 +822,8 @@ namespace NMib::NDevelop
 					|| mp_pTokens->f_IsText(First, "union")
 					|| mp_pTokens->f_IsText(First, "enum")
 					|| mp_pTokens->f_IsText(First, "namespace")
+					// A linkage specification's braces hold declarations: 'extern "C" {'.
+					|| (mp_pTokens->f_IsText(First, "extern") && Tokens[mp_Significant[i - 1]].m_Kind == ECodeTokenKind::mc_StringLiteral)
 				;
 				bool bBlock = bAfterCloseParen || bAfterTrailingReturn || (i == _iToken && !fp_IsRequirementBrace(i)) || bDefinition;
 				if (!bBlock)

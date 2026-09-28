@@ -461,7 +461,19 @@ brace is an argument, which no parameter list holds, so `TCSet<int>
 Set(fg_Construct(&Allocator))` is never converted. A bare name behind a complete type, `void *` included, such as an
 attribute macro, keeps the declaration from being converted, and so does a
 macro in front of the name, `DMibFloatConstexpr`, which can expand to
-specifiers as readily as to a type. The
+specifiers as readily as to a type. Malterlib's attribute macros that stand in
+front of a return type, such as `mark_artificial` and `only_parameters_aliased`,
+are specifiers like `inline_always`. An operator function is named by the
+keyword and its symbol, `operator ->*`, and has its return type moved like any
+other name. A requires clause on a line of its own behind a declaration keeps
+that line, and the declaration in front of it is laid out as one ending there.
+The parenthesis of `operator new` is its parameter list, never placement
+arguments, and the braces of `extern "C"` hold declarations like a namespace's.
+A parameter's default argument is given to it as a statement's value is: the
+`=` and the value take the line below, and the type stays whole with its name.
+A lambda standing in a construct whose own lines are kept, such as a braced
+initializer written across lines, still has a head of its own, split where it
+does not fit on its line. The
 conversion is the one rule that changes tokens. It is decided on the original
 source, and the layout is then made on the converted source, so the lines the
 plan writes are the lines a later pass sees.

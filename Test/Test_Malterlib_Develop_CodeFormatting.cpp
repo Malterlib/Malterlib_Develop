@@ -1268,6 +1268,36 @@ namespace
 
 				DMibTestCategory("Bodies")
 				{
+					// A lambda in a braced initializer written across lines still has a head of its
+					// own, split where it does not fit on its line as in any statement.
+					{
+						CStr Params;
+						for (umint i = 0; i < 6; ++i)
+							Params += "CBuildSystemEvaluationContext const &_Context{}, "_f << i;
+
+						Params += "int _Last";
+						fg_ExpectFormat
+							(
+								"LambdaHeadInInitializer"
+								, "CMap g_Map =\n\t{\n\t\tCFoo\n\t\t(\n\t\t\t[](" + Params + ") -> int\n\t\t\t{\n\t\t\t\treturn 1;\n\t\t\t}\n\t\t)\n\t\t, 5\n\t}\n;\n"
+								, "CMap g_Map =\n\t{\n\t\tCFoo\n\t\t(\n\t\t\t[]\n\t\t\t(\n\t\t\t\t" + CStr(Params).f_Replace(", ", "\n\t\t\t\t, ")
+									+ "\n\t\t\t)\n\t\t\t-> int\n\t\t\t{\n\t\t\t\treturn 1;\n\t\t\t}\n\t\t)\n\t\t, 5\n\t}\n;\n"
+							)
+						;
+						CStr Captures;
+						for (umint i = 0; i < 4; ++i)
+							Captures += "pStateWithName{} = fg_Move(pState{}), "_f << i << i;
+
+						Captures += "this";
+						fg_ExpectFormat
+							(
+								"CaptureBelowOperatorInInitializer"
+								, "void f()\n{\n\tco_return CFoo\n\t\t{\n\t\t\tg_ActorSubscription(Actor) / [" + Captures + "]() mutable\n\t\t\t{\n\t\t\t}\n\t\t\t, 5\n\t\t}\n\t;\n}\n"
+								, "void f()\n{\n\tco_return CFoo\n\t\t{\n\t\t\tg_ActorSubscription(Actor) /\n\t\t\t\t[" + Captures + "]() mutable\n"
+									"\t\t\t{\n\t\t\t}\n\t\t\t, 5\n\t\t}\n\t;\n}\n"
+							)
+						;
+					}
 					// An empty body after a braced member initializer has no terminator of its
 					// own. Reading it as another initializer swallowed the next declaration,
 					// which then no longer fit on one line and was split apart.
@@ -2088,6 +2118,78 @@ namespace
 
 				DMibTestCategory("TrailingReturn")
 				{
+					// A parameter's default argument is given to it as a statement's value is: the
+					// '=' and the value take the line below, and the type stays whole with the name.
+					{
+						CStr Type = "NFunction::TCFunction<void (NFunction::TCFunction<void ()> const &_Functor)>";
+						fg_ExpectFormat
+							(
+								"DefaultArgumentBelow"
+								, "struct C\n{\n\tstatic C fs_Launch\n\t\t(\n\t\t\tint _Operation\n\t\t\t, " + Type + " const &_fDispatcherWithALongName = " + Type + "()\n\t\t)\n\t;\n};\n"
+								, "struct C\n{\n\tstatic C fs_Launch\n\t\t(\n\t\t\tint _Operation\n\t\t\t, " + Type + " const &_fDispatcherWithALongName\n\t\t\t= " + Type
+									+ "()\n\t\t)\n\t;\n};\n"
+							)
+						;
+					}
+					{
+						CStr Params;
+						for (umint i = 0; i < 5; ++i)
+							Params += "NMib::CLongParameterTypeName{} _Param{}, "_f << i << i;
+
+						Params += "int _Last";
+						CStr Split = CStr(Params).f_Replace(", ", "\n\t\t, ");
+						// The parenthesis of 'operator new' is its parameter list, not placement arguments.
+						fg_ExpectFormat
+							(
+								"OperatorNewParameters"
+								, "void *operator new (" + Params + ")\n{\n}\n"
+								, "void *operator new\n\t(\n\t\t" + Split + "\n\t)\n{\n}\n"
+							)
+						;
+						// The declarations in a linkage specification's braces are laid out as any others.
+						fg_ExpectFormat
+							(
+								"LinkageSpecification"
+								, "extern \"C\"\n{\n\tvoid fg_Function(" + Params + ")\n\t{\n\t}\n}\n"
+								, "extern \"C\"\n{\n\tvoid fg_Function\n\t\t(\n\t\t\t" + CStr(Params).f_Replace(", ", "\n\t\t\t, ") + "\n\t\t)\n\t{\n\t}\n}\n"
+							)
+						;
+						// A requires clause on a line of its own behind the declaration keeps that line,
+						// and the declaration is laid out as one that ends there.
+						fg_ExpectFormat
+							(
+								"TrailingRequiresClause"
+								, "template <typename t_C>\nvoid fg_Function(" + Params + ")\n\trequires (cFoo<t_C>)\n{\n}\n"
+								, "template <typename t_C>\nvoid fg_Function\n\t(\n\t\t" + Split + "\n\t)\n\trequires (cFoo<t_C>)\n{\n}\n"
+							)
+						;
+					}
+					// An operator named by its symbol has its return type moved like any other name,
+					// and the attribute macros in front of it are specifiers that stay in front.
+					{
+						CStr Name;
+						for (umint i = 0; i < 40; ++i)
+							Name += "W";
+
+						fg_ExpectFormat
+							(
+								"OperatorTrailingReturn"
+								, CStr
+									(
+										"mark_artificial mark_nodebug inline_always NFunction::TCBoundFunctor@<t_CMemberPtr, t_CType *> "
+										"TCReference@<t_CType>::operator ->* (t_CMemberPtr const &_MemberPtr) const\n{\n}\n"
+									)
+									.f_Replace("@", Name)
+								, CStr
+									(
+										"mark_artificial mark_nodebug inline_always auto TCReference@<t_CType>::operator ->* (t_CMemberPtr const &_MemberPtr) const\n"
+										"\t-> NFunction::TCBoundFunctor@<t_CMemberPtr, t_CType *>\n{\n}\n"
+									)
+									.f_Replace("@", Name)
+								, false
+							)
+						;
+					}
 					// Only a return type moves. A macro in front of the name can expand to specifiers,
 					// which are no type behind the parameter list.
 					{
