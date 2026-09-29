@@ -711,6 +711,8 @@ namespace
 		NStr::CStr fp_GetDirectiveKeyword(umint _iToken) const;
 		bool fp_IsDirectiveParallel(umint _iDirective, umint _iOpen, umint _iClose) const;
 		bool fp_HasOpaqueDirective(umint _iFirst, umint _iLast) const;
+		bool fp_IsInConditionalWithin(umint _iToken, umint _iScopeFirst) const;
+		bool fp_SpansLines(umint _iFirst, umint _iLast) const;
 		umint fp_GetSourceLineIndent(umint _iToken) const;
 		void fp_MarkInline(umint _iFirst, umint _iLast);
 		void fp_EmitLayout();
@@ -749,7 +751,7 @@ namespace
 		NContainer::TCVector<umint> m_iBlockEnd;				// Indexed by token: the closing brace of the block the token opens, or the token count.
 		NContainer::TCVector<uint8> m_bOpaqueDirective;			// Indexed by token: a directive whose branches cut a construct, so nothing is read across it.
 		NContainer::TCVector<umint> m_nOpaqueBefore;			// Indexed by token: how many opaque directives stand in front of it.
-		NContainer::TCVector<uint8> m_bInConditional;			// Indexed by token: the token stands inside a conditional group's branches.
+		NContainer::TCVector<umint> m_iConditionalOpen;		// Indexed by token: the directive opening the innermost conditional around it, or the maximum.
 		NContainer::TCVector<CCodeFormattingRange> m_Conditionals;	// Source spans of the '#if' groups, for saying which one a structure was cut by.
 		NContainer::TCVector<uint8> m_GapState;					// Indexed by token: what the gap in front of it becomes.
 		mutable NContainer::TCVector<uint8> m_CanonicalSpacing;	// Indexed by token: the standard's spelling of the gap in front of it, plus one, or zero when not yet asked.
@@ -1803,6 +1805,9 @@ namespace
 
 			auto iOpen = Node.m_iFirstToken;
 			auto iClose = Node.m_iLastToken;
+			if (iClose >= Tokens.f_GetLen())
+				continue;
+
 			auto iMarker = fp_PreviousCode(iOpen);
 			auto iFirstElement = fp_NextCode(iOpen);
 			bool bArray = Node.m_Bracket == ECodeBracket::mc_Square && iMarker >= 0 && m_Tokens.f_HasRole(Tokens[umint(iMarker)], ECodeNameRole::mc_DSLMarker);
@@ -4813,6 +4818,12 @@ namespace
 					if (bOwnTail && m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && fp_FitsInline(umint(iTail), Node.m_iLastToken, _iIndent))
 						fp_MarkInline(umint(iTail), Node.m_iLastToken);
 
+					// A call that hugs the brace, '}()', ends the statement there as well.
+					bool bHugsBrace = iTail >= 0 && umint(iTail) < Node.m_iLastToken && !fp_IsFirstOnLine(umint(iTail));
+					auto iBrace = Nodes[iBlock].m_iLastToken;
+					if (bHugsBrace && m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && fp_FitsInline(iBrace, Node.m_iLastToken, _iIndent))
+						fp_MarkInline(iBrace, Node.m_iLastToken);
+
 					return;
 				}
 
@@ -5418,11 +5429,14 @@ namespace
 		// depth of their own, since the token stream runs through every branch at once. Such
 		// a block keeps the depths the source gave its lines.
 		bool bDepths = !fp_HasOpaqueDirective(Node.m_iFirstToken, Node.m_iLastToken);
+		// The file's scope starts before anything in it, the directives in front of its first
+		// statement included.
+		umint iScopeFirst = bBraced ? Node.m_iFirstToken : 0;
 		if (bBraced)
 		{
 			if (!fp_IsFirstOnLine(Node.m_iLastToken))
 				fp_OwnLineBefore(Node.m_iLastToken, _iIndent);
-			else if (bDepths && !m_bInConditional[Node.m_iLastToken] && fp_GetStatementIndent(Node.m_iLastToken) != _iIndent)
+			else if (bDepths && !fp_IsInConditionalWithin(Node.m_iLastToken, iScopeFirst) && fp_GetStatementIndent(Node.m_iLastToken) != _iIndent)
 				fp_IndentBefore(Node.m_iLastToken, _iIndent);
 		}
 
@@ -5433,6 +5447,9 @@ namespace
 		;
 		umint nLevel = bBraced ? _iIndent + nTab : _iIndent;
 		umint nPlaced = nLevel;
+		bool bEnumBody = false;
+		if (bBraced && Node.m_iParent < Nodes.f_GetLen() && Nodes[Node.m_iParent].m_Kind == ECodeNodeKind::mc_Statement)
+			bEnumBody = m_Tokens.f_IsText(Tokens[fp_SkipTemplateHeader(Nodes[Node.m_iParent].m_iFirstToken)], "enum");
 		// The clause whose statement is still to come, and the depth that clause was
 		// written at: what it guards stands one level in from there.
 		umint iGuard = TCLimitsInt<umint>::mc_Max;
@@ -5481,7 +5498,16 @@ namespace
 			else if (bLabel && nLevel >= nTab)
 				nPlace = nLevel - nTab;
 
-			bool bStays = Child.m_Kind == ECodeNodeKind::mc_Unsupported || bOnLabelLine || bElseIf || bAttribute || m_Tokens.f_IsText(First, ";");
+			// An enumerator list is no statement, but takes the line under the enum's brace as one
+			// does, where it is one line to move.
+			bool bEnumerators = false;
+			if (bEnumBody && !bFirstOnLine && iPrevious == TCLimitsInt<umint>::mc_Max)
+			{
+				auto iChildLast = fp_PreviousCode(fg_Min(Child.m_iLastToken, Node.m_iLastToken - 1) + 1);
+				bEnumerators = iChildLast >= aint(iFirst) && !fp_SpansLines(iFirst, umint(iChildLast));
+			}
+
+			bool bStays = (Child.m_Kind == ECodeNodeKind::mc_Unsupported && !bEnumerators) || bOnLabelLine || bElseIf || bAttribute || m_Tokens.f_IsText(First, ";");
 			// Behind a closing brace only a keyword starts a statement of its own, since a
 			// name there declares a variable of the type just defined.
 			if (!bStays && !bFirstOnLine && bAfterBlock)
@@ -5499,7 +5525,7 @@ namespace
 				fp_OwnLineBefore(iFirst, nPlace);
 				nWritten = nPlace;
 			}
-			else if (!bStays && bDepths && !m_bInConditional[iFirst] && nWritten != nPlace && !fp_KeepsOwnLines(iChild))
+			else if (!bStays && bDepths && !fp_IsInConditionalWithin(iFirst, iScopeFirst) && nWritten != nPlace && !fp_KeepsOwnLines(iChild))
 			{
 				fp_IndentBefore(iFirst, nPlace);
 				nWritten = nPlace;
@@ -5819,23 +5845,41 @@ namespace
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 			m_nOpaqueBefore[i + 1] = m_nOpaqueBefore[i] + m_bOpaqueDirective[i];
 
-		// Which tokens a conditional holds. The depth the sources give the lines inside one
-		// varies with the file, so the standard does not settle it and they keep theirs.
-		m_bInConditional.f_SetLen(Tokens.f_GetLen());
-		umint nDepth = 0;
+		// The conditional each token stands in, by its opening directive. The depth the sources
+		// give the lines directly inside one varies with the file, so the standard does not
+		// settle it and they keep theirs.
+		m_iConditionalOpen.f_SetLen(Tokens.f_GetLen());
+		TCVector<umint> OpenConditionals;
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 		{
 			if (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor)
 			{
 				auto Keyword = fp_GetDirectiveKeyword(i);
 				if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
-					++nDepth;
-				else if (Keyword == "endif" && nDepth)
-					--nDepth;
+					OpenConditionals.f_Insert(i);
+				else if (Keyword == "endif" && !OpenConditionals.f_IsEmpty())
+					OpenConditionals.f_Remove(OpenConditionals.f_GetLen() - 1);
 			}
 
-			m_bInConditional[i] = nDepth != 0;
+			m_iConditionalOpen[i] = OpenConditionals.f_IsEmpty() ? TCLimitsInt<umint>::mc_Max : OpenConditionals.f_GetLast();
 		}
+	}
+
+	bool CFormattingAnalyzer::fp_SpansLines(umint _iFirst, umint _iLast) const
+	{
+		return m_Lines.f_FindLine(m_Tokens.f_GetTokens()[_iFirst].m_iOffset) != m_Lines.f_FindLine(m_Tokens.f_GetTokens()[_iLast].f_GetEnd() - 1);
+	}
+
+	// Whether the token stands in a conditional that opens inside the scope: one around the
+	// whole scope leaves the depths inside it to the scope's own braces.
+	bool CFormattingAnalyzer::fp_IsInConditionalWithin(umint _iToken, umint _iScopeFirst) const
+	{
+		if (_iToken >= m_iConditionalOpen.f_GetLen())
+			return false;
+
+		auto iOpen = m_iConditionalOpen[_iToken];
+
+		return iOpen != TCLimitsInt<umint>::mc_Max && iOpen > _iScopeFirst;
 	}
 
 	// A node the builder could not close names a token past the end, so the range is taken
@@ -6819,9 +6863,9 @@ namespace
 					;
 				}
 
-				// Moving the access down only helps where the rest then fits, or gives at its own
-				// accesses. One access whose call still has to open anyway stays on the line with
-				// what it is called on, and that call opens: 'fg_Get(*this).f_Enable' over '('.
+				// Moving the access down only helps where the rest then fits. One access whose call
+				// has to open anyway stays on the line with what it is called on, and that call
+				// opens: 'fg_Get(*this).f_Enable' over '('.
 				if (bOpens && bMember && !fp_FitsInline(umint(iMember), _iLast, nContinuation))
 				{
 					bool bOneAccess = true;

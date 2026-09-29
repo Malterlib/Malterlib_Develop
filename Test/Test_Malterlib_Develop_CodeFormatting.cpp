@@ -2208,6 +2208,33 @@ namespace
 							"\tStr\n\t\t= CFormat(\"@\")\n\t\t<< @\n\t\t<< &Serial\n\t;\n}\n"
 						)
 					;
+					// A declarator in parentheses behind a type stands apart from it, and a type's
+					// key in front of an initialized variable defines no body.
+					fg_ExpectFormat
+						(
+							"DeclaratorsAndInitializers"
+							, "void fg_F(ch8(&_Dest)[4], int(*_pCall)(int));\nvoid f()\n{\n\tstruct CState State = {0};\n\tstruct CState Broken =\n\t{0\n\t};\n}\n"
+							, "void fg_F(ch8 (&_Dest)[4], int (*_pCall)(int));\nvoid f()\n{\n\tstruct CState State = {0};\n\tstruct CState Broken = {0};\n}\n"
+						)
+					;
+					// An enumerator list takes the line under the enum's brace, and a statement that
+					// opens with its lambda ends on the call behind the body.
+					fg_ExpectFormat
+						(
+							"EnumListsAndLambdaCalls"
+							, "void f()\n{\n\tenum { EA = 4 };\n\tenum\n\t{EB = 4\n\t};\n\t[]()\n\t{\n\t\tg();\n\t\th();\n\t}()\n\t;\n}\n"
+							, "void f()\n{\n\tenum\n\t{\n\t\tEA = 4\n\t};\n\n\tenum\n\t{\n\t\tEB = 4\n\t};\n\n\t[]()\n\t{\n\t\tg();\n\t\th();\n\t}();\n}\n"
+						)
+					;
+					// A conditional around a whole scope leaves the depths inside it to the scope's
+					// braces; only lines directly inside a conditional keep the depth they have.
+					fg_ExpectFormat
+						(
+							"ConditionalAroundScope"
+							, "#if 1\nvoid f()\n{\n\t\tg();\n#if DFoo\n\t\th();\n#endif\n}\n#endif\n"
+							, "#if 1\nvoid f()\n{\n\tg();\n#if DFoo\n\t\th();\n#endif\n}\n#endif\n"
+						)
+					;
 					// A single member access whose call has to open anyway stays on the line with what
 					// it is called on, and the call opens there.
 					fSplit

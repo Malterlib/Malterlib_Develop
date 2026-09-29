@@ -296,12 +296,31 @@ namespace NMib::NDevelop
 			bDSLArray = iMarker >= 0 && fg_IsDSLMarker(*mp_pTokens, mp_pTokens->f_GetTokens()[umint(iMarker)]);
 		}
 
+		// Only a list opened on purpose keeps its lines: one whose first element starts the line
+		// behind the opening marker. An element on the marker's line spells a list written on
+		// one line, whatever broke it.
 		if (Node.m_Kind == ECodeNodeKind::mc_Group && ((Node.m_Bracket == ECodeBracket::mc_Brace && !bRequirement) || bDSLArray))
 		{
 			auto const &Source = mp_pTokens->f_GetSource();
-			for (auto i = Node.m_iFirstToken; i <= _iLastToken && !Node.m_bHasMultiLineBrace; ++i)
+			auto const &Tokens = mp_pTokens->f_GetTokens();
+			bool bOpened = false;
+			for (auto i = Node.m_iFirstToken + 1; i <= _iLastToken && i < Tokens.f_GetLen(); ++i)
 			{
-				auto const &Token = mp_pTokens->f_GetTokens()[i];
+				auto Kind = Tokens[i].m_Kind;
+				if (Kind == ECodeTokenKind::mc_Newline)
+				{
+					bOpened = true;
+
+					break;
+				}
+
+				if (Kind != ECodeTokenKind::mc_Whitespace)
+					break;
+			}
+
+			for (auto i = Node.m_iFirstToken; bOpened && i <= _iLastToken && i < Tokens.f_GetLen() && !Node.m_bHasMultiLineBrace; ++i)
+			{
+				auto const &Token = Tokens[i];
 				for (umint iByte = Token.m_iOffset; iByte < Token.f_GetEnd(); ++iByte)
 					mp_Nodes[_iNode].m_bHasMultiLineBrace |= Source.f_GetStr()[iByte] == '\n' || Source.f_GetStr()[iByte] == '\r';
 			}
@@ -835,11 +854,14 @@ namespace NMib::NDevelop
 					iHead = iEnd + 1;
 				}
 
+				// A brace behind an '=' initializes a variable of the type the class key names, and
+				// is no body of it: 'struct timespec Time = {0};'.
 				auto const &First = Tokens[mp_Significant[iHead]];
-				bool bDefinition = mp_pTokens->f_IsText(First, "struct")
-					|| mp_pTokens->f_IsText(First, "class")
-					|| mp_pTokens->f_IsText(First, "union")
-					|| mp_pTokens->f_IsText(First, "enum")
+				bool bInitializer = i && mp_pTokens->f_IsText(Tokens[mp_Significant[i - 1]], "=");
+				bool bDefinition = (!bInitializer && mp_pTokens->f_IsText(First, "struct"))
+					|| (!bInitializer && mp_pTokens->f_IsText(First, "class"))
+					|| (!bInitializer && mp_pTokens->f_IsText(First, "union"))
+					|| (!bInitializer && mp_pTokens->f_IsText(First, "enum"))
 					|| mp_pTokens->f_IsText(First, "namespace")
 					// A linkage specification's braces hold declarations: 'extern "C" {'.
 					|| (mp_pTokens->f_IsText(First, "extern") && Tokens[mp_Significant[i - 1]].m_Kind == ECodeTokenKind::mc_StringLiteral)
@@ -2656,15 +2678,18 @@ namespace NMib::NDevelop
 							iInner = iStar;
 					}
 
+					// A pointer or a reference to an array is followed by the bound instead: 'ch8
+					// (&_Dest)[t_Size]'. Behind a name the naming lists as a type's, which cannot be
+					// called, the declarator stands apart from it.
 					auto iBehind = fg_NextCode(_Tokens, Node.m_iLastToken);
 					bool bDeclarator = iInner >= 0
 						&& (_Tokens.f_IsText(Tokens[umint(iInner)], "*") || _Tokens.f_IsText(Tokens[umint(iInner)], "&"))
 						&& iBehind >= 0
-						&& _Tokens.f_IsText(Tokens[umint(iBehind)], "(")
+						&& (_Tokens.f_IsText(Tokens[umint(iBehind)], "(") || _Tokens.f_IsText(Tokens[umint(iBehind)], "["))
 						&& Node.m_SplitPoints.f_IsEmpty()
 					;
 					if (bDeclarator)
-						return ECodeSpacing::mc_Preserve;
+						return fg_NamesType(_Tokens, Left) ? ECodeSpacing::mc_Space : ECodeSpacing::mc_Preserve;
 
 					umint iStatement = Node.m_iParent;
 					while (iStatement && Nodes[iStatement].m_Kind != ECodeNodeKind::mc_Statement)
