@@ -1865,6 +1865,17 @@ namespace
 							, "void f()\n{\n\tco_return co_await m_Promises\n\t\t.f_Insert() // why\n\t\t.f_Future()\n\t;\n}\n"
 						)
 					;
+					// A string continued on the next line stands one level in under the line that starts
+					// its statement, and at the level of an element or an operand line it continues.
+					fg_ExpectFormat
+						(
+							"StringContinuations"
+							, "void f()\n{\n\tText = \"a \"\n\"b\";\n\tg\n\t\t(\n\t\t\t\"c \"\n\t\t\t\t\"d\"\n"
+							"\t\t\t, \"e \"\n\t\t\t\t\t\"f\"\n\t\t\t\t\"g\"\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tText = \"a \"\n\t\t\"b\";\n\tg\n\t\t(\n\t\t\t\"c \"\n\t\t\t\"d\"\n"
+							"\t\t\t, \"e \"\n\t\t\t\"f\"\n\t\t\t\"g\"\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// A trailing comment stands one space behind its code, and the comment lines that
 					// continue it follow it there; one at the code's own indentation is its own.
 					fg_ExpectFormat
