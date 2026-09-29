@@ -1877,6 +1877,19 @@ namespace
 							"\t\t\t, \"C\"_o= _o[4, 5]\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// Within a list of data, a blank line sets nothing apart, and a closing marker
+					// hugging the last element takes a line of its own. A directive keeps its lines.
+					fg_ExpectFormat
+						(
+							"DSLListCorrections"
+							, "void f()\n{\n\tauto Value =\n\t\t{\n\t\t\t\"A\"_o= _o[\n\t\t\t\t1\n\n\t\t\t\t, 2]\n"
+							"\t\t\t, \"B\"_o=\n\t\t\t{\n\t\t\t\t\"C\"_o= 3\n\n\t\t\t\t, \"D\"_o= 4}\n"
+							"\t\t\t, \"E\"_o=\n\t\t\t{\n#ifdef DFoo\n\t\t\t\t\"F\"_o= 5\n#endif\n\t\t\t}\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\tauto Value =\n\t\t{\n\t\t\t\"A\"_o= _o\n\t\t\t[\n\t\t\t\t1\n\t\t\t\t, 2\n\t\t\t]\n"
+							"\t\t\t, \"B\"_o=\n\t\t\t{\n\t\t\t\t\"C\"_o= 3\n\t\t\t\t, \"D\"_o= 4\n\t\t\t}\n"
+							"\t\t\t, \"E\"_o=\n\t\t\t{\n#ifdef DFoo\n\t\t\t\t\"F\"_o= 5\n#endif\n\t\t\t}\n\t\t}\n\t;\n}\n"
+						)
+					;
 					// An attribute behind a lambda's capture list belongs to its introducer, apart from
 					// the list and the parameters as an attribute macro is, and so does one behind a
 					// condition: the body is a lambda's, and the arrow its return type's.

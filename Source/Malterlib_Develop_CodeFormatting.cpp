@@ -1782,73 +1782,123 @@ namespace
 				return iIndent;
 			}
 		;
+		auto const &LineEnding = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
+		auto fBreakBefore = [&](umint _iToken, umint _nColumns, ch8 const *_pExplanation)
+			{
+				auto iGap = Tokens[umint(fp_PreviousSignificant(_iToken))].f_GetEnd();
+				for (umint iEdit = 0; iEdit < m_Edits.f_GetLen(); ++iEdit)
+				{
+					if (m_Edits[iEdit].m_iOffset >= iGap && m_Edits[iEdit].f_GetEnd() <= Tokens[_iToken].m_iOffset)
+						m_bEditDropped[iEdit] = 1;
+				}
+
+				fp_AddEdit("line-break", iGap, Tokens[_iToken].m_iOffset - iGap, LineEnding + fp_MakeIndent(_nColumns), _pExplanation);
+			}
+		;
 		for (umint iNode = 0; m_Structure.f_IsComplete() && iNode < Nodes.f_GetLen(); ++iNode)
 		{
 			auto const &Node = Nodes[iNode];
-			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Square)
+			if (Node.m_Kind != ECodeNodeKind::mc_Group)
 				continue;
 
 			auto iOpen = Node.m_iFirstToken;
 			auto iClose = Node.m_iLastToken;
 			auto iMarker = fp_PreviousCode(iOpen);
-			if (iMarker < 0 || !m_Tokens.f_HasRole(Tokens[umint(iMarker)], ECodeNameRole::mc_DSLMarker) || fp_IsFirstOnLine(iOpen) || !fp_IsFirstOnLine(iClose))
-				continue;
-
-			auto iAfterOpen = fp_NextSignificant(iOpen);
-			if (iAfterOpen < 0 || Tokens[umint(iAfterOpen)].m_Kind != ECodeTokenKind::mc_Newline)
+			auto iFirstElement = fp_NextCode(iOpen);
+			bool bArray = Node.m_Bracket == ECodeBracket::mc_Square && iMarker >= 0 && m_Tokens.f_HasRole(Tokens[umint(iMarker)], ECodeNameRole::mc_DSLMarker);
+			// An object is told by its first key, which the DSL's marker makes one: '{"Key"_o= 5'.
+			auto iKeyMarker = iFirstElement >= 0 ? fp_NextCode(umint(iFirstElement)) : aint(-1);
+			bool bObject = Node.m_Bracket == ECodeBracket::mc_Brace
+				&& iFirstElement >= 0
+				&& Tokens[umint(iFirstElement)].m_Kind == ECodeTokenKind::mc_StringLiteral
+				&& iKeyMarker >= 0
+				&& m_Tokens.f_HasRole(Tokens[umint(iKeyMarker)], ECodeNameRole::mc_DSLMarker)
+			;
+			// A directive's lines are the conditional's, and keep where they are.
+			if ((!bArray && !bObject) || Node.m_bHasDirective)
 				continue;
 
 			auto iOpenLine = m_Lines.f_FindLine(Tokens[iOpen].m_iOffset);
 			auto iCloseLine = m_Lines.f_FindLine(Tokens[iClose].m_iOffset);
-			auto iHeadFirst = m_Tokens.f_FindToken(fLineIndentOffset(iOpenLine));
-
-			auto iStatement = m_Structure.f_FindEnclosingNode(iOpen);
-			while (iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_Kind != ECodeNodeKind::mc_Statement)
-				iStatement = Nodes[iStatement].m_iParent;
-
-			bool bStartsStatement = iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_iFirstToken == iHeadFirst;
-			umint nHead = 0;
-			umint nClose = 0;
-			if (!fFormattedColumn(Tokens[iHeadFirst].m_iOffset, nHead) || !fFormattedColumn(Tokens[iClose].m_iOffset, nClose))
+			auto iAfterOpen = fp_NextSignificant(iOpen);
+			bool bOpened = iAfterOpen >= 0 && Tokens[umint(iAfterOpen)].m_Kind == ECodeTokenKind::mc_Newline && iCloseLine > iOpenLine;
+			if (!bOpened)
 				continue;
 
-			auto nTarget = aint(nHead) + fShiftAt(iOpenLine) + aint(bStartsStatement ? nTab : 0);
-			auto nDelta = nTarget - (aint(nClose) + fShiftAt(iCloseLine));
-
-			// The bracket leaves the marker's line, and the gap it leaves takes the layout's
-			// place there.
-			auto iGap = Tokens[umint(iMarker)].f_GetEnd();
-			for (umint iEdit = 0; iEdit < m_Edits.f_GetLen(); ++iEdit)
+			// Where the bracket stands: its own line, or the one it is moved to.
+			bool bMoveOpener = bArray && !fp_IsFirstOnLine(iOpen);
+			aint nTarget = 0;
 			{
-				if (m_Edits[iEdit].m_iOffset >= iGap && m_Edits[iEdit].f_GetEnd() <= Tokens[iOpen].m_iOffset)
-					m_bEditDropped[iEdit] = 1;
+				auto iHeadFirst = m_Tokens.f_FindToken(fLineIndentOffset(iOpenLine));
+				umint nHead = 0;
+				if (!fFormattedColumn(Tokens[iHeadFirst].m_iOffset, nHead))
+					continue;
+
+				nTarget = aint(nHead) + fShiftAt(iOpenLine);
+				if (bMoveOpener)
+				{
+					auto iStatement = m_Structure.f_FindEnclosingNode(iOpen);
+					while (iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_Kind != ECodeNodeKind::mc_Statement)
+						iStatement = Nodes[iStatement].m_iParent;
+
+					if (iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_iFirstToken == iHeadFirst)
+						nTarget += aint(nTab);
+				}
 			}
 
-			fp_AddEdit
-				(
-					"line-break"
-					, iGap
-					, Tokens[iOpen].m_iOffset - iGap
-					, fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding()) + fp_MakeIndent(umint(nTarget))
-					, "an opened array's bracket stands on a line of its own"
-				)
-			;
-
-			if (nDelta)
+			// The elements stand one level in from the bracket, the first one's line saying how
+			// far the lines it holds move.
+			aint nDelta = 0;
 			{
-				for (auto iLine = iOpenLine + 1; iLine <= iCloseLine; ++iLine)
-				{
-					auto iIndent = fLineIndentOffset(iLine);
-					umint nIndent = 0;
-					if (m_bProtectedStart[iLine] || iIndent == m_Lines.f_GetLineContentEnd(iLine) || !fFormattedColumn(iIndent, nIndent))
-						continue;
+				auto iFirstLine = iOpenLine + 1;
+				while (iFirstLine < iCloseLine && fLineIndentOffset(iFirstLine) == m_Lines.f_GetLineContentEnd(iFirstLine))
+					++iFirstLine;
 
-					auto nPlaced = aint(nIndent) + fShiftAt(iLine) + nDelta;
-					fPlaceLine(m_Lines.f_GetLineStart(iLine), iIndent, umint(fg_Max(nPlaced, aint(0))), "line-break", "an opened array's lines move with its bracket");
+				umint nFirst = 0;
+				if (!fFormattedColumn(fLineIndentOffset(iFirstLine), nFirst))
+					continue;
+
+				nDelta = nTarget + aint(nTab) - (aint(nFirst) + fShiftAt(iFirstLine));
+			}
+
+			if (bMoveOpener)
+				fBreakBefore(iOpen, umint(fg_Max(nTarget, aint(0))), "an opened list's bracket stands on a line of its own");
+
+			bool bCloserOwnLine = fp_IsFirstOnLine(iClose);
+			for (auto iLine = iOpenLine + 1; iLine <= iCloseLine; ++iLine)
+			{
+				auto iIndent = fLineIndentOffset(iLine);
+				if (m_bProtectedStart[iLine])
+					continue;
+
+				// A blank line sets nothing apart among the elements of data.
+				if (iIndent == m_Lines.f_GetLineContentEnd(iLine))
+				{
+					if (iLine < iCloseLine)
+					{
+						auto iBlank = m_Lines.f_GetLineStart(iLine);
+						fp_AddEdit("blank-line", iBlank, m_Lines.f_GetLineStart(iLine + 1) - iBlank, {}, "no blank line stands between the elements of a list");
+					}
+
+					continue;
 				}
 
-				Shifts.f_Insert(CShift{iOpenLine + 1, iCloseLine, nDelta});
+				if (!nDelta)
+					continue;
+
+				umint nIndent = 0;
+				if (!fFormattedColumn(iIndent, nIndent))
+					continue;
+
+				auto nPlaced = aint(nIndent) + fShiftAt(iLine) + nDelta;
+				fPlaceLine(m_Lines.f_GetLineStart(iLine), iIndent, umint(fg_Max(nPlaced, aint(0))), "line-break", "an opened list's lines move with its bracket");
 			}
+
+			if (!bCloserOwnLine)
+				fBreakBefore(iClose, umint(fg_Max(nTarget, aint(0))), "an opened list's closing bracket stands on a line of its own");
+
+			if (nDelta)
+				Shifts.f_Insert(CShift{iOpenLine + 1, iCloseLine, nDelta});
 		}
 
 		for (umint i = 0; m_Structure.f_IsComplete() && i < Tokens.f_GetLen(); ++i)
