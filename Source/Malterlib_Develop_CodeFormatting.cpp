@@ -4271,6 +4271,33 @@ namespace
 
 				bLambdaBody |= fp_ClosesLambdaIntroducer(Child.m_iLastToken);
 			}
+
+			// A requires expression's body is an expression's like a lambda's, and stands where
+			// one does: 'concept cFoo = requires (t_C _Value)' with the body one level in.
+			auto iBeforeBrace = fp_PreviousCode(iBrace);
+			if (iBeforeBrace >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeBrace)], ")"))
+			{
+				for (auto iChild : Node.m_Children)
+				{
+					auto const &Child = Nodes[iChild];
+					if (Child.m_Kind == ECodeNodeKind::mc_Group && Child.m_iLastToken == umint(iBeforeBrace))
+						iBeforeBrace = fp_PreviousCode(Child.m_iFirstToken);
+				}
+			}
+
+			// A requires clause stands behind a declarator and constrains the body that follows
+			// it, while a requires expression stands where an operand does.
+			if (iBeforeBrace >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeBrace)], "requires"))
+			{
+				auto iLead = fp_PreviousCode(umint(iBeforeBrace));
+				constexpr ch8 const *c_pOperandLeads[] =
+					{
+						"=", "(", ",", "||", "!", "?", ":", "return", "requires"
+					}
+				;
+				for (auto pLead : c_pOperandLeads)
+					bLambdaBody |= iLead >= 0 && m_Tokens.f_IsText(Tokens[umint(iLead)], pLead);
+			}
 		}
 
 		// A lambda's body stands one level in, under the expression the lambda is written

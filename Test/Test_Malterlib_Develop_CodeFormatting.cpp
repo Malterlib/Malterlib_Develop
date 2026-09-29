@@ -2653,6 +2653,17 @@ namespace
 								, "template <typename t_C>\nvoid fg_Function\n\t(\n\t\t" + Split + "\n\t)\n\trequires (cFoo<t_C>)\n{\n}\n"
 							)
 						;
+						// A requires expression's body stands under the line its 'requires' is on, like a
+						// lambda's, apart from the function body a requires clause constrains.
+						fg_ExpectFormat
+							(
+								"RequiresExpressionBody"
+								, "template <typename t_C>\nconcept cFoo =\n\trequires ()\n{\n\tt_C::f_Get();\n}\n;\n"
+								"template <typename t_C>\nvoid fg_Bar(t_C _Value)\n\trequires requires ()\n{\n\t_Value.f_Get();\n}\n{\n}\n"
+								, "template <typename t_C>\nconcept cFoo =\n\trequires ()\n\t{\n\t\tt_C::f_Get();\n\t}\n;\n"
+								"template <typename t_C>\nvoid fg_Bar(t_C _Value)\n\trequires requires ()\n\t{\n\t\t_Value.f_Get();\n\t}\n{\n}\n"
+							)
+						;
 					}
 					// An operator named by its symbol has its return type moved like any other name,
 					// and the attribute macros in front of it are specifiers that stay in front.
