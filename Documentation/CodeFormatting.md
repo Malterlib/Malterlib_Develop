@@ -169,6 +169,7 @@ formatter failure, not an edit.
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
 | `blank-line` | Collapses a run of blank lines into one. |
 | `function-blank-line` | One blank line after a function's body, unless the scope the function stands in ends there. |
+| `type-blank-line` | One blank line after a struct, class, union or enum definition, unless the scope it stands in ends there. A variable of a C struct type with a braced initializer, `struct timespec Time = {...};`, defines no type. |
 | `access-blank-line` | One blank line in front of `public:`, `private:`, or `protected:`, and none after it. The first specifier in a class stands directly under the opening brace, and two in a row stand together: `private:` directly above `public:` follows it the way a member does. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
 | `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |

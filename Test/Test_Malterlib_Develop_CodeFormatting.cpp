@@ -833,8 +833,8 @@ namespace
 					fg_ExpectFormat
 						(
 							"Cast"
-							, "struct C\n{\n\tvoid f_A() &;\n};\nvoid f()\n{\n\tauto a = (ch8 const *) &Data;\n\tauto b = (CFoo &&) *pFoo;\n\tauto c = (x) & y;\n}\n"
-							, "struct C\n{\n\tvoid f_A() &;\n};\nvoid f()\n{\n\tauto a = (ch8 const *)&Data;\n\tauto b = (CFoo &&)*pFoo;\n\tauto c = (x) & y;\n}\n"
+							, "struct C\n{\n\tvoid f_A() &;\n};\n\nvoid f()\n{\n\tauto a = (ch8 const *) &Data;\n\tauto b = (CFoo &&) *pFoo;\n\tauto c = (x) & y;\n}\n"
+							, "struct C\n{\n\tvoid f_A() &;\n};\n\nvoid f()\n{\n\tauto a = (ch8 const *)&Data;\n\tauto b = (CFoo &&)*pFoo;\n\tauto c = (x) & y;\n}\n"
 						)
 					;
 					// 'if constexpr' holds a condition like any other 'if', whose operators are
@@ -1073,6 +1073,17 @@ namespace
 							"BeforeBrace"
 							, "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t\th();\n\n\t}\n\n}\n\nstruct C\n{\n\tint m_A; // Comment\n\n\n};\n"
 							, "void f()\n{\n\tif (a)\n\t{\n\t\tg();\n\t\th();\n\t}\n}\n\nstruct C\n{\n\tint m_A; // Comment\n};\n"
+						)
+					;
+					// So is a type's definition, the last one in its scope aside; a variable of a
+					// C struct type with a braced initializer defines no type.
+					fg_ExpectFormat
+						(
+							"TypeDefinitions"
+							, "struct CA\n{\n};\nstruct CB : CA\n{\n\tenum EKind\n\t{\n\t\tEKind_A\n\t};\n\tEKind m_Kind;\n};\n"
+							"template <typename t_C>\nclass TCC\n{\n};\nusing CD = TCC<int>;\nvoid f()\n{\n\tstruct timespec Time =\n\t{\n\t};\n\tg(Time);\n}\n"
+							, "struct CA\n{\n};\n\nstruct CB : CA\n{\n\tenum EKind\n\t{\n\t\tEKind_A\n\t};\n\n\tEKind m_Kind;\n};\n\n"
+							"template <typename t_C>\nclass TCC\n{\n};\n\nusing CD = TCC<int>;\nvoid f()\n{\n\tstruct timespec Time =\n\t{\n\t};\n\tg(Time);\n}\n"
 						)
 					;
 					// A function's body is set off from what follows it, a comment behind its
@@ -2600,7 +2611,7 @@ namespace
 					fg_ExpectFormat("Broken", "constexpr\nstatic umint gc_A = 1;\n", "static constexpr umint gc_A = 1;\n", false);
 					// The order the sources mostly have, a 'constexpr' with no 'static' behind it,
 					// a comment between the two, and a disabled region stay as they are.
-					CStr Kept = "struct C\n{\n\tstatic constexpr umint mc_A = 1;\n\tconstexpr umint f_B() const;\n\tconstexpr /* c */ static umint mc_C = 1;\n};\n"
+					CStr Kept = "struct C\n{\n\tstatic constexpr umint mc_A = 1;\n\tconstexpr umint f_B() const;\n\tconstexpr /* c */ static umint mc_C = 1;\n};\n\n"
 						"// malterlib-format off\nconstexpr static int g_Off = 0;\n// malterlib-format on\n"
 					;
 					fg_ExpectFormat("Kept", Kept, Kept);
@@ -2946,12 +2957,12 @@ namespace
 							"\tvoid * (DMibCrossmoduleAPI * m_fFree)(void * _pMemory, umint _Size);\n"
 							"\tinline_always static void *DMibCrossmoduleAPI fs_Alloc(CMemoryManagerCrossModule *_pModule, umint &_Size, ch8 const *_pFile, aint _Line, "
 							"EHeapDebugFlag _Flags, EAllocationFlag _AllocFlags, ENumaNode _NumaNode);\n"
-							"};\nvoid f()\n{\n\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint) - 16324 + (smint)-1 + sizeof(void *)*4;\n"
+							"};\n\nvoid f()\n{\n\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint) - 16324 + (smint)-1 + sizeof(void *)*4;\n"
 							"\tDMibTestSuite(\"Level {}\"_f << nLevel)->TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n}\n"
 							, "struct C\n{\n\tauto operator = (C &&) noexcept(false) -> C & = default;\n"
 							"\tvoid * (DMibCrossmoduleAPI * m_fFree)(void * _pMemory, umint _Size);\n\tinline_always static void * DMibCrossmoduleAPI fs_Alloc\n\t\t(\n"
 							"\t\t\tCMemoryManagerCrossModule *_pModule\n\t\t\t, umint &_Size\n\t\t\t, ch8 const *_pFile\n\t\t\t, aint _Line\n"
-							"\t\t\t, EHeapDebugFlag _Flags\n\t\t\t, EAllocationFlag _AllocFlags\n\t\t\t, ENumaNode _NumaNode\n\t\t)\n\t;\n};\nvoid f()\n{\n"
+							"\t\t\t, EHeapDebugFlag _Flags\n\t\t\t, EAllocationFlag _AllocFlags\n\t\t\t, ENumaNode _NumaNode\n\t\t)\n\t;\n};\n\nvoid f()\n{\n"
 							"\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint)-16324 + (smint)-1 + sizeof(void *) * 4;\n"
 							"\tDMibTestSuite(\"Level {}\"_f << nLevel) -> TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n}\n"
 							, false

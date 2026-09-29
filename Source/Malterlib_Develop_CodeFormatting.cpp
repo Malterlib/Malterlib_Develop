@@ -1789,9 +1789,9 @@ namespace
 			i = iNext - 1;
 		}
 
-		// A function's body is set off from what follows it by a blank line, unless that is
-		// the end of the scope the function stands in. A directive behind the body belongs
-		// to a conditional whose lines are its own.
+		// A function's body, and a type's definition, is set off from what follows it by a
+		// blank line, unless that is the end of the scope it stands in. A directive behind
+		// the body belongs to a conditional whose lines are its own.
 		auto const &Nodes = m_Structure.f_GetNodes();
 		for (umint iNode = 0; m_Structure.f_IsComplete() && iNode < Nodes.f_GetLen(); ++iNode)
 		{
@@ -1814,7 +1814,31 @@ namespace
 				bBody |= Child.m_Kind == ECodeNodeKind::mc_Block && Child.m_iLastToken == Node.m_iLastToken;
 			}
 
-			if (!bBody || iParameters == TCLimitsInt<umint>::mc_Max || !fg_ClosesParameterList(m_Tokens, m_Structure, iParameters))
+			// A type is defined by a declaration that starts with its class key, behind any
+			// template header, and holds the body: 'struct CFoo : CBase { ... };'. A braced
+			// initializer behind an '=' is a variable's, 'struct timespec Time = {...};'.
+			bool bTypeDefinition = false;
+			if (!bBody)
+			{
+				auto iKey = fp_SkipTemplateHeader(Node.m_iFirstToken);
+				auto const &Key = Tokens[iKey];
+				bool bClassKey = m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "union") || m_Tokens.f_IsText(Key, "enum");
+				for (auto iChild : Node.m_Children)
+				{
+					auto const &Child = Nodes[iChild];
+					if (!bClassKey || Child.m_Kind != ECodeNodeKind::mc_Block || Child.m_iFirstToken <= iKey)
+						continue;
+
+					bool bInitializer = false;
+					for (auto i = iKey; i < Child.m_iFirstToken && !bInitializer; ++i)
+						bInitializer = m_TokenDepth[i] == m_TokenDepth[iKey] && m_Tokens.f_IsText(Tokens[i], "=");
+
+					bTypeDefinition |= !bInitializer;
+				}
+			}
+
+			bool bFunction = bBody && iParameters != TCLimitsInt<umint>::mc_Max && fg_ClosesParameterList(m_Tokens, m_Structure, iParameters);
+			if (!bFunction && !bTypeDefinition)
 				continue;
 
 			umint iNewline = TCLimitsInt<umint>::mc_Max;
@@ -1862,7 +1886,10 @@ namespace
 			}
 
 			auto Newline = m_Tokens.f_GetText(Tokens[iNewline]);
-			fp_AddEdit("function-blank-line", Tokens[iNewline].m_iOffset, Tokens[iNewline].m_nLength, Newline + Newline, "a blank line follows a function's body");
+			if (bFunction)
+				fp_AddEdit("function-blank-line", Tokens[iNewline].m_iOffset, Tokens[iNewline].m_nLength, Newline + Newline, "a blank line follows a function's body");
+			else
+				fp_AddEdit("type-blank-line", Tokens[iNewline].m_iOffset, Tokens[iNewline].m_nLength, Newline + Newline, "a blank line follows a type's definition");
 		}
 
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
