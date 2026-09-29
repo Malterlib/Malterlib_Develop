@@ -2208,6 +2208,15 @@ namespace
 							"\tStr\n\t\t= CFormat(\"@\")\n\t\t<< @\n\t\t<< &Serial\n\t;\n}\n"
 						)
 					;
+					// A single member access whose call has to open anyway stays on the line with what
+					// it is called on, and the call opens there.
+					fSplit
+						(
+							"MemberCallOpens"
+							, "void f()\n{\n\tg(a).f_Call(@, @);\n}\n"
+							, "void f()\n{\n\tg(a).f_Call\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// An operand in parentheses with a member access behind it stays whole and gives at
 					// the access, whether it starts the operator chain's first line or follows an operator.
 					CStr Parenthesised = "(@ % SecondOperandWithAVeryLongNameThatMakesTheParenthesisWideEnoughForThisCase).f_Dispatch()";

@@ -6819,6 +6819,28 @@ namespace
 					;
 				}
 
+				// Moving the access down only helps where the rest then fits, or gives at its own
+				// accesses. One access whose call still has to open anyway stays on the line with
+				// what it is called on, and that call opens: 'fg_Get(*this).f_Enable' over '('.
+				if (bOpens && bMember && !fp_FitsInline(umint(iMember), _iLast, nContinuation))
+				{
+					bool bOneAccess = true;
+					for (auto i = umint(iMember) + 1; i <= _iLast && bOneAccess; ++i)
+					{
+						bool bAccess = m_TokenDepth[i] == m_TokenDepth[umint(iMember)] && (m_Tokens.f_IsText(Tokens[i], ".") || m_Tokens.f_IsText(Tokens[i], "->"));
+						bOneAccess = !bAccess || fp_IsTrailingReturnArrow(i);
+					}
+
+					auto iCall = iScope + 1 < Scopes.f_GetLen() ? Nodes[Scopes[iScope + 1]].m_iFirstToken : TCLimitsInt<umint>::mc_Max;
+					auto iCallHead = iCall != TCLimitsInt<umint>::mc_Max ? fp_PreviousCode(iCall) : aint(-1);
+					if (bOneAccess && iCallHead > iMember && fp_FitsInline(iLineFirst, umint(iCallHead), nLineIndent))
+					{
+						++iScope;
+
+						continue;
+					}
+				}
+
 				if (bOpens && (bMember || bDeclared) && fp_FitsInline(iLineFirst, Link.m_iLastToken, nLineIndent))
 				{
 					fp_MarkInline(iLineFirst, Link.m_iLastToken);
