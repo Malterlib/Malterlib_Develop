@@ -1865,6 +1865,18 @@ namespace
 							, "void f()\n{\n\tco_return co_await m_Promises\n\t\t.f_Insert() // why\n\t\t.f_Future()\n\t;\n}\n"
 						)
 					;
+					// A DSL's array written across lines keeps them, as an initializer does, and one
+					// written on a line is only opened where it does not fit. Its bracket stands on a
+					// line of its own, and what it holds moves with it.
+					fg_ExpectFormat
+						(
+							"DSLArrays"
+							, "void f()\n{\n\tauto Value =\n\t\t{\n\t\t\t\"A\"_o= _o\n\t\t\t[\n\t\t\t\t1\n\t\t\t]\n\t\t\t, \"B\"_o= _o[\n\t\t\t\t2\n\t\t\t\t, 3\n\t\t\t]\n"
+							"\t\t\t, \"C\"_o= _o[4, 5]\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\tauto Value =\n\t\t{\n\t\t\t\"A\"_o= _o\n\t\t\t[\n\t\t\t\t1\n\t\t\t]\n\t\t\t, \"B\"_o= _o\n\t\t\t[\n\t\t\t\t2\n\t\t\t\t, 3\n\t\t\t]\n"
+							"\t\t\t, \"C\"_o= _o[4, 5]\n\t\t}\n\t;\n}\n"
+						)
+					;
 					// An attribute behind a lambda's capture list belongs to its introducer, apart from
 					// the list and the parameters as an attribute macro is, and so does one behind a
 					// condition: the body is a lambda's, and the arrow its return type's.

@@ -14,6 +14,9 @@ namespace
 	using namespace NMib;
 	using namespace NMib::NDevelop;
 
+	aint fg_PreviousCode(CCodeTokenStream const &_Tokens, umint _iToken);
+	bool fg_IsDSLMarker(CCodeTokenStream const &_Tokens, CCodeToken const &_Token);
+
 	bool fg_IsSignificant(ECodeTokenKind _Kind)
 	{
 		switch (_Kind)
@@ -276,15 +279,24 @@ namespace NMib::NDevelop
 		if (!_iNode)
 			return;
 
-		// A braced initializer is written one element per line on purpose, so a construct
-		// around one keeps its lines instead of collapsing the list into an expression. A
+		// A braced initializer, and a DSL's array, is written one element per line on purpose,
+		// so a construct around one keeps its lines instead of collapsing the list into an
+		// expression. A
 		// compound requirement opens its statement, which no initializer does, and holds an
 		// expression rather than data.
 		bool bRequirement = Node.m_iParent < mp_Nodes.f_GetLen()
 			&& mp_Nodes[Node.m_iParent].m_Kind == ECodeNodeKind::mc_Statement
 			&& mp_Nodes[Node.m_iParent].m_iFirstToken == Node.m_iFirstToken
 		;
-		if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Brace && !bRequirement)
+		// A DSL's array is data like an initializer: '"Names"_o= _o["--a", "--b"]'.
+		bool bDSLArray = false;
+		if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Square)
+		{
+			auto iMarker = fg_PreviousCode(*mp_pTokens, Node.m_iFirstToken);
+			bDSLArray = iMarker >= 0 && fg_IsDSLMarker(*mp_pTokens, mp_pTokens->f_GetTokens()[umint(iMarker)]);
+		}
+
+		if (Node.m_Kind == ECodeNodeKind::mc_Group && ((Node.m_Bracket == ECodeBracket::mc_Brace && !bRequirement) || bDSLArray))
 		{
 			auto const &Source = mp_pTokens->f_GetSource();
 			for (auto i = Node.m_iFirstToken; i <= _iLastToken && !Node.m_bHasMultiLineBrace; ++i)

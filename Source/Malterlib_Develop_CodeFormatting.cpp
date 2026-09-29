@@ -1749,6 +1749,108 @@ namespace
 				return bContinues ? iPrevious : aint(-1);
 			}
 		;
+		// An opened DSL array's bracket stands on a line of its own, at the element's level, or
+		// one level in when the line starts its statement, and what it holds moves with it:
+		// '"Names"_o= _o' over '[' over the elements over ']'. The shift of an array around
+		// another is added to the inner one's, which is laid out after it.
+		struct CShift
+		{
+			umint m_iFirstLine = 0;
+			umint m_iLastLine = 0;
+			aint m_nColumns = 0;
+		};
+		TCVector<CShift> Shifts;
+		auto fShiftAt = [&](umint _iLine)
+			{
+				aint nShift = 0;
+				for (auto const &Shift : Shifts)
+				{
+					if (_iLine >= Shift.m_iFirstLine && _iLine <= Shift.m_iLastLine)
+						nShift += Shift.m_nColumns;
+				}
+
+				return nShift;
+			}
+		;
+		auto fLineIndentOffset = [&](umint _iLine)
+			{
+				auto iIndent = m_Lines.f_GetLineStart(_iLine);
+				auto iEnd = m_Lines.f_GetLineContentEnd(_iLine);
+				while (iIndent < iEnd && fg_IsSpaceOrTab(Source.f_GetStr()[iIndent]))
+					++iIndent;
+
+				return iIndent;
+			}
+		;
+		for (umint iNode = 0; m_Structure.f_IsComplete() && iNode < Nodes.f_GetLen(); ++iNode)
+		{
+			auto const &Node = Nodes[iNode];
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Square)
+				continue;
+
+			auto iOpen = Node.m_iFirstToken;
+			auto iClose = Node.m_iLastToken;
+			auto iMarker = fp_PreviousCode(iOpen);
+			if (iMarker < 0 || !m_Tokens.f_HasRole(Tokens[umint(iMarker)], ECodeNameRole::mc_DSLMarker) || fp_IsFirstOnLine(iOpen) || !fp_IsFirstOnLine(iClose))
+				continue;
+
+			auto iAfterOpen = fp_NextSignificant(iOpen);
+			if (iAfterOpen < 0 || Tokens[umint(iAfterOpen)].m_Kind != ECodeTokenKind::mc_Newline)
+				continue;
+
+			auto iOpenLine = m_Lines.f_FindLine(Tokens[iOpen].m_iOffset);
+			auto iCloseLine = m_Lines.f_FindLine(Tokens[iClose].m_iOffset);
+			auto iHeadFirst = m_Tokens.f_FindToken(fLineIndentOffset(iOpenLine));
+
+			auto iStatement = m_Structure.f_FindEnclosingNode(iOpen);
+			while (iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_Kind != ECodeNodeKind::mc_Statement)
+				iStatement = Nodes[iStatement].m_iParent;
+
+			bool bStartsStatement = iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_iFirstToken == iHeadFirst;
+			umint nHead = 0;
+			umint nClose = 0;
+			if (!fFormattedColumn(Tokens[iHeadFirst].m_iOffset, nHead) || !fFormattedColumn(Tokens[iClose].m_iOffset, nClose))
+				continue;
+
+			auto nTarget = aint(nHead) + fShiftAt(iOpenLine) + aint(bStartsStatement ? nTab : 0);
+			auto nDelta = nTarget - (aint(nClose) + fShiftAt(iCloseLine));
+
+			// The bracket leaves the marker's line, and the gap it leaves takes the layout's
+			// place there.
+			auto iGap = Tokens[umint(iMarker)].f_GetEnd();
+			for (umint iEdit = 0; iEdit < m_Edits.f_GetLen(); ++iEdit)
+			{
+				if (m_Edits[iEdit].m_iOffset >= iGap && m_Edits[iEdit].f_GetEnd() <= Tokens[iOpen].m_iOffset)
+					m_bEditDropped[iEdit] = 1;
+			}
+
+			fp_AddEdit
+				(
+					"line-break"
+					, iGap
+					, Tokens[iOpen].m_iOffset - iGap
+					, fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding()) + fp_MakeIndent(umint(nTarget))
+					, "an opened array's bracket stands on a line of its own"
+				)
+			;
+
+			if (nDelta)
+			{
+				for (auto iLine = iOpenLine + 1; iLine <= iCloseLine; ++iLine)
+				{
+					auto iIndent = fLineIndentOffset(iLine);
+					umint nIndent = 0;
+					if (m_bProtectedStart[iLine] || iIndent == m_Lines.f_GetLineContentEnd(iLine) || !fFormattedColumn(iIndent, nIndent))
+						continue;
+
+					auto nPlaced = aint(nIndent) + fShiftAt(iLine) + nDelta;
+					fPlaceLine(m_Lines.f_GetLineStart(iLine), iIndent, umint(fg_Max(nPlaced, aint(0))), "line-break", "an opened array's lines move with its bracket");
+				}
+
+				Shifts.f_Insert(CShift{iOpenLine + 1, iCloseLine, nDelta});
+			}
+		}
+
 		for (umint i = 0; m_Structure.f_IsComplete() && i < Tokens.f_GetLen(); ++i)
 		{
 			auto iPrevious = fContinuesLiteral(i);
@@ -1782,7 +1884,7 @@ namespace
 				(
 					m_Lines.f_GetLineStart(iLine)
 					, Tokens[i].m_iOffset
-					, nColumns + (bStartsStatement ? nTab : 0)
+					, umint(fg_Max(aint(nColumns) + fShiftAt(m_Lines.f_FindLine(Tokens[iHead].m_iOffset)), aint(0))) + (bStartsStatement ? nTab : 0)
 					, "string-continuation"
 					, bStartsStatement ? "a string continued on the next line stands one level in" : "a string continued on the next line stands at its element's level"
 				)
