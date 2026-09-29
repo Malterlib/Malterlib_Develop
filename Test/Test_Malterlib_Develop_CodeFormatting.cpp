@@ -1865,6 +1865,16 @@ namespace
 							, "void f()\n{\n\tco_return co_await m_Promises\n\t\t.f_Insert() // why\n\t\t.f_Future()\n\t;\n}\n"
 						)
 					;
+					// An attribute behind a lambda's capture list belongs to its introducer, apart from
+					// the list and the parameters as an attribute macro is, and so does one behind a
+					// condition: the body is a lambda's, and the arrow its return type's.
+					fg_ExpectFormat
+						(
+							"LambdaAttribute"
+							, "void f()\n{\n\tauto fA = [][[nodiscard]]()->int\n\t{\n\t\treturn 1;\n\t}\n\t;\n\tif (bFlag)[[unlikely]]\n\t\treturn;\n}\n"
+							, "void f()\n{\n\tauto fA = [] [[nodiscard]] () -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t;\n\tif (bFlag) [[unlikely]]\n\t\treturn;\n}\n"
+						)
+					;
 					// A string continued on the next line stands one level in under the line that starts
 					// its statement, and at the level of an element or an operand line it continues.
 					fg_ExpectFormat

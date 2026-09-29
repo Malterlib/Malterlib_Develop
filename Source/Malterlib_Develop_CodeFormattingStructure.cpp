@@ -2115,10 +2115,16 @@ namespace NMib::NDevelop
 			return false;
 
 		auto const &Node = _Structure.f_GetNodes()[umint(iNode)];
-		// Two brackets open an attribute, which captures nothing: '[[maybe_unused]]'.
+		// Two brackets open an attribute, which captures nothing: '[[maybe_unused]]'. One
+		// behind a capture list is the lambda's, and ends its introducer the way the list
+		// does: '[] [[nodiscard]] () -> int'.
 		auto iInner = fg_NextCode(_Tokens, Node.m_iFirstToken);
 		if (iInner >= 0 && _Tokens.f_IsText(Tokens[umint(iInner)], "["))
-			return false;
+		{
+			auto iBeforeAttribute = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+
+			return iBeforeAttribute >= 0 && _Tokens.f_IsText(Tokens[umint(iBeforeAttribute)], "]") && fg_IsCaptureList(_Tokens, _Structure, umint(iBeforeAttribute));
+		}
 
 		auto iBefore = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
 		if (iBefore < 0)
@@ -2548,12 +2554,15 @@ namespace NMib::NDevelop
 
 		// A subscript on what a call or another subscript yields hugs it, as one behind a
 		// name does: 'f_Get()[0]', 'm_Rows[0][1]'. An attribute opens with two brackets and
-		// stands apart from the parenthesis in front of it: 'if (bFlag) [[unlikely]]'.
+		// stands apart from the parenthesis or the capture list in front of it:
+		// 'if (bFlag) [[unlikely]]', '[] [[nodiscard]] ()'.
 		if (fRight("[") && (fLeft(")") || fLeft("]")))
 		{
 			auto iInner = fg_NextCode(_Tokens, _iRight);
 			if (iInner < 0 || !_Tokens.f_IsText(Tokens[umint(iInner)], "["))
 				return ECodeSpacing::mc_None;
+
+			return ECodeSpacing::mc_Space;
 		}
 
 		// A conditional's '?' and ':' stand apart from both of their operands, a
@@ -2577,6 +2586,16 @@ namespace NMib::NDevelop
 			for (auto pKeyword : c_pSpacedKeywords)
 			{
 				if (_Tokens.f_IsText(Left, pKeyword))
+					return ECodeSpacing::mc_Space;
+			}
+
+			// A lambda's attribute behind its capture list stands apart from the parameter list
+			// behind it, as an attribute macro does: '[] [[nodiscard]] (int _Value)'.
+			if (fLeft("]") && fg_IsCaptureList(_Tokens, _Structure, _iLeft))
+			{
+				auto iNode = fg_FindGroupClosingAt(_Structure, _iLeft, ECodeBracket::mc_Square);
+				auto iInner = iNode >= 0 ? fg_NextCode(_Tokens, _Structure.f_GetNodes()[umint(iNode)].m_iFirstToken) : aint(-1);
+				if (iInner >= 0 && _Tokens.f_IsText(Tokens[umint(iInner)], "["))
 					return ECodeSpacing::mc_Space;
 			}
 
