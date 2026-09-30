@@ -2226,6 +2226,17 @@ namespace
 							, "void f()\n{\n\tenum\n\t{\n\t\tEA = 4\n\t};\n\n\tenum\n\t{\n\t\tEB = 4\n\t};\n\n\t[]()\n\t{\n\t\tg();\n\t\th();\n\t}();\n}\n"
 						)
 					;
+					// Each enumerator takes a line, the comma in front of it, and a blank line between
+					// two moves in front of the comma. A comma with a comment behind it and a trailing
+					// one keep their places. A type is set off from a '#define' behind it, not from
+					// a conditional or a pragma.
+					fg_ExpectFormat
+						(
+							"EnumeratorLines"
+							, "enum EA\n{\n\tEA_A, EA_B\n};\n#define DA 1\nenum EB\n{\n\tEB_A,\n\tEB_B,\n\n\tEB_C = 2, // c\n\tEB_D,\n};\n#if 1\n#endif\n"
+							, "enum EA\n{\n\tEA_A\n\t, EA_B\n};\n\n#define DA 1\nenum EB\n{\n\tEB_A\n\t, EB_B\n\n\t, EB_C = 2, // c\n\tEB_D,\n};\n#if 1\n#endif\n"
+						)
+					;
 					// A conditional around a whole scope leaves the depths inside it to the scope's
 					// braces; only lines directly inside a conditional keep the depth they have.
 					fg_ExpectFormat

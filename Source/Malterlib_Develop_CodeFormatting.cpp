@@ -2092,7 +2092,17 @@ namespace
 			// A brace behind the block says the block was no body: a requires expression's
 			// requirements end in one, with the function's body below them.
 			bool bEndsScope = iNext < Tokens.f_GetLen() && (m_Tokens.f_IsText(Tokens[iNext], "}") || m_Tokens.f_IsText(Tokens[iNext], "{"));
-			if (iNext >= Tokens.f_GetLen() || nNewlines > 1 || Tokens[iNext].m_Kind == ECodeTokenKind::mc_Preprocessor || bEndsScope)
+			// A conditional's directive belongs to lines of its own and a pragma to the code it
+			// brackets; any other, a '#define' behind a type included, is set off like code.
+			bool bAttachedDirective = false;
+			if (iNext < Tokens.f_GetLen() && Tokens[iNext].m_Kind == ECodeTokenKind::mc_Preprocessor)
+			{
+				auto Keyword = fp_GetDirectiveKeyword(iNext);
+				for (auto pAttached : {"if", "ifdef", "ifndef", "elif", "elifdef", "elifndef", "else", "endif", "pragma"})
+					bAttachedDirective |= Keyword == pAttached;
+			}
+
+			if (iNext >= Tokens.f_GetLen() || nNewlines > 1 || bAttachedDirective || bEndsScope)
 				continue;
 
 			// A macro invoked directly under a body belongs to the function, as the one
@@ -5508,6 +5518,45 @@ namespace
 			}
 
 			bool bStays = (Child.m_Kind == ECodeNodeKind::mc_Unsupported && !bEnumerators) || bOnLabelLine || bElseIf || bAttribute || m_Tokens.f_IsText(First, ";");
+
+			// Each enumerator takes a line of its own, the comma in front of it: 'EA' over ', EB'.
+			// A comma with a comment or a directive behind it keeps its place, and so does a
+			// trailing one, which ends the list rather than starting an enumerator.
+			if (bEnumBody && iPrevious == TCLimitsInt<umint>::mc_Max)
+			{
+				for (auto i = iFirst; i < Node.m_iLastToken && i <= Child.m_iLastToken; ++i)
+				{
+					if (m_TokenDepth[i] != m_TokenDepth[iFirst] || !m_Tokens.f_IsText(Tokens[i], ",") || fp_IsFirstOnLine(i))
+						continue;
+
+					auto iNextCode = fp_NextCode(i);
+					bool bTrailing = iNextCode < 0 || umint(iNextCode) >= Node.m_iLastToken;
+					bool bTrivia = false;
+					for (auto iBetween = i + 1; !bTrailing && iBetween < umint(iNextCode) && !bTrivia; ++iBetween)
+					{
+						auto Kind = Tokens[iBetween].m_Kind;
+						bTrivia = Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor;
+					}
+
+					if (bTrivia || bTrailing)
+						continue;
+
+					// A comma ending its line moves to the front of the enumerator behind it, and a
+					// blank line in front of that enumerator moves in front of the comma.
+					fp_OwnLineBefore(i, nPlace);
+					if (fp_IsLastOnLine(i))
+					{
+						fp_MarkInline(i, umint(iNextCode));
+						umint nNewlines = 0;
+						for (auto iBetween = i + 1; iBetween < umint(iNextCode); ++iBetween)
+							nNewlines += Tokens[iBetween].m_Kind == ECodeTokenKind::mc_Newline;
+
+						if (nNewlines > 1 && i < m_bBlankBefore.f_GetLen())
+							m_bBlankBefore[i] = 1;
+					}
+				}
+			}
+
 			// Behind a closing brace only a keyword starts a statement of its own, since a
 			// name there declares a variable of the type just defined.
 			if (!bStays && !bFirstOnLine && bAfterBlock)

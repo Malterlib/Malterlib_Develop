@@ -233,12 +233,20 @@ spelling of its pair, so they stay where they are written.
 
 `function-blank-line` sets a function's body off from what follows it, a comment
 behind its closing brace staying on that line. Nothing is added in front of the
-closing brace of the scope the function stands in, in front of a directive,
-whose conditional has lines of its own, or in front of a macro invoked directly
+closing brace of the scope the function stands in, in front of a conditional's
+directive, which has lines of its own, or a pragma, which belongs to the code it
+brackets, or in front of a macro invoked directly
 under the body, which belongs to the function as the one that implements the
 streaming of a type does. Only a function's body counts: a lambda's ends in the
 statement's terminator, and the requirements of a requires expression have the
-body below them.
+body below them. `type-blank-line` follows the same rules, so a `#define` behind
+a type is set off from it as it is from a function.
+
+Each enumerator of an `enum` body takes a line of its own with the comma in front
+of it, `EA` over `, EB`; a comma written at the end of a line moves to the front of
+the enumerator behind it, and a blank line between the two stays in front of the
+comma. A comma with a comment behind it keeps its place, and so does a trailing
+comma, which ends the list rather than starting an enumerator.
 
 `access-blank-line` leaves a specifier alone where a comment or a directive
 stands between it and what is in front of it, since the blank line then belongs
