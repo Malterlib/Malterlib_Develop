@@ -901,10 +901,6 @@ reported for its length: data written to a width of its own, such as a raw
 string's test input, is what the region is for. An unmatched or nested
 directive is a failure, not a silently ignored comment.
 
-What `#if 0` holds is never compiled and is as often prose or a table as code,
-so it is excluded the same way, from the `#if 0` line to the end of the line of
-the directive that ends its branch.
-
 A source that ends inside a comment or literal, contains a byte that cannot
 start a token, or is not valid UTF-8 is reported as unsupported and left
 untouched.

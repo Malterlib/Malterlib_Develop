@@ -900,53 +900,6 @@ namespace
 			return false;
 		}
 
-		// What '#if 0' holds is never compiled and is as often prose or a table as code, so
-		// it is left as written, up to the directive that ends the branch.
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
-		{
-			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor || fp_GetDirectiveKeyword(i) != "if")
-				continue;
-
-			auto Text = m_Tokens.f_GetText(Tokens[i]);
-			auto iIf = Text.f_Find("if");
-			if (iIf < 0 || Text.f_Extract(iIf + 2).f_Trim() != "0")
-				continue;
-
-			umint nNested = 0;
-			for (umint iEnd = i + 1; iEnd < Tokens.f_GetLen(); ++iEnd)
-			{
-				if (Tokens[iEnd].m_Kind != ECodeTokenKind::mc_Preprocessor)
-					continue;
-
-				auto Keyword = fp_GetDirectiveKeyword(iEnd);
-				if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
-				{
-					++nNested;
-
-					continue;
-				}
-
-				bool bEnds = Keyword == "endif" || ((Keyword == "else" || Keyword == "elif" || Keyword == "elifdef" || Keyword == "elifndef") && !nNested);
-				if (Keyword == "endif" && nNested)
-				{
-					--nNested;
-
-					continue;
-				}
-
-				if (!bEnds)
-					continue;
-
-				auto iStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[i].m_iOffset));
-				auto &Range = m_Disabled.f_Insert();
-				Range.m_iOffset = iStart;
-				Range.m_nLength = m_Lines.f_GetLineEnd(m_Lines.f_FindLine(Tokens[iEnd].m_iOffset)) - iStart;
-
-				break;
-			}
-		}
-
 		return true;
 	}
 

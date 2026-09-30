@@ -2361,13 +2361,15 @@ namespace
 							"\tcase 4: i();\n\t}\n}\n"
 						)
 					;
-					// Two names on one line are one space apart however the source aligned them, and
-					// what '#if 0' holds is left as written.
+					// Two names on one line are one space apart however the source aligned them, and a
+					// region the formatter is turned off for keeps its alignment.
 					fg_ExpectFormat
 						(
 							"AlignedNames"
-							, "void f()\n{\n\tBOOL       bA;   /* 000 */\n\tDWORD      dwB = 0; // B\n\tg(/* a */ 1);\n#if 0\n\tFCGI_PARAMS      x      x\n#endif\n}\n"
-							, "void f()\n{\n\tBOOL bA; /* 000 */\n\tDWORD dwB = 0; // B\n\tg(/* a */ 1);\n#if 0\n\tFCGI_PARAMS      x      x\n#endif\n}\n"
+							, "void f()\n{\n\tBOOL       bA;   /* 000 */\n\tDWORD      dwB = 0; // B\n\tg(/* a */ 1);\n"
+							"\t// malterlib-format off\n\tFCGI_PARAMS      x      x\n\t// malterlib-format on\n}\n"
+							, "void f()\n{\n\tBOOL bA; /* 000 */\n\tDWORD dwB = 0; // B\n\tg(/* a */ 1);\n"
+							"\t// malterlib-format off\n\tFCGI_PARAMS      x      x\n\t// malterlib-format on\n}\n"
 						)
 					;
 					// A comment behind a list's comma describes the element in front of it, and the
