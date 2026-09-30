@@ -673,6 +673,7 @@ namespace
 		bool fp_HasOperand(umint _iToken, bool _bBefore) const;
 		bool fp_EndsOperand(aint _iToken) const;
 		aint fp_ContinuesLiteral(umint _iToken) const;
+		bool fp_ContinuesValue(umint _iContinued) const;
 		void fp_RuleBlankLines();
 		void fp_RuleLineBreaks();
 		void fp_LayoutNode(umint _iNode, umint _iIndent);
@@ -1251,6 +1252,44 @@ namespace
 		;
 
 		return bContinues ? iPrevious : aint(-1);
+	}
+
+	// Whether the string the token continues is a value given behind an '=', a DSL key's
+	// included, or a macro's name on its line: '"Key"_o= "a"' over '"b"', 'DPrefix " a"'
+	// over '"b"'. Such a continuation stands one level in from that line.
+	bool CFormattingAnalyzer::fp_ContinuesValue(umint _iContinued) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto iPrevious = fp_ContinuesLiteral(_iContinued);
+		if (iPrevious < 0)
+			return false;
+
+		auto iRun = umint(iPrevious);
+		while (true)
+		{
+			// Back over the literals the run holds on its line, then to the line it continues.
+			auto iBefore = fp_PreviousCode(iRun);
+			if (iBefore >= 0 && Tokens[umint(iBefore)].m_Kind == ECodeTokenKind::mc_StringLiteral && !fp_SpansLines(umint(iBefore), iRun))
+			{
+				iRun = umint(iBefore);
+
+				continue;
+			}
+
+			auto iEarlier = fp_ContinuesLiteral(iRun);
+			if (iEarlier < 0)
+				break;
+
+			iRun = umint(iEarlier);
+		}
+
+		auto iLead = fp_PreviousCode(iRun);
+		if (iLead < 0 || fp_SpansLines(umint(iLead), iRun))
+			return false;
+
+		auto const &Lead = Tokens[umint(iLead)];
+
+		return m_Tokens.f_IsText(Lead, "=") || Lead.m_Kind == ECodeTokenKind::mc_Identifier;
 	}
 
 	bool CFormattingAnalyzer::fp_EndsOperand(aint _iToken) const
@@ -1967,6 +2006,7 @@ namespace
 				iStatement = Nodes[iStatement].m_iParent;
 
 			bool bStartsStatement = iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_iFirstToken == iHeadFirst;
+			bStartsStatement |= fp_ContinuesValue(i);
 			umint nColumns = 0;
 			if (!fFormattedColumn(Tokens[iHeadFirst].m_iOffset, nColumns))
 				continue;
@@ -7956,6 +7996,10 @@ namespace
 					bSplitMembers |= m_TokenDepth[iMember] == nLevel && (m_Tokens.f_IsText(Tokens[iMember], ".") || m_Tokens.f_IsText(Tokens[iMember], "->"));
 
 				auto nSegmentIndent = iCut ? nContinuation : _iIndent;
+				// A string continued as a value stands one level in: 'DPrefix " a"' over '"b"'.
+				if (iCut && nContinuation == _iIndent && fp_ContinuesValue(iStart))
+					nSegmentIndent = _iIndent + nTab;
+
 				if (iCut)
 					fp_BreakBefore(iStart, nSegmentIndent);
 

@@ -2371,6 +2371,15 @@ namespace
 							"\t// malterlib-format off\n\tFCGI_PARAMS      x      x\n\t// malterlib-format on\n}\n"
 						)
 					;
+					// A string continued as a value behind a DSL key stands one level in, with the
+					// operators continuing it; one that is the element itself stays at its level.
+					fg_ExpectFormat
+						(
+							"ContinuedValueString"
+							, "auto g_A = _o\n\t{\n\t\t\"Description\"_o= \"a\\n\"\n\t\t\"b\\n\"\n\t\t\t+ Warning\n\t\t, \"c\"\n\t\t\"d\"\n\t}\n;\n"
+							, "auto g_A = _o\n\t{\n\t\t\"Description\"_o= \"a\\n\"\n\t\t\t\"b\\n\"\n\t\t\t+ Warning\n\t\t, \"c\"\n\t\t\"d\"\n\t}\n;\n"
+						)
+					;
 					// A comment behind a list's comma describes the element in front of it, and the
 					// comma goes past it to the element behind.
 					fg_ExpectFormat
