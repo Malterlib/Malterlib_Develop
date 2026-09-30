@@ -1322,16 +1322,18 @@ namespace
 					// A lambda's body sits one level in and takes its lines along, and its
 					// terminator stands at the statement's indentation.
 					fg_ExpectFormat("Lambda", "void f()\n{\n\tauto g = [&] {\n\t\th();\n\t};\n}\n", "void f()\n{\n\tauto g = [&]\n\t\t{\n\t\t\th();\n\t\t}\n\t;\n}\n");
-					// 'else if' and a case of one statement written on its label's line are kept as
-					// written; a block or more than one statement takes lines of their own under it.
+					// 'else if' and a case of one statement written on its label's line, a 'break'
+					// behind it included, are kept as written; a block or more statements take lines of
+					// their own under it.
 					CStr ElseIf = "void f()\n{\n\tif (a)\n\t\tg();\n\telse if (b)\n\t\th();\n}\n";
 					fg_ExpectFormat("ElseIf", ElseIf, ElseIf);
 					fg_ExpectFormat
 						(
 							"CompactCases"
-							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1: a = 1; break;\n\tcase 2: return;\n\tcase 3: {int b; g(b);} break;\n\tdefault: break;\n\t}\n}\n"
-							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\ta = 1;\n\t\tbreak;\n\tcase 2: return;\n\tcase 3:\n\t\t{\n\t\t\tint b;\n\t\t\tg(b);\n\t\t}\n"
-							"\t\tbreak;\n\tdefault: break;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1: a = 1; break;\n\tcase 2: return;\n\tcase 3: {int b; g(b);} break;\n\tcase 4: a = 1; b = 2; break;\n"
+							"\tdefault: break;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1: a = 1; break;\n\tcase 2: return;\n\tcase 3:\n\t\t{\n\t\t\tint b;\n\t\t\tg(b);\n\t\t}\n"
+							"\t\tbreak;\n\tcase 4:\n\t\ta = 1;\n\t\tb = 2;\n\t\tbreak;\n\tdefault: break;\n\t}\n}\n"
 						)
 					;
 					// A name behind a closing brace declares a variable of the type just defined.

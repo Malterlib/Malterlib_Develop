@@ -5813,8 +5813,8 @@ namespace
 			}
 
 			// A case written on its label's line stays there where it is one statement and no
-			// block: 'case 1: return 1;'. A block, or more than one statement, takes lines of
-			// its own under the label like any other body.
+			// block, a 'break' behind it included: 'case 1: a = 1; break;'. A block, or more
+			// statements than that, takes lines of its own under the label like any other body.
 			if (bLabelled && !bFirstOnLine)
 			{
 				umint nOnLine = 0;
@@ -5825,7 +5825,8 @@ namespace
 					if (iOther > iChildIndex && fp_IsFirstOnLine(Other.m_iFirstToken))
 						break;
 
-					++nOnLine;
+					bool bBreak = iOther > iChildIndex && m_Tokens.f_IsText(Tokens[Other.m_iFirstToken], "break");
+					nOnLine += !bBreak;
 					bBlockOnLine |= Other.m_Kind == ECodeNodeKind::mc_Block || m_Tokens.f_IsText(Tokens[Other.m_iFirstToken], "{");
 				}
 
