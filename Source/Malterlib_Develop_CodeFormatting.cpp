@@ -5788,8 +5788,10 @@ namespace
 		umint nGuard = 0;
 		umint iPrevious = TCLimitsInt<umint>::mc_Max;
 		bool bOnLabelLine = false;
+		umint iChildIndex = TCLimitsInt<umint>::mc_Max;
 		for (auto iChild : Node.m_Children)
 		{
+			++iChildIndex;
 			auto const &Child = Nodes[iChild];
 			auto iFirst = Child.m_iFirstToken;
 			auto const &First = Tokens[iFirst];
@@ -5804,8 +5806,27 @@ namespace
 				bAfterBlock = m_Tokens.f_IsText(Tokens[Previous.m_iLastToken], "}");
 			}
 
-			// A case written on its label's line stays there whole: 'case 1: a = 1; break;'.
-			bOnLabelLine = !bFirstOnLine && (bLabelled || bOnLabelLine);
+			// A case written on its label's line stays there where it is one statement and no
+			// block: 'case 1: return 1;'. A block, or more than one statement, takes lines of
+			// its own under the label like any other body.
+			if (bLabelled && !bFirstOnLine)
+			{
+				umint nOnLine = 0;
+				bool bBlockOnLine = false;
+				for (auto iOther = iChildIndex; iOther < Node.m_Children.f_GetLen(); ++iOther)
+				{
+					auto const &Other = Nodes[Node.m_Children[iOther]];
+					if (iOther > iChildIndex && fp_IsFirstOnLine(Other.m_iFirstToken))
+						break;
+
+					++nOnLine;
+					bBlockOnLine |= Other.m_Kind == ECodeNodeKind::mc_Block || m_Tokens.f_IsText(Tokens[Other.m_iFirstToken], "{");
+				}
+
+				bOnLabelLine = nOnLine == 1 && !bBlockOnLine;
+			}
+			else
+				bOnLabelLine = !bFirstOnLine && bOnLabelLine;
 			// The clause the statement stands directly behind, which is the one whose braces
 			// the standard decides; an attribute on its line stands between the two.
 			bool bDirectlyGuarded = bGuarded && iPrevious == iGuard;
