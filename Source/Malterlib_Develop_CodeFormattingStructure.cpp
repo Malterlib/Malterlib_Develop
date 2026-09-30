@@ -2063,6 +2063,10 @@ namespace
 		if (Node.m_Kind == ECodeNodeKind::mc_Group && Node.m_Bracket == ECodeBracket::mc_Paren)
 		{
 			auto iClause = fg_PreviousCode(_Tokens, Node.m_iFirstToken);
+			// A requires clause's parenthesis holds a constraint, which declares nothing.
+			if (iClause >= 0 && _Tokens.f_IsText(Tokens[umint(iClause)], "requires"))
+				return !fg_IsParameterList(_Tokens, _Structure, iNode);
+
 			if (iClause >= 0 && _Tokens.f_IsText(Tokens[umint(iClause)], "constexpr"))
 				iClause = fg_PreviousCode(_Tokens, umint(iClause));
 

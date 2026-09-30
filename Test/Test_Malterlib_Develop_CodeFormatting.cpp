@@ -1242,11 +1242,12 @@ namespace
 					fg_ExpectFormat("DefaultArgument", "void fg_F(int _A = a &\n\tb);\n", "void fg_F(int _A = a & b);\n");
 					fg_ExpectFormat("CallArgument", "void f()\n{\n\tg(a &\n\t\tb);\n}\n", "void f()\n{\n\tg(a &\n\t\tb);\n}\n");
 					fg_ExpectFormat("Ternary", "void f()\n{\n\tx = y ? g(a &\n\t\tb) : c;\n}\n", "void f()\n{\n\tx = y ? g(a &\n\t\tb) : c;\n}\n");
+					// A requires clause's constraint declares nothing, which settles it too.
 					fg_ExpectFormat
 						(
 							"ConceptOrDeclarator"
 							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires (cFoo<t_C> &&\n\t\tcBar<t_C>)\n;\n"
-							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires (cFoo<t_C> &&\n\t\tcBar<t_C>)\n;\n"
+							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires (cFoo<t_C> && cBar<t_C>)\n;\n"
 						)
 					;
 				};
@@ -2234,6 +2235,14 @@ namespace
 						"concept cC = requires (t_C &&_Value)\n\t{\n\t\t_Value.f_Get();\n\t}\n;\n"
 					;
 					fg_ExpectFormat("ConstraintBehindHeader", Constraint, Constraint);
+					// Its operators are settled, so one written tight is spaced.
+					fg_ExpectFormat
+						(
+							"ConstraintOperatorsSpaced"
+							, "template <typename t_C>\nrequires (cA<TCFoo<t_C>> &&cB<t_C> &&!cC<t_C>)\nvoid f();\n"
+							, "template <typename t_C>\nrequires (cA<TCFoo<t_C>> && cB<t_C> && !cC<t_C>)\nvoid f();\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(
