@@ -2316,6 +2316,18 @@ namespace
 							, "struct CA\n{\n\talignas(CData) uint8 m_Space[sizeof(CData)];\n\tdecltype(CFoo()) m_Value;\n};\n"
 						)
 					;
+					// An exception specification too long for the head's line takes a line of its own
+					// before the parameter list opens, and a trailing return type behind it the next.
+					fg_ExpectFormat
+						(
+							"NoexceptBelowHead"
+							, "struct CA\n{\n\tstatic void fs_Call(t_CThis &&_pThis, t_CVisitor &&_Visitor) noexcept(noexcept(fg_Call(" + Long.f_Left(120) + ")))\n\t{\n\t}\n\n"
+							"\tstatic auto fs_Get(t_CThis &&_pThis, t_CVisitor &&_Visitor) noexcept(noexcept(fg_Call(" + Long.f_Left(120) + "))) -> int\n\t{\n\t\treturn 0;\n\t}\n};\n"
+							, "struct CA\n{\n\tstatic void fs_Call(t_CThis &&_pThis, t_CVisitor &&_Visitor)\n\t\tnoexcept(noexcept(fg_Call(" + Long.f_Left(120) + ")))\n\t{\n\t}\n\n"
+							"\tstatic auto fs_Get(t_CThis &&_pThis, t_CVisitor &&_Visitor)\n\t\tnoexcept(noexcept(fg_Call(" + Long.f_Left(120) + ")))\n\t\t-> int\n"
+							"\t{\n\t\treturn 0;\n\t}\n};\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(

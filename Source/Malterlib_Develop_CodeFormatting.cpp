@@ -7113,16 +7113,29 @@ namespace
 
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto nLevel = m_TokenDepth[_iFirst];
+		// So may an exception specification behind a parameter list, which gives its line
+		// before the list opens: 'fs_Call(t_C &&_This)' over 'noexcept(noexcept(...))'.
 		for (umint i = _iFirst; i <= _iLast; ++i)
 		{
-			if (m_TokenDepth[i] != nLevel || !m_Tokens.f_IsText(Tokens[i], "->"))
+			bool bArrow = m_Tokens.f_IsText(Tokens[i], "->");
+			if (m_TokenDepth[i] != nLevel || (!bArrow && !m_Tokens.f_IsText(Tokens[i], "noexcept")))
 				continue;
 
 			auto iBefore = fp_PreviousCode(i);
 			if (iBefore < 0 || umint(iBefore) < _iFirst)
 				continue;
 
-			if (fp_IsTrailingReturnArrow(i))
+			bool bSpecification = false;
+			if (!bArrow)
+			{
+				auto iList = iBefore;
+				while (iList >= 0 && umint(iList) > _iFirst && fp_IsFunctionQualifier(umint(iList)))
+					iList = fp_PreviousCode(umint(iList));
+
+				bSpecification = iList >= 0 && fg_ClosesParameterList(m_Tokens, m_Structure, umint(iList));
+			}
+
+			if (bArrow ? fp_IsTrailingReturnArrow(i) : bSpecification)
 			{
 				Breaks.f_Insert(i);
 				Introducer.f_Insert(false);
@@ -7229,6 +7242,11 @@ namespace
 				nLineIndent = nContinuation;
 				while (iScope < Scopes.f_GetLen() && Nodes[Scopes[iScope]].m_iFirstToken < iLineFirst)
 					++iScope;
+
+				// An exception specification on a line of its own is a qualifier moved below the
+				// parameter list, and a trailing return type behind it takes the next line.
+				for (umint i = iBreak + 1; m_Tokens.f_IsText(Tokens[iLineFirst], "noexcept") && i < Breaks.f_GetLen(); ++i)
+					bMustSplit |= m_Tokens.f_IsText(Tokens[Breaks[i]], "->");
 
 				continue;
 			}
