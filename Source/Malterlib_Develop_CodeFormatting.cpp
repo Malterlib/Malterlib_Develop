@@ -4669,6 +4669,12 @@ namespace
 		if (!_iFirstParen)
 			return TCLimitsInt<umint>::mc_Max;
 
+		// A class's colon starts its base clause, whatever parenthesis stands in front of it:
+		// 'struct alignas(32) CFoo : public CBar'.
+		auto const &Key = m_Tokens.f_GetTokens()[fp_SkipTemplateHeader(Node.m_iFirstToken)];
+		if (m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "union"))
+			return TCLimitsInt<umint>::mc_Max;
+
 		// A conditional operator also puts a colon at the statement's own level, and its
 		// '?' can stand in front of the parameter list the initializer list follows.
 		for (umint i = Node.m_iFirstToken; i <= _iLast; ++i)

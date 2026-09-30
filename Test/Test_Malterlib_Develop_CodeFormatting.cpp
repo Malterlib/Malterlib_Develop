@@ -2335,6 +2335,10 @@ namespace
 							"\t{\n\t\treturn 0;\n\t}\n};\n"
 						)
 					;
+					// A class's head with an alignment in front of its name has a base clause, not an
+					// initializer list.
+					CStr AlignedClass = "struct alignas(32) CA : public CB, CC\n{\n\tint m_A = 3;\n};\n";
+					fg_ExpectFormat("AlignedClassHead", AlignedClass, AlignedClass);
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(
