@@ -148,15 +148,28 @@ namespace
 			}
 		;
 		// A run of statement terminators reads as one, since the stage takes out the ones
-		// that end nothing: 'f_Call();;' reads as 'f_Call();'.
+		// that end nothing: 'f_Call();;' reads as 'f_Call();'. A comma in front of a closing
+		// brace goes the same way: 'EA, }' reads as 'EA }'.
 		CCodeTokenStream Tokens(_Source);
 		CStr Text;
 		umint nMoved[4] = {};
 		bool bTerminated = false;
+		bool bComma = false;
 		for (auto const &Token : Tokens.f_GetTokens())
 		{
 			if (!fg_IsCodeToken(Token))
 				continue;
+
+			if (bComma && !Tokens.f_IsText(Token, "}"))
+				Text += ",";
+
+			bComma = Tokens.f_IsText(Token, ",");
+			if (bComma)
+			{
+				bTerminated = false;
+
+				continue;
+			}
 
 			bool bMoved = false;
 			for (umint i = 0; i < 4 && !bMoved; ++i)
@@ -174,6 +187,9 @@ namespace
 
 			bTerminated = bTerminator;
 		}
+
+		if (bComma)
+			Text += ",";
 
 		for (auto nWords : nMoved)
 			Text += " {}"_f << nWords;
@@ -691,6 +707,7 @@ namespace
 		void fp_ConvertQualifiers();
 		void fp_ConvertSpecifiers();
 		void fp_ConvertEmptyStatements();
+		void fp_ConvertTrailingEnumCommas();
 		bool fp_DropBraces(umint _iStatement, umint _iGuard);
 		bool fp_AddBraces(umint _iStatement, umint _iGuard);
 		bool fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const;
@@ -2408,6 +2425,7 @@ namespace
 			fp_ConvertQualifiers();
 			fp_ConvertSpecifiers();
 			fp_ConvertEmptyStatements();
+			fp_ConvertTrailingEnumCommas();
 		}
 
 		bool bQualifierStage = !m_Structural.f_IsEmpty();
@@ -2465,6 +2483,8 @@ namespace
 					Explanation = "'static' stands in front of 'constexpr'";
 				else if (Edit.m_Rule == "empty-statement")
 					Explanation = "a terminator that ends nothing is taken out";
+				else if (Edit.m_Rule == "enum-trailing-comma")
+					Explanation = "the last enumerator ends its enum without a comma";
 
 				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
 			}
@@ -3584,6 +3604,58 @@ namespace
 			Remove.m_iOffset = iRemove;
 			Remove.m_nLength = nRemove;
 			Remove.m_Rule = "empty-statement";
+		}
+	}
+
+	// Takes out the comma behind an enum's last enumerator, which the enumerators' leading
+	// commas leave standing alone. Only a comma with nothing but blanks around it goes; one
+	// a comment or a directive stands next to is left where it is.
+	void CFormattingAnalyzer::fp_ConvertTrailingEnumCommas()
+	{
+		if (!m_Structure.f_IsComplete())
+			return;
+
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto fPlain = [&](umint _iFirst, umint _iEnd)
+			{
+				for (auto iGap = _iFirst; iGap < _iEnd; ++iGap)
+				{
+					if (Tokens[iGap].m_Kind != ECodeTokenKind::mc_Whitespace && Tokens[iGap].m_Kind != ECodeTokenKind::mc_Newline)
+						return false;
+				}
+
+				return true;
+			}
+		;
+		for (auto const &Node : Nodes)
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Block || Node.m_iParent >= Nodes.f_GetLen() || Nodes[Node.m_iParent].m_Kind != ECodeNodeKind::mc_Statement)
+				continue;
+
+			if (!m_Tokens.f_IsText(Tokens[fp_SkipTemplateHeader(Nodes[Node.m_iParent].m_iFirstToken)], "enum"))
+				continue;
+
+			auto iComma = fp_PreviousCode(Node.m_iLastToken);
+			if (iComma < 0 || umint(iComma) <= Node.m_iFirstToken || !m_Tokens.f_IsText(Tokens[umint(iComma)], ","))
+				continue;
+
+			auto iEnumerator = fp_PreviousCode(umint(iComma));
+			if (iEnumerator < 0 || umint(iEnumerator) <= Node.m_iFirstToken)
+				continue;
+
+			if (!fPlain(umint(iEnumerator) + 1, umint(iComma)) || !fPlain(umint(iComma) + 1, Node.m_iLastToken))
+				continue;
+
+			auto iRemove = Tokens[umint(iEnumerator)].f_GetEnd();
+			auto nRemove = Tokens[umint(iComma)].f_GetEnd() - iRemove;
+			if (fp_IsDisabled(iRemove, nRemove) || !fp_IsSelected(iRemove, nRemove))
+				continue;
+
+			auto &Remove = m_Structural.f_Insert();
+			Remove.m_iOffset = iRemove;
+			Remove.m_nLength = nRemove;
+			Remove.m_Rule = "enum-trailing-comma";
 		}
 	}
 

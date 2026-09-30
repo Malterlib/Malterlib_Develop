@@ -59,10 +59,11 @@ operations, Git access, or console output in the engine; those belong in the
 consumer. `MTool Format` applies the plan and `MTool Validate` reports it, so a
 rule must never be reimplemented as a separate regular-expression check.
 
-Every rule but five conversions changes whitespace only: the trailing return
+Every rule but six conversions changes whitespace only: the trailing return
 type, the braces dropped around a single guarded statement, a qualifier moved
-behind the type it leads, `static` moved in front of `constexpr`, and an empty
-statement taken out behind another terminator. A conversion is decided first, on the original
+behind the type it leads, `static` moved in front of `constexpr`, an empty
+statement taken out behind another terminator, and the comma behind an enum's
+last enumerator taken out. A conversion is decided first, on the original
 source, and the layout is made on the converted source, so a plan is verified
 with `fg_HasEquivalentCodeTokens` against the converted source, and a whole-file
 plan is re-analyzed to prove it converged; a failing check reports a formatter
