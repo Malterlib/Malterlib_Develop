@@ -509,9 +509,12 @@ further only while it is still too long:
    `: b` each take a line. A conditional groups to the right, so one in a
    branch, `: c ? d : e`, is a single operand of the outer one: whole where it
    fits, and where it does not, its `? d` and `: e` stand a level deeper than
-   the `:` in front of it. A range holding a gap the standard does not settle
-   has no single-line form to measure, and is left as it stands rather than
-   broken at its operators.
+   the `:` in front of it. A parameter's default broken at its operators is
+   given the way a statement's value is, its `=` starting the first operand's
+   line at the parameter's level. A range holding a gap the standard does not
+   settle has no single-line form to measure, and is left as it stands rather
+   than broken at its operators; an operator behind a template argument list
+   is settled, so a conditional behind one is laid out wherever it was broken.
 2. A scope standing behind another scope's closing marker, such as a lambda's
    parameter list behind its capture list, and a trailing return type behind a
    parameter list, each move down whole. A lambda's capture list, template

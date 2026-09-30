@@ -2501,6 +2501,17 @@ namespace NMib::NDevelop
 			if (fRight("::") || fRight(",") || fRight(";") || fRight(")") || fRight("[") || fRight("]"))
 				return ECodeSpacing::mc_None;
 
+			// Behind a whole argument list these take it for their left operand, or give a
+			// default to what it names: 'cHas<t_C> ? a : b', 'typename t_C = TCFoo<int>'. A
+			// colon there as often starts a specialization's base clause, on a line of its own.
+			constexpr ch8 const *c_pInfix[] =
+				{
+					"?", "=", "==", "!=", "<=", ">=", "<=>", "||", "|", "^", "+", "-", "/", "%"
+				}
+			;
+			if (fg_IsAnyText(_Tokens, Right, c_pInfix))
+				return ECodeSpacing::mc_Space;
+
 			return ECodeSpacing::mc_Preserve;
 		}
 

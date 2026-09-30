@@ -7450,8 +7450,9 @@ namespace
 		//       + b
 		// That holds where the first operand is a plain line. One that takes a lambda's body
 		// or has to be opened keeps the '=' on the head, 'auto Value = fg_Function' with its
-		// parenthesis below, and so does the key of a DSL spelling, which hugs its '='.
-		bool bAssignMoved = _bIndentContinuations && !bOperatorTrails && !bLeadsOpened && fp_BreakAtAssign(_iFirst, Operators[0], _iIndent, nContinuation);
+		// parenthesis below, and so does the key of a DSL spelling, which hugs its '='. A
+		// parameter's default is given the same way, its '=' at the element's level.
+		bool bAssignMoved = !bOperatorTrails && !bLeadsOpened && fp_BreakAtAssign(_iFirst, Operators[0], _iIndent, nContinuation);
 
 		for (umint iSegment = 0; iSegment <= Operators.f_GetLen(); ++iSegment)
 		{

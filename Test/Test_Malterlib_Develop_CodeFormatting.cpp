@@ -2322,6 +2322,29 @@ namespace
 							"\tauto Other\n\t\t= bFirst\n\t\t? (@).f_Get()\n\t\t: bSecond\n\t\t\t? " + Operand + "\n\t\t\t: c\n\t;\n}\n"
 						)
 					;
+					// A parameter's default is given the way a statement's value is, from its own
+					// line, and a conditional behind a template argument list is laid out the same
+					// wherever the source broke it.
+					CStr Default = "cHas_f_GetStringFormatType<t_CData, t_CFormatter> && cHas_f_CreateStringFormatter<t_CData, t_CFormatter>";
+					CStr Expected = "template\n<\n\ttypename t_CData\n\t, EType t_Type\n\t= " + Default + "\n\t? EType::mc_InlineCreateStringFormatter\n"
+						"\t: cHas_f_Format<t_CData> ? EType::mc_Inline : EType::mc_FormatterTemplate\n>\nstruct CHelper;\n"
+					;
+					fg_ExpectFormat
+						(
+							"DefaultConditional"
+							, "template <typename t_CData, EType t_Type = " + Default + " ? EType::mc_InlineCreateStringFormatter : cHas_f_Format<t_CData> ? EType::mc_Inline "
+							": EType::mc_FormatterTemplate>\nstruct CHelper;\n"
+							, Expected
+						)
+					;
+					fg_ExpectFormat
+						(
+							"DefaultConditionalWrittenSplit"
+							, "template\n<\n\ttypename t_CData\n\t, EType t_Type = " + Default + "\n\t? EType::mc_InlineCreateStringFormatter\n\t: cHas_f_Format<t_CData>\n"
+							"\t? EType::mc_Inline\n\t: EType::mc_FormatterTemplate\n>\nstruct CHelper;\n"
+							, Expected
+						)
+					;
 					// A parenthesised operand stands apart from the '?' and ':' like any other,
 					// which is what lets a conditional written across lines be joined. A range
 					// with an unsettled gap cannot be measured, and is not broken at its
