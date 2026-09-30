@@ -2779,6 +2779,29 @@ namespace NMib::NDevelop
 						&& (_Tokens.f_IsText(Tokens[umint(iBehind)], "(") || _Tokens.f_IsText(Tokens[umint(iBehind)], "["))
 						&& Node.m_SplitPoints.f_IsEmpty()
 					;
+					// A parameter list outside a default argument holds declarations only, which settles
+					// what the name in front of the declarator is: 'tf_CType (&_Array)[t_nSize]'.
+					if (bDeclarator && !fg_NamesType(_Tokens, Left) && Node.m_iParent < Nodes.f_GetLen() && fg_IsParameterList(_Tokens, _Structure, Node.m_iParent))
+					{
+						auto const &List = Nodes[Node.m_iParent];
+						auto iStart = List.m_iFirstToken;
+						for (auto iSplit : List.m_SplitPoints)
+						{
+							if (iSplit < Node.m_iFirstToken)
+								iStart = iSplit;
+						}
+
+						bool bDefault = false;
+						for (auto i = iStart + 1; i < Node.m_iFirstToken && !bDefault; ++i)
+						{
+							auto iInner = _Structure.f_FindEnclosingNode(i);
+							bDefault = iInner == Node.m_iParent && _Tokens.f_IsText(Tokens[i], "=");
+						}
+
+						if (!bDefault)
+							return ECodeSpacing::mc_Space;
+					}
+
 					if (bDeclarator)
 						return fg_NamesType(_Tokens, Left) ? ECodeSpacing::mc_Space : ECodeSpacing::mc_Preserve;
 

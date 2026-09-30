@@ -2252,6 +2252,15 @@ namespace
 							, "TCFunction<void ()> g_fA;\nTCFunction<int (int)> g_fB;\nTCFunction<CFoo()> g_fC;\n"
 						)
 					;
+					// In a parameter list a declarator in parentheses follows a type whatever its name,
+					// but not in a default argument, which is an expression.
+					fg_ExpectFormat
+						(
+							"ParameterDeclarators"
+							, "template <typename tf_CType, size_t tf_n>\nsize_t fg_A(tf_CType(&_Array)[tf_n], int _B = g(&c)[1]);\n"
+							, "template <typename tf_CType, size_t tf_n>\nsize_t fg_A(tf_CType (&_Array)[tf_n], int _B = g(&c)[1]);\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(
