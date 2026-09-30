@@ -43,6 +43,7 @@ namespace NMib::NDevelop
 		, mc_Macro = DMibBit(2)
 		, mc_SpecifierMacro = DMibBit(3)
 		, mc_DSLMarker = DMibBit(4)
+		, mc_NoReturnMacro = DMibBit(5)
 	};
 
 	struct CCodeFormattingNaming;

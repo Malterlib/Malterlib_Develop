@@ -94,6 +94,7 @@ DSLMarkers:
 | `MacroNames` | Names of macros, which can expand to anything, so the layout around them is kept rather than read. |
 | `SpecifierMacros` | Macros that stand in front of a declaration the way `inline` does, and are part of a run of specifiers. |
 | `DSLMarkers` | User-defined literal suffixes of a DSL, which hug what they mark. |
+| `NoReturnMacros` | Macros that never return, such as those that throw, so a case ending in one does not fall through to the next. |
 
 A list written as a sequence replaces the one extended. Written as a mapping
 holding `Append`, its sequence is added to the one extended instead:

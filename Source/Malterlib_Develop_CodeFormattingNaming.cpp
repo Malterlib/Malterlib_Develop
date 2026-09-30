@@ -25,6 +25,7 @@ namespace NMib::NDevelop
 				, {"MacroNames", ECodeNameRole::mc_Macro}
 				, {"SpecifierMacros", ECodeNameRole::mc_SpecifierMacro}
 				, {"DSLMarkers", ECodeNameRole::mc_DSLMarker}
+				, {"NoReturnMacros", ECodeNameRole::mc_NoReturnMacro}
 			}
 		;
 		static_assert(sizeof(gc_NamingLists) / sizeof(gc_NamingLists[0]) == umint(ECodeNamingList::mc_Count));

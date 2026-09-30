@@ -19,6 +19,7 @@ namespace NMib::NDevelop
 		, mc_MacroNames
 		, mc_SpecifierMacros
 		, mc_DSLMarkers
+		, mc_NoReturnMacros
 
 		, mc_Count
 	};

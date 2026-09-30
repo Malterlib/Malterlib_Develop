@@ -99,6 +99,9 @@ namespace
 							"  - 'return_not_aliased'\n"
 							"DSLMarkers:\n"
 							"  - '_[a-z]*'\n"
+							"NoReturnMacros:\n"
+							"  - 'DMibError'\n"
+							"  - 'DError'\n"
 						)
 					)
 				;
@@ -2347,6 +2350,17 @@ namespace
 					fg_ExpectFormat("AlignedClassHead", AlignedClass, AlignedClass);
 					CStr MacroCase = "void f()\n{\n\tswitch (a)\n\t{\n\tcase DMibFoo(R32): break;\n\tcase DMibFoo(R8):\n\tcase DMibFoo(B8):\n\t\tbreak;\n\t}\n}\n";
 					fg_ExpectFormat("MacroCaseLabel", MacroCase, MacroCase);
+					// A case that falls through to the next stays under its label, and so does a body
+					// that labels fall through to.
+					fg_ExpectFormat
+						(
+							"FallThroughBody"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1: ++p;\n\tcase 2:\n\t\tg();\n\t\tbreak;\n\tcase 3:\n\t\th();\n\tcase 5: DMibError(\"x\");\n"
+							"\tcase 4: i();\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\t++p;\n\tcase 2: g(); break;\n\tcase 3:\n\t\th();\n\tcase 5: DMibError(\"x\");\n"
+							"\tcase 4: i();\n\t}\n}\n"
+						)
+					;
 					// A body that labels fall through to stays under all of them.
 					fg_ExpectFormat
 						(

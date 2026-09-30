@@ -5794,6 +5794,43 @@ namespace
 		umint nGuard = 0;
 		umint iPrevious = TCLimitsInt<umint>::mc_Max;
 		bool bOnLabelLine = false;
+		auto fIsCaseLabel = [&](umint _iIndex)
+			{
+				if (_iIndex >= Node.m_Children.f_GetLen())
+					return false;
+
+				auto const &Label = Nodes[Node.m_Children[_iIndex]];
+
+				return m_Tokens.f_IsText(Tokens[Label.m_iLastToken], ":")
+					&& (m_Tokens.f_IsText(Tokens[Label.m_iFirstToken], "case") || m_Tokens.f_IsText(Tokens[Label.m_iFirstToken], "default"))
+				;
+			}
+		;
+		// A case whose last statement does not jump falls through to the label behind it. A
+		// macro the naming lists as never returning jumps as 'throw' does.
+		auto fFallsThrough = [&](umint _iLast)
+			{
+				if (!fIsCaseLabel(_iLast + 1))
+					return false;
+
+				constexpr ch8 const *c_pJumps[] =
+					{
+						"break", "return", "co_return", "continue", "throw", "goto"
+					}
+				;
+				auto const &Last = Tokens[Nodes[Node.m_Children[_iLast]].m_iFirstToken];
+				if (m_Tokens.f_HasRole(Last, ECodeNameRole::mc_NoReturnMacro))
+					return false;
+
+				for (auto pJump : c_pJumps)
+				{
+					if (m_Tokens.f_IsText(Last, pJump))
+						return false;
+				}
+
+				return true;
+			}
+		;
 		// The last statement a label took onto its line, and the label itself.
 		umint iJoinedLabel = TCLimitsInt<umint>::mc_Max;
 		umint iJoinedUntil = TCLimitsInt<umint>::mc_Max;
@@ -5818,14 +5855,7 @@ namespace
 			// A case written on its label's line stays there where it is one statement and no
 			// block, a 'break' behind it included: 'case 1: a = 1; break;'. A block, or more
 			// statements than that, takes lines of its own under the label like any other body.
-			bool bSharedLabel = false;
-			if (bLabelled && iChildIndex >= 2)
-			{
-				auto const &BeforeLabel = Nodes[Node.m_Children[iChildIndex - 2]];
-				bSharedLabel = m_Tokens.f_IsText(Tokens[BeforeLabel.m_iLastToken], ":")
-					&& (m_Tokens.f_IsText(Tokens[BeforeLabel.m_iFirstToken], "case") || m_Tokens.f_IsText(Tokens[BeforeLabel.m_iFirstToken], "default"))
-				;
-			}
+			bool bSharedLabel = bLabelled && iChildIndex >= 2 && fIsCaseLabel(iChildIndex - 2);
 
 			if (bLabelled && !bFirstOnLine && bSharedLabel)
 				bOnLabelLine = false;
@@ -5833,6 +5863,7 @@ namespace
 			{
 				umint nOnLine = 0;
 				bool bBlockOnLine = false;
+				umint iLastOnLine = iChildIndex;
 				for (auto iOther = iChildIndex; iOther < Node.m_Children.f_GetLen(); ++iOther)
 				{
 					auto const &Other = Nodes[Node.m_Children[iOther]];
@@ -5842,9 +5873,10 @@ namespace
 					bool bBreak = iOther > iChildIndex && m_Tokens.f_IsText(Tokens[Other.m_iFirstToken], "break");
 					nOnLine += !bBreak;
 					bBlockOnLine |= Other.m_Kind == ECodeNodeKind::mc_Block || m_Tokens.f_IsText(Tokens[Other.m_iFirstToken], "{");
+					iLastOnLine = iOther;
 				}
 
-				bOnLabelLine = nOnLine == 1 && !bBlockOnLine;
+				bOnLabelLine = nOnLine == 1 && !bBlockOnLine && !fFallsThrough(iLastOnLine);
 			}
 			else
 				bOnLabelLine = !bFirstOnLine && bOnLabelLine;
@@ -5936,6 +5968,7 @@ namespace
 
 				bool bJoins = bSimple
 					&& !bBlank
+					&& !fFallsThrough(iBodyLast)
 					&& iBodyLast > iChildIndex
 					&& nStatements <= 1
 					&& fp_IsFirstOnLine(Nodes[Node.m_Children[iChildIndex + 1]].m_iFirstToken)
