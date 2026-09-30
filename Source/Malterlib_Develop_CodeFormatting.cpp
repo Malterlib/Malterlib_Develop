@@ -6863,21 +6863,30 @@ namespace
 					;
 				}
 
-				// Moving the access down only helps where the rest then fits. One access whose call
-				// has to open anyway stays on the line with what it is called on, and that call
-				// opens: 'fg_Get(*this).f_Enable' over '('.
-				if (bOpens && bMember && !fp_FitsInline(umint(iMember), _iLast, nContinuation))
+				// Moving the access down is what opening the call that has to break would do anyway,
+				// since what follows a closing marker resumes under it; but only where that call has
+				// an access behind it. The call that has to break is the one holding the most, the
+				// scope in front of the access or the call behind it. Where it is the call behind,
+				// the chain up to it stays on the line and the call opens: 'p->f_Get(i)->f_Report'
+				// over '('. A chain of several accesses gives at each of them instead.
+				if (bOpens && bMember && iScope + 1 < Scopes.f_GetLen())
 				{
-					bool bOneAccess = true;
-					for (auto i = umint(iMember) + 1; i <= _iLast && bOneAccess; ++i)
-					{
-						bool bAccess = m_TokenDepth[i] == m_TokenDepth[umint(iMember)] && (m_Tokens.f_IsText(Tokens[i], ".") || m_Tokens.f_IsText(Tokens[i], "->"));
-						bOneAccess = !bAccess || fp_IsTrailingReturnArrow(i);
-					}
-
-					auto iCall = iScope + 1 < Scopes.f_GetLen() ? Nodes[Scopes[iScope + 1]].m_iFirstToken : TCLimitsInt<umint>::mc_Max;
-					auto iCallHead = iCall != TCLimitsInt<umint>::mc_Max ? fp_PreviousCode(iCall) : aint(-1);
-					if (bOneAccess && iCallHead > iMember && fp_FitsInline(iLineFirst, umint(iCallHead), nLineIndent))
+					auto const &Call = Nodes[Scopes[iScope + 1]];
+					auto iCallHead = fp_PreviousCode(Call.m_iFirstToken);
+					bool bOneAccess = Call.m_iLastToken <= _iLast && !Call.m_bHasBlock && iCallHead >= 0 && fp_PreviousCode(umint(iCallHead)) == iMember;
+					auto iBehindCall = bOneAccess ? fp_NextCode(Call.m_iLastToken) : aint(-1);
+					bool bAccessBehind = iBehindCall >= 0
+						&& umint(iBehindCall) <= _iLast
+						&& (m_Tokens.f_IsText(Tokens[umint(iBehindCall)], ".") || m_Tokens.f_IsText(Tokens[umint(iBehindCall)], "->"))
+					;
+					umint nLink = 0;
+					umint nCall = 0;
+					bool bCallHolds = bOneAccess
+						&& fp_MeasureJoinedWidth(Link.m_iFirstToken, Link.m_iLastToken, nLink)
+						&& fp_MeasureJoinedWidth(Call.m_iFirstToken, Call.m_iLastToken, nCall)
+						&& nCall > nLink
+					;
+					if (bCallHolds && !bAccessBehind && fp_FitsInline(iLineFirst, umint(iCallHead), nLineIndent))
 					{
 						++iScope;
 

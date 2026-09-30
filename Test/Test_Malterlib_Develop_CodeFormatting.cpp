@@ -2235,6 +2235,16 @@ namespace
 							, "#if 1\nvoid f()\n{\n\tg();\n#if DFoo\n\t\th();\n#endif\n}\n#endif\n"
 						)
 					;
+					// The call holding more is the one that breaks. Behind an access it opens, and the
+					// chain in front of it stays on the line; in front of the access its closing marker
+					// would have the access behind it, so the line gives at the access instead.
+					fSplit
+						(
+							"AccessBreaksWithTheLongerCall"
+							, "void f()\n{\n\tp->f_Get(i)->f_Report(@, @);\n\tg(@, @).f_Call(a);\n}\n"
+							, "void f()\n{\n\tp->f_Get(i)->f_Report\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t;\n\tg(@, @)\n\t\t.f_Call(a)\n\t;\n}\n"
+						)
+					;
 					// A single member access whose call has to open anyway stays on the line with what
 					// it is called on, and the call opens there.
 					fSplit
