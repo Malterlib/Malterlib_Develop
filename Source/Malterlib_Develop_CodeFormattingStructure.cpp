@@ -2705,6 +2705,22 @@ namespace NMib::NDevelop
 				if (iOpening < Nodes.f_GetLen() && Nodes[iOpening].m_Kind == ECodeNodeKind::mc_Group)
 				{
 					auto const &Node = Nodes[iOpening];
+					// A cv-qualifier ends the type a pointer or reference declarator in parentheses
+					// follows, as a type's name does: 'char const (&_String)[4]', 'TCFoo<int const (&)[4]>'.
+					if (_Tokens.f_IsText(Left, "const") || _Tokens.f_IsText(Left, "volatile"))
+					{
+						auto iInner = fg_NextCode(_Tokens, _iRight);
+						auto iBehind = fg_NextCode(_Tokens, Node.m_iLastToken);
+						bool bDeclarator = iInner >= 0
+							&& (_Tokens.f_IsText(Tokens[umint(iInner)], "*") || _Tokens.f_IsText(Tokens[umint(iInner)], "&"))
+							&& iBehind >= 0
+							&& (_Tokens.f_IsText(Tokens[umint(iBehind)], "(") || _Tokens.f_IsText(Tokens[umint(iBehind)], "["))
+							&& Node.m_SplitPoints.f_IsEmpty()
+						;
+						if (bDeclarator)
+							return ECodeSpacing::mc_Space;
+					}
+
 					if (Nodes[Node.m_iParent].m_Bracket == ECodeBracket::mc_Angle)
 						return fg_NamesFunction(_Tokens, Left) ? ECodeSpacing::mc_None : ECodeSpacing::mc_Preserve;
 

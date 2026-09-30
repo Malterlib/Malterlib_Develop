@@ -2226,6 +2226,14 @@ namespace
 							, "void fg_F(ch8 (&_Dest)[4], int (*_pCall)(int));\nvoid f()\n{\n\tstruct CState State = {0};\n\tstruct CState Broken = {0};\n}\n"
 						)
 					;
+					// A cv-qualifier ends the type a declarator in parentheses follows, too.
+					fg_ExpectFormat
+						(
+							"QualifiedDeclarators"
+							, "void fg_F(char const(&_String)[4], int volatile(*_pValue)[2]);\nusing CA = TCFoo<char const(&)[4]>;\n"
+							, "void fg_F(char const (&_String)[4], int volatile (*_pValue)[2]);\nusing CA = TCFoo<char const (&)[4]>;\n"
+						)
+					;
 					// An enumerator list takes the line under the enum's brace, and a statement that
 					// opens with its lambda ends on the call behind the body.
 					fg_ExpectFormat
