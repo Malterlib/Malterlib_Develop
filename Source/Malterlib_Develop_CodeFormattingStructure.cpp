@@ -2259,6 +2259,11 @@ namespace NMib::NDevelop
 		if (iCapture >= 0 && _Tokens.f_IsText(Tokens[umint(iCapture)], "]"))
 			return fg_NameSubscriptOperator(_Tokens, umint(iCapture)) < 0 && fg_IsCaptureList(_Tokens, _Structure, umint(iCapture));
 
+		// An attribute macro can stand behind a parameter list as well, where no name has a
+		// place of its own: '(umint _nChars) inline_always_lambda -> CChar *'.
+		if (iCapture >= 0 && iCapture != iBefore && _Tokens.f_IsText(Tokens[umint(iCapture)], ")") && fg_ClosesParameterList(_Tokens, _Structure, umint(iCapture)))
+			return true;
+
 		if (!_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
 			return false;
 

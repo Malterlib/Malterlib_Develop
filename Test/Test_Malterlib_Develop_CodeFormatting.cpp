@@ -1900,6 +1900,15 @@ namespace
 							, "void f()\n{\n\tauto fA = [] [[nodiscard]] () -> int\n\t\t{\n\t\t\treturn 1;\n\t\t}\n\t;\n\tif (bFlag) [[unlikely]]\n\t\treturn;\n}\n"
 						)
 					;
+					// A name between a lambda's parameter list and its arrow is an attribute macro,
+					// and the arrow behind it starts the return type.
+					fg_ExpectFormat
+						(
+							"LambdaAttributeMacro"
+							, "void f()\n{\n\tauto fA = [&](umint _nChars) inline_always_lambda->ch8 *\n\t\t{\n\t\t\treturn nullptr;\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\tauto fA = [&](umint _nChars) inline_always_lambda -> ch8 *\n\t\t{\n\t\t\treturn nullptr;\n\t\t}\n\t;\n}\n"
+						)
+					;
 					// A string continued on the next line stands one level in under the line that starts
 					// its statement, and at the level of an element or an operand line it continues.
 					fg_ExpectFormat
