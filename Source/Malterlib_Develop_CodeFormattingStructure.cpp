@@ -33,6 +33,17 @@ namespace
 		}
 	}
 
+	bool fg_IsAsmQualifier(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
+	{
+		for (auto pQualifier : {"volatile", "__volatile__", "__volatile", "inline", "__inline__", "goto"})
+		{
+			if (_Tokens.f_IsText(_Token, pQualifier))
+				return true;
+		}
+
+		return false;
+	}
+
 	ECodeBracket fg_GetOpeningBracket(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
 	{
 		if (_Token.m_Kind != ECodeTokenKind::mc_Punctuator)
@@ -637,6 +648,21 @@ namespace NMib::NDevelop
 		if (_Bracket == ECodeBracket::mc_Angle)
 			mp_bAngleBracket[mp_Significant[_iToken]] = 1;
 		auto Closing = fg_GetClosingText(_Bracket);
+		// An asm statement's operand sections start their lines like its operands do.
+		bool bAsm = false;
+		if (_Bracket == ECodeBracket::mc_Paren)
+		{
+			auto iBefore = aint(_iToken) - 1;
+			while (iBefore >= 0 && fg_IsAsmQualifier(*mp_pTokens, Tokens[mp_Significant[umint(iBefore)]]))
+				--iBefore;
+
+			if (iBefore >= 0)
+			{
+				auto const &Keyword = Tokens[mp_Significant[umint(iBefore)]];
+				bAsm = mp_pTokens->f_IsText(Keyword, "asm") || mp_pTokens->f_IsText(Keyword, "__asm__") || mp_pTokens->f_IsText(Keyword, "__asm");
+			}
+		}
+
 		auto i = _iToken + 1;
 		while (i < mp_Significant.f_GetLen())
 		{
@@ -653,7 +679,8 @@ namespace NMib::NDevelop
 			}
 
 			// A top-level separator is where the canonical split form starts a new line.
-			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && (mp_pTokens->f_IsText(Token, ",") || mp_pTokens->f_IsText(Token, ";")))
+			bool bSeparator = mp_pTokens->f_IsText(Token, ",") || mp_pTokens->f_IsText(Token, ";") || (bAsm && mp_pTokens->f_IsText(Token, ":"));
+			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && bSeparator)
 			{
 				mp_Nodes[iNode].m_SplitPoints.f_Insert(mp_Significant[i]);
 				++i;

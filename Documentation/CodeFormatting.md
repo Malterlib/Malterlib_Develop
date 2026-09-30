@@ -398,6 +398,13 @@ the middle of a file does. The brace of the block a statement stands in is the
 exception: it ends that statement, which is how a list written without
 terminators is spelled, such as the enumerators of an `enum` body.
 
+A string an element of a list continues on the line below keeps that line, as a
+line comment ends the one it stands on, so the list around it opens and a value
+holding it gives at each of its loose operators. A continued string that stands
+directly in a statement keeps the statement's lines. The operand sections of an
+asm statement are split points of its parentheses, so a split one puts each `:`
+and `,` in front of the section or operand it starts.
+
 A `<` opens a template argument list only when it is written tight against the
 name before it, or across a line break; Malterlib spells a comparison with
 spaces, so the loose spelling stays an operator. Behind a name the naming lists

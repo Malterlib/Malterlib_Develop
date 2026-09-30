@@ -2226,6 +2226,20 @@ namespace
 							, "void f()\n{\n\tenum\n\t{\n\t\tEA = 4\n\t};\n\n\tenum\n\t{\n\t\tEB = 4\n\t};\n\n\t[]()\n\t{\n\t\tg();\n\t\th();\n\t}();\n}\n"
 						)
 					;
+					// A string an element continues on the line below keeps that line, so the list
+					// around it opens and a value holding it gives at each of its operators. An asm
+					// statement's operand sections start their lines as its operands do.
+					fg_ExpectFormat
+						(
+							"StringContinuationOpens"
+							, "void f()\n{\n\tfg_Call(\"a\"\n\t\t\"b\"_f << x << y, z);\n"
+							"\tasm volatile(\n\t\t\t\"0:\\n\"\n\t\t\t\"\\tbne 0b\\n\"\n\t\t\t: \"=r\"(a),\"=r\"(b)\n\t\t\t);\n"
+							"\tasm volatile(\"x\" : \"=r\"(a) : \"r\"(b));\n}\n"
+							, "void f()\n{\n\tfg_Call\n\t\t(\n\t\t\t\"a\"\n\t\t\t\"b\"_f\n\t\t\t<< x\n\t\t\t<< y\n\t\t\t, z\n\t\t)\n\t;\n"
+							"\tasm volatile\n\t\t(\n\t\t\t\"0:\\n\"\n\t\t\t\"\\tbne 0b\\n\"\n\t\t\t: \"=r\"(a)\n\t\t\t, \"=r\"(b)\n\t\t)\n\t;\n"
+							"\tasm volatile(\"x\" : \"=r\"(a) : \"r\"(b));\n}\n"
+						)
+					;
 					// Each enumerator takes a line, the comma in front of it, and a blank line between
 					// two moves in front of the comma. A comma with a comment behind it and a trailing
 					// one keep their places. A type is set off from a '#define' behind it, not from

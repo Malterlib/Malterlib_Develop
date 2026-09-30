@@ -656,6 +656,7 @@ namespace
 		void fp_RuleTokenSpacing();
 		bool fp_HasOperand(umint _iToken, bool _bBefore) const;
 		bool fp_EndsOperand(aint _iToken) const;
+		aint fp_ContinuesLiteral(umint _iToken) const;
 		void fp_RuleBlankLines();
 		void fp_RuleLineBreaks();
 		void fp_LayoutNode(umint _iNode, umint _iIndent);
@@ -1212,6 +1213,27 @@ namespace
 		;
 	}
 
+	// The string literal in front of the token when the token continues it on a line of its
+	// own, which the source asks for and the layout keeps; -1 otherwise.
+	aint CFormattingAnalyzer::fp_ContinuesLiteral(umint _iToken) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		if (Tokens[_iToken].m_Kind != ECodeTokenKind::mc_StringLiteral || Tokens[_iToken].m_bMultiLine || !fp_IsFirstOnLine(_iToken))
+			return -1;
+
+		auto iPrevious = fp_PreviousSignificant(_iToken);
+		while (iPrevious >= 0 && Tokens[umint(iPrevious)].m_Kind == ECodeTokenKind::mc_Newline)
+			iPrevious = fp_PreviousSignificant(umint(iPrevious));
+
+		bool bContinues = iPrevious >= 0
+			&& Tokens[umint(iPrevious)].m_Kind == ECodeTokenKind::mc_StringLiteral
+			&& !Tokens[umint(iPrevious)].m_bMultiLine
+			&& m_TokenDepth[umint(iPrevious)] == m_TokenDepth[_iToken]
+		;
+
+		return bContinues ? iPrevious : aint(-1);
+	}
+
 	bool CFormattingAnalyzer::fp_EndsOperand(aint _iToken) const
 	{
 		if (_iToken < 0)
@@ -1733,24 +1755,6 @@ namespace
 		}
 
 		auto const &Nodes = m_Structure.f_GetNodes();
-		auto fContinuesLiteral = [&](umint _iToken) -> aint
-			{
-				if (Tokens[_iToken].m_Kind != ECodeTokenKind::mc_StringLiteral || Tokens[_iToken].m_bMultiLine || !fp_IsFirstOnLine(_iToken))
-					return -1;
-
-				auto iPrevious = fp_PreviousSignificant(_iToken);
-				while (iPrevious >= 0 && Tokens[umint(iPrevious)].m_Kind == ECodeTokenKind::mc_Newline)
-					iPrevious = fp_PreviousSignificant(umint(iPrevious));
-
-				bool bContinues = iPrevious >= 0
-					&& Tokens[umint(iPrevious)].m_Kind == ECodeTokenKind::mc_StringLiteral
-					&& !Tokens[umint(iPrevious)].m_bMultiLine
-					&& m_TokenDepth[umint(iPrevious)] == m_TokenDepth[_iToken]
-				;
-
-				return bContinues ? iPrevious : aint(-1);
-			}
-		;
 		// An opened DSL array's bracket stands on a line of its own, at the element's level, or
 		// one level in when the line starts its statement, and what it holds moves with it:
 		// '"Names"_o= _o' over '[' over the elements over ']'. The shift of an array around
@@ -1908,7 +1912,7 @@ namespace
 
 		for (umint i = 0; m_Structure.f_IsComplete() && i < Tokens.f_GetLen(); ++i)
 		{
-			auto iPrevious = fContinuesLiteral(i);
+			auto iPrevious = fp_ContinuesLiteral(i);
 			if (iPrevious < 0)
 				continue;
 
@@ -1918,7 +1922,7 @@ namespace
 
 			// The chain is placed against the line its first literal stands on.
 			auto iHead = umint(iPrevious);
-			for (auto iBefore = fContinuesLiteral(iHead); iBefore >= 0; iBefore = fContinuesLiteral(iHead))
+			for (auto iBefore = fp_ContinuesLiteral(iHead); iBefore >= 0; iBefore = fp_ContinuesLiteral(iHead))
 				iHead = umint(iBefore);
 
 			auto iHeadLineStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[iHead].m_iOffset));
@@ -2932,6 +2936,16 @@ namespace
 						bComment = true;
 					else
 						return false;
+				}
+
+				// A string continued on a line of its own inside a bracket keeps that line, as a
+				// line comment ends the line in front of it, so the bracket around it opens.
+				if (bNewline && !bComment && m_TokenDepth[i] > m_TokenDepth[_iFirstToken] && fp_ContinuesLiteral(i) >= 0)
+				{
+					nColumns += gc_nBlockWidth + fp_GetTokenColumns(Token);
+					iPrevious = i;
+
+					continue;
 				}
 
 				// Two closers of nested template argument lists are written as one '>>'
@@ -7180,6 +7194,7 @@ namespace
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto nLevel = m_TokenDepth[_iFirst];
 		TCVector<umint> Cuts;
+		bool bContinuedString = false;
 		for (umint i = _iFirst; i <= _iLast; ++i)
 		{
 			// Only a directive standing at the range's own level cuts it. One inside a
@@ -7187,11 +7202,18 @@ namespace
 			// directive stays where the marker's own scope puts it.
 			// A line comment ends its line the same way, and what stands behind it starts
 			// the next: 'class CFoo // Comment' above its base clause.
+			// So does a string an element of a group continues on the line below it.
 			bool bEndsLine = (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor && !m_bOpaqueDirective[i]) || Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment;
+			auto iNext = fp_NextCode(i);
+			if (!_bIndentContinuations && Tokens[i].m_Kind == ECodeTokenKind::mc_StringLiteral && iNext >= 0 && fp_ContinuesLiteral(umint(iNext)) == aint(i))
+			{
+				bEndsLine = true;
+				bContinuedString = true;
+			}
+
 			if (!bEndsLine || m_TokenDepth[i] != nLevel)
 				continue;
 
-			auto iNext = fp_NextCode(i);
 			if (iNext < 0 || umint(iNext) > _iLast || umint(iNext) <= _iFirst || m_TokenDepth[umint(iNext)] != nLevel)
 				continue;
 
@@ -7230,8 +7252,9 @@ namespace
 				bool bSplitSegment = false;
 				for (auto iOperator : Operators)
 				{
-					// One that opens the segment already stands on a line of its own.
-					bSplitSegment |= bCutAtOperator && iOperator > iStart && iOperator <= iEnd;
+					// One that opens the segment already stands on a line of its own. A value
+					// holding a string continued over lines spans lines, and so gives at each.
+					bSplitSegment |= (bCutAtOperator || bContinuedString) && iOperator > iStart && iOperator <= iEnd;
 				}
 
 				// A chain written broken at one member access is broken at each of them.
