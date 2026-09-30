@@ -2243,6 +2243,15 @@ namespace
 							, "template <typename t_C>\nrequires (cA<TCFoo<t_C>> && cB<t_C> && !cC<t_C>)\nvoid f();\n"
 						)
 					;
+					// A fundamental type in front of a parenthesis in a template argument list spells
+					// a function type, which a named type there may spell or construct a value with.
+					fg_ExpectFormat
+						(
+							"FundamentalFunctionType"
+							, "TCFunction<void()> g_fA;\nTCFunction<int(int)> g_fB;\nTCFunction<CFoo()> g_fC;\n"
+							, "TCFunction<void ()> g_fA;\nTCFunction<int (int)> g_fB;\nTCFunction<CFoo()> g_fC;\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(

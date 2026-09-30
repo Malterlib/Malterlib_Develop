@@ -2747,7 +2747,14 @@ namespace NMib::NDevelop
 					}
 
 					if (Nodes[Node.m_iParent].m_Bracket == ECodeBracket::mc_Angle)
+					{
+						// A template argument that can be read as a type is one, so a fundamental type in
+						// front of a parenthesis there spells a function type: 'TCFunction<void ()>'.
+						if (!_Tokens.f_HasRole(Left, ECodeNameRole::mc_Type) && fg_NamesType(_Tokens, Left))
+							return ECodeSpacing::mc_Space;
+
 						return fg_NamesFunction(_Tokens, Left) ? ECodeSpacing::mc_None : ECodeSpacing::mc_Preserve;
+					}
 
 					// A pointer to function's declarator is followed by its parameter list and
 					// holds no separator, which is what tells 'void (*pCall)(int)' from a call
