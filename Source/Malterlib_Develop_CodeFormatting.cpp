@@ -5018,12 +5018,18 @@ namespace
 
 			// Only a clause written on one line is left alone whole; one holding a requires
 			// expression, whose braces the head can end in, keeps the statement's lines.
-			bool bOneLineClause = iClause >= 0 && !m_Tokens.f_IsText(Tokens[iHeadLast], "requires");
-			for (auto i = iClause >= 0 ? fp_NextCode(umint(iClause)) : aint(-1); bOneLineClause && i >= 0 && umint(i) <= iHeadLast; i = fp_NextCode(umint(i)))
+			// The terminator of a declaration ends the statement, not the clause, and an
+			// initializer list behind the clause is laid out on lines of its own.
+			auto iClauseLast = iInitializerList != TCLimitsInt<umint>::mc_Max ? fp_PreviousCode(iInitializerList) : aint(iHeadLast);
+			if (iClauseLast >= 0 && umint(iClauseLast) == Node.m_iLastToken && m_Tokens.f_IsText(Tokens[umint(iClauseLast)], ";"))
+				iClauseLast = fp_PreviousCode(umint(iClauseLast));
+
+			bool bOneLineClause = iClause >= 0 && iClauseLast >= 0 && !m_Tokens.f_IsText(Tokens[umint(iClauseLast)], "requires");
+			for (auto i = iClause >= 0 ? fp_NextCode(umint(iClause)) : aint(-1); bOneLineClause && i >= 0 && i <= iClauseLast; i = fp_NextCode(umint(i)))
 				bOneLineClause = !fp_IsFirstOnLine(umint(i));
 
 			auto iBeforeClause = iClause >= 0 ? fp_PreviousCode(umint(iClause)) : aint(-1);
-			if (bOneLineClause && iBeforeClause >= 0 && umint(iBeforeClause) >= iDeclFirst && !bElsewhere && iInitializerList == TCLimitsInt<umint>::mc_Max)
+			if (bOneLineClause && iBeforeClause >= 0 && umint(iBeforeClause) >= iDeclFirst && !bElsewhere)
 			{
 				iSignatureLast = umint(iBeforeClause);
 				iHeadLast = iSignatureLast;
@@ -6618,7 +6624,18 @@ namespace
 	{
 		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
 		if (m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]"))
+		{
+			// The brackets behind 'operator' spell the function's name: 'operator ()', 'operator []'.
+			auto iOpen = fp_PreviousCode(_iToken);
+			if (iOpen >= 0 && (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iOpen)], "(") || m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iOpen)], "[")))
+			{
+				auto iKeyword = fp_PreviousCode(umint(iOpen));
+				if (iKeyword >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iKeyword)], "operator"))
+					return false;
+			}
+
 			return true;
+		}
 
 		// A lambda's template parameter list is a scope of its own rather than part of a
 		// name, which is what a template argument list behind an identifier is.

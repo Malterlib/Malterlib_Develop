@@ -2288,6 +2288,16 @@ namespace
 							"fs_Calc\n\t\t\t\t<\n\t\t\t\t\t" + Long + "\n\t\t\t\t>()\n\t\t\t)...\n\t\t}\n\t;\n};\n"
 						)
 					;
+					// A declaration with a requires clause on a line of its own is laid out in front of
+					// it as any other, an initializer list behind the clause and a terminator on a line
+					// of their own included, and an operator's brackets are its name, not a scope.
+					fg_ExpectFormat
+						(
+							"RequiresClauseDeclarations"
+							, "struct CA\n{\n\tauto f_C(int _A) const\n\t\t-> int\n\t\trequires (cB<int>)\n\t;\n\n\tauto operator ()\n\t\t(int _A) const\n\t\t-> int\n\t;\n};\n"
+							, "struct CA\n{\n\tauto f_C(int _A) const -> int\n\t\trequires (cB<int>)\n\t;\n\n\tauto operator () (int _A) const -> int;\n};\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(
