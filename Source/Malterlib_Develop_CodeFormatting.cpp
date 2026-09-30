@@ -4552,8 +4552,48 @@ namespace
 				return;
 		}
 
+		// A list keeping its lines still lays out an element written on one line too long for
+		// it, as an opened list lays out each of its elements.
+		TCVector<umint> LaidOut;
+		if (Node.m_Kind == ECodeNodeKind::mc_Group && (Node.m_Bracket == ECodeBracket::mc_Brace || Node.m_Bracket == ECodeBracket::mc_Paren))
+		{
+			umint iElement = Node.m_iFirstToken + 1;
+			for (umint iSplit = 0; iElement <= Node.m_iLastToken; ++iSplit)
+			{
+				auto iEnd = iSplit < Node.m_SplitPoints.f_GetLen() ? Node.m_SplitPoints[iSplit] : Node.m_iLastToken;
+				auto iLast = fp_PreviousCode(iEnd);
+				auto iStart = fp_NextCode(iElement - 1);
+				bool bElement = iEnd > iElement && iStart >= 0 && iLast >= 0 && umint(iStart) <= umint(iLast) && fp_IsFirstOnLine(umint(iStart));
+				for (auto i = bElement ? umint(iStart) + 1 : umint(0); bElement && i < umint(iLast); ++i)
+					bElement = m_Tokens.f_GetTokens()[i].m_Kind != ECodeTokenKind::mc_Newline;
+
+				if (bElement && fp_IsLastOnLine(umint(iLast)))
+				{
+					auto nIndent = fp_GetStatementIndent(umint(iStart));
+					if (!fp_FitsInline(umint(iStart), umint(iLast), nIndent) && fp_IsRangeJoinable(_iNode, umint(iStart), umint(iLast)))
+					{
+						fp_LayoutRange(_iNode, umint(iStart), umint(iLast), nIndent, false, false);
+						LaidOut.f_Insert(umint(iStart));
+						LaidOut.f_Insert(umint(iLast));
+					}
+				}
+
+				if (iSplit >= Node.m_SplitPoints.f_GetLen())
+					break;
+
+				iElement = Node.m_SplitPoints[iSplit];
+			}
+		}
+
 		for (auto iChild : Node.m_Children)
 		{
+			bool bLaidOut = false;
+			for (umint iRange = 0; iRange + 1 < LaidOut.f_GetLen() && !bLaidOut; iRange += 2)
+				bLaidOut = Nodes[iChild].m_iFirstToken >= LaidOut[iRange] && Nodes[iChild].m_iLastToken <= LaidOut[iRange + 1];
+
+			if (bLaidOut)
+				continue;
+
 			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Block)
 			{
 				fp_LayoutLambdaHead(_iNode, iChild);
@@ -7036,7 +7076,13 @@ namespace
 			// A capture list, or a template parameter list that only a lambda can end, is
 			// what one part of an introducer stands behind.
 			auto const &Before = m_Tokens.f_GetTokens()[umint(iBefore)];
-			bool bIntroducer = m_Tokens.f_IsText(Before, "]") || m_Structure.f_IsAngleBracket(umint(iBefore));
+			bool bIntroducer = m_Tokens.f_IsText(Before, "]");
+			if (m_Structure.f_IsAngleBracket(umint(iBefore)))
+			{
+				auto iList = m_Structure.f_FindNodeClosingAt(umint(iBefore));
+				auto iCapture = iList < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iList].m_iFirstToken) : aint(-1);
+				bIntroducer = iCapture >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iCapture)], "]");
+			}
 
 			// An empty scope is nothing to move down: only a part of an introducer takes a
 			// line of its own while holding nothing, and '(*pFunctor)()' stays whole.
@@ -7412,6 +7458,47 @@ namespace
 					break;
 
 				iNext = aint(iResume);
+			}
+
+			// An empty call and a pack expansion stay on the closing marker's line, having
+			// nothing to open: '>()', ')...'. A lambda's parameter list is a part of its
+			// introducer instead, and takes a line of its own.
+			bool bPastEnd = false;
+			bool bEmptyCall = false;
+			for (auto iMarker = Scope.m_iLastToken; iNext >= 0 && umint(iNext) <= _iLast; )
+			{
+				umint iHugged = umint(iNext);
+				if (m_Tokens.f_IsText(Tokens[umint(iNext)], "("))
+				{
+					if (fp_ClosesLambdaIntroducer(iMarker))
+						break;
+
+					auto iClose = fp_NextCode(umint(iNext));
+					if (iClose < 0 || !m_Tokens.f_IsText(Tokens[umint(iClose)], ")"))
+						break;
+
+					iHugged = umint(iClose);
+				}
+				else if (!m_Tokens.f_IsText(Tokens[umint(iNext)], "..."))
+					break;
+
+				fp_MarkInline(iMarker, iHugged);
+				bEmptyCall = m_Tokens.f_IsText(Tokens[iHugged], ")");
+				iMarker = iHugged;
+				iNext = fp_NextCode(iHugged);
+				bPastEnd = iNext < 0 || umint(iNext) > _iLast;
+			}
+
+			if (bPastEnd)
+				break;
+
+			// Behind an empty call the rest stays on the marker's line where it fits there:
+			// '>().promise()'.
+			if (bEmptyCall && fp_FitsInline(Scope.m_iLastToken, _iLast, nLineIndent))
+			{
+				fp_MarkInline(Scope.m_iLastToken, _iLast);
+
+				break;
 			}
 
 			// What follows the scope resumes under its closing marker.
