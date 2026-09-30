@@ -147,9 +147,9 @@ is not handled, and `mc_Failed` when analysis could not produce a usable plan.
 
 ## Rules
 
-The implemented rule matrix is whitespace-only but for six conversions: the
+The implemented rule matrix is whitespace-only but for seven conversions: the
 trailing return type, `braces`, `east-qualifier`, `specifier-order`,
-`empty-statement`, and `enum-comma`. Every plan is verified
+`empty-statement`, `enum-comma`, and `list-comma`. Every plan is verified
 against `fg_HasEquivalentCodeTokens` on the converted source, and whole-file
 plans are re-analyzed to prove the result is stable; either check failing is a
 formatter failure, not an edit.
@@ -181,6 +181,7 @@ formatter failure, not an edit.
 | `specifier-order` | `static` stands in front of `constexpr`: `constexpr static umint` becomes `static constexpr umint`. |
 | `empty-statement` | A statement terminator that ends nothing is taken out: `f_Call();;` becomes `f_Call();`. Only an empty statement standing directly behind another terminator goes, with nothing but spaces and line breaks between them; a comment between the two keeps both. |
 | `enum-comma` | An enumerator's comma stands in front of it, and the last one has none. A comma that a comment or a conditional's directive separates from the enumerator behind it moves in front of that enumerator, into every branch it is compiled in, and the one behind the last enumerator is taken out; the layout moves the rest. An enum holding another directive, or an enumerator that is the first in some configurations only, keeps its commas. |
+| `list-comma` | A comment behind a comma in a bracketed list describes the element in front of it, so the comma moves in front of the element behind it, as the layout writes it: `a, // A` over `b` becomes `a // A` over `, b`. Only a line comment on the comma's line, with the next element on a later line and nothing but blanks and comments between, moves it; a braced list holding a directive, or written with other commas behind their elements, keeps its commas. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound

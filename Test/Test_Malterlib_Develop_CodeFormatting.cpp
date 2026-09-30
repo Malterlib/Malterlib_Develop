@@ -2361,6 +2361,16 @@ namespace
 							"\tcase 4: i();\n\t}\n}\n"
 						)
 					;
+					// A comment behind a list's comma describes the element in front of it, and the
+					// comma goes past it to the element behind.
+					fg_ExpectFormat
+						(
+							"CommentBehindListComma"
+							, "void f()\n{\n\tg(\n\t\ta,\n\t\t1,      // Count\n\t\tnSize,  // Size\n\t\tb\n\t);\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\ta\n\t\t\t, 1 // Count\n\t\t\t, nSize // Size\n\t\t\t, b\n\t\t)\n\t;\n}\n"
+							, false
+						)
+					;
 					// A body that labels fall through to stays under all of them.
 					fg_ExpectFormat
 						(

@@ -2487,6 +2487,8 @@ namespace
 					Explanation = "a terminator that ends nothing is taken out";
 				else if (Edit.m_Rule == "enum-comma")
 					Explanation = "an enumerator's comma stands in front of it, and the last one has none";
+				else if (Edit.m_Rule == "list-comma")
+					Explanation = "a comment describes the element in front of it, which the comma behind it goes past";
 
 				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
 			}
@@ -3625,6 +3627,97 @@ namespace
 
 			if (m_Tokens.f_IsText(Tokens[fp_SkipTemplateHeader(Nodes[Node.m_iParent].m_iFirstToken)], "enum"))
 				fp_ConvertEnumBodyCommas(Node);
+		}
+
+		// A comment behind a list's comma describes the element in front of it, so the comma
+		// moves in front of the element behind it instead, as the layout puts it: 'a, // A'
+		// over 'b' is 'a // A' over ', b'.
+		// A braced list written with its commas behind its elements, or holding a directive,
+		// keeps them there.
+		auto fKeepsCommas = [&](CCodeNode const &_List)
+			{
+				if (_List.m_Bracket != ECodeBracket::mc_Brace)
+					return false;
+
+				for (auto i = _List.m_iFirstToken; i < _List.m_iLastToken; ++i)
+				{
+					if (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor)
+						return true;
+				}
+
+				for (auto iComma : _List.m_SplitPoints)
+				{
+					auto iNext = fp_NextCode(iComma);
+					if (!m_Tokens.f_IsText(Tokens[iComma], ",") || iNext < 0 || umint(iNext) >= _List.m_iLastToken || !fp_IsLastOnLine(iComma))
+						continue;
+
+					bool bComment = false;
+					for (auto i = iComma + 1; i < umint(iNext) && !bComment; ++i)
+						bComment = Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment;
+
+					if (!bComment)
+						return true;
+				}
+
+				return false;
+			}
+		;
+		for (auto const &Node : Nodes)
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || fKeepsCommas(Node))
+				continue;
+
+			for (auto iComma : Node.m_SplitPoints)
+			{
+				if (!m_Tokens.f_IsText(Tokens[iComma], ","))
+					continue;
+
+				auto iComment = iComma + 1;
+				while (iComment < Tokens.f_GetLen() && Tokens[iComment].m_Kind == ECodeTokenKind::mc_Whitespace)
+					++iComment;
+
+				if (iComment >= Tokens.f_GetLen() || Tokens[iComment].m_Kind != ECodeTokenKind::mc_LineComment)
+					continue;
+
+				auto iNext = fp_NextCode(iComma);
+				if (iNext < 0 || umint(iNext) >= Node.m_iLastToken)
+					continue;
+
+				bool bPlain = true;
+				for (auto i = iComment + 1; i < umint(iNext) && bPlain; ++i)
+				{
+					auto Kind = Tokens[i].m_Kind;
+					bPlain = Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_LineComment;
+				}
+
+				auto iBefore = fp_PreviousCode(iComma);
+				if (!bPlain || iBefore < 0)
+					continue;
+
+				auto iRemove = Tokens[iComma].m_iOffset;
+				bool bTight = true;
+				for (auto i = umint(iBefore) + 1; i < iComma && bTight; ++i)
+					bTight = Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace;
+
+				if (bTight)
+					iRemove = Tokens[umint(iBefore)].f_GetEnd();
+
+				auto nRemove = Tokens[iComma].f_GetEnd() - iRemove;
+				auto iInsert = Tokens[umint(iNext)].m_iOffset;
+				if (fp_IsDisabled(iRemove, nRemove) || !fp_IsSelected(iRemove, nRemove) || fp_IsDisabled(iInsert, 0) || !fp_IsSelected(iInsert, 0))
+					continue;
+
+				auto &Remove = m_Structural.f_Insert();
+				Remove.m_iOffset = iRemove;
+				Remove.m_nLength = nRemove;
+				Remove.m_Rule = "list-comma";
+
+				auto &Insert = m_Structural.f_Insert();
+				Insert.m_iOffset = iInsert;
+				Insert.m_nLength = 0;
+				Insert.m_Replacement = ", ";
+				Insert.m_Rule = "list-comma";
+			}
 		}
 	}
 
