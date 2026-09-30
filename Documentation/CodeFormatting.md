@@ -638,9 +638,11 @@ specifier go. A statement whose own lines are fixed keeps the line it starts as
 well, since moving that one alone would leave the rest of them behind: a braced
 initializer written across lines, a block comment inside, a multiline token. So
 does a statement inside a conditional, whose depth the sources decide for
-themselves. A case written on its label's line stays there whole, as
-`case 1: return 1;` is written on purpose, and so do the `if` of an `else if`
-and an attribute on a clause's line. The `if` is laid out against the line the
+themselves. A case whose body is one statement, a `break` behind it included,
+stands on its label's line where the whole fits there, `case 1: a = 1; break;`;
+a block, a clause, more statements, a comment or a blank line between them keep
+the body under the label, a block opened like any other. The `if` of an
+`else if` and an attribute on a clause's line stay where they are written. The `if` is laid out against the line the
 `else` starts, so a condition that does not fit behind both opens under the
 `else`, as it would under an `if` of its own. A statement that opens with such an
 attribute, `if (x) [[unlikely]]` with the block below, is laid out at the

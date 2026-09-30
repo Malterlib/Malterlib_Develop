@@ -4669,10 +4669,10 @@ namespace
 		if (!_iFirstParen)
 			return TCLimitsInt<umint>::mc_Max;
 
-		// A class's colon starts its base clause, whatever parenthesis stands in front of it:
-		// 'struct alignas(32) CFoo : public CBar'.
+		// A class's colon starts its base clause, whatever parenthesis stands in front of it,
+		// and a case's ends its label: 'struct alignas(32) CFoo : public CBar', 'case DFoo(1):'.
 		auto const &Key = m_Tokens.f_GetTokens()[fp_SkipTemplateHeader(Node.m_iFirstToken)];
-		if (m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "union"))
+		if (m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "union") || m_Tokens.f_IsText(Key, "case"))
 			return TCLimitsInt<umint>::mc_Max;
 
 		// A conditional operator also puts a colon at the statement's own level, and its
@@ -5794,6 +5794,9 @@ namespace
 		umint nGuard = 0;
 		umint iPrevious = TCLimitsInt<umint>::mc_Max;
 		bool bOnLabelLine = false;
+		// The last statement a label took onto its line, and the label itself.
+		umint iJoinedLabel = TCLimitsInt<umint>::mc_Max;
+		umint iJoinedUntil = TCLimitsInt<umint>::mc_Max;
 		umint iChildIndex = TCLimitsInt<umint>::mc_Max;
 		for (auto iChild : Node.m_Children)
 		{
@@ -5867,7 +5870,75 @@ namespace
 				bEnumerators = iChildLast >= aint(iFirst) && !fp_SpansLines(iFirst, umint(iChildLast));
 			}
 
-			bool bStays = (Child.m_Kind == ECodeNodeKind::mc_Unsupported && !bEnumerators) || bOnLabelLine || bElseIf || bAttribute || m_Tokens.f_IsText(First, ";");
+			// A case whose body is one statement, a 'break' behind it included, takes it onto
+			// its label's line where the whole fits there: 'case 1: a = 1; break;'. A block, a
+			// clause and a comment keep the body under the label.
+			bool bJoinedToLabel = iJoinedLabel != TCLimitsInt<umint>::mc_Max && iChildIndex > iJoinedLabel && iChildIndex <= iJoinedUntil;
+			bool bCaseLabel = bLabel && (m_Tokens.f_IsText(First, "case") || m_Tokens.f_IsText(First, "default"));
+			if (bCaseLabel && !bGuarded && Child.m_Kind == ECodeNodeKind::mc_Statement)
+			{
+				umint iBodyLast = iChildIndex;
+				umint nStatements = 0;
+				bool bSimple = true;
+				for (auto iOther = iChildIndex + 1; iOther < Node.m_Children.f_GetLen() && bSimple; ++iOther)
+				{
+					auto const &Other = Nodes[Node.m_Children[iOther]];
+					auto const &OtherFirst = Tokens[Other.m_iFirstToken];
+					if (m_Tokens.f_IsText(Tokens[Other.m_iLastToken], ":") || m_Tokens.f_IsText(Tokens[Other.m_iFirstToken], "}"))
+						break;
+
+					bool bBreak = m_Tokens.f_IsText(OtherFirst, "break");
+					if (bBreak && nStatements <= 1)
+					{
+						iBodyLast = iOther;
+
+						break;
+					}
+
+					constexpr ch8 const *c_pCompound[] =
+						{
+							"if", "for", "while", "switch", "do", "else", "try", "{", "case", "default"
+						}
+					;
+					bool bCompound = false;
+					for (auto pKeyword : c_pCompound)
+						bCompound |= m_Tokens.f_IsText(OtherFirst, pKeyword);
+
+					bSimple = Other.m_Kind == ECodeNodeKind::mc_Statement && !bCompound && ++nStatements == 1;
+					iBodyLast = iOther;
+				}
+
+				auto iLast = Nodes[Node.m_Children[iBodyLast]].m_iLastToken;
+				// A blank line between the body's statements is one its author put there; one
+				// behind the label goes anyway.
+				umint nNewlines = 0;
+				bool bBlank = false;
+				auto iBodyFirst = iBodyLast > iChildIndex ? Nodes[Node.m_Children[iChildIndex + 1]].m_iFirstToken : iLast;
+				for (auto i = iBodyFirst + 1; i < iLast && !bBlank; ++i)
+				{
+					if (Tokens[i].m_Kind == ECodeTokenKind::mc_Newline)
+						bBlank = ++nNewlines > 1;
+					else if (Tokens[i].m_Kind != ECodeTokenKind::mc_Whitespace)
+						nNewlines = 0;
+				}
+
+				bool bJoins = bSimple
+					&& !bBlank
+					&& iBodyLast > iChildIndex
+					&& nStatements <= 1
+					&& fp_IsFirstOnLine(Nodes[Node.m_Children[iChildIndex + 1]].m_iFirstToken)
+					&& fp_IsRangeJoinable(_iNode, Child.m_iFirstToken, iLast)
+					&& fp_FitsInline(Child.m_iFirstToken, iLast, nPlace)
+				;
+				if (bJoins)
+				{
+					fp_MarkInline(Child.m_iLastToken, iLast);
+					iJoinedLabel = iChildIndex;
+					iJoinedUntil = iBodyLast;
+				}
+			}
+
+			bool bStays = (Child.m_Kind == ECodeNodeKind::mc_Unsupported && !bEnumerators) || bOnLabelLine || bElseIf || bAttribute || bJoinedToLabel || m_Tokens.f_IsText(First, ";");
 
 			// Each enumerator takes a line of its own, the comma in front of it: 'EA' over ', EB',
 			// or behind the one in front of it in an enum holding a directive. A comma with a

@@ -1135,7 +1135,7 @@ namespace
 							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\n\t\tbreak;\n\t}\n}\n"
 						)
 					;
-					fg_ExpectFormat("AfterDefault", "void f()\n{\n\tswitch (a)\n\t{\n\tdefault:\n\n\t\tbreak;\n\t}\n}\n", "void f()\n{\n\tswitch (a)\n\t{\n\tdefault:\n\t\tbreak;\n\t}\n}\n");
+					fg_ExpectFormat("AfterDefault", "void f()\n{\n\tswitch (a)\n\t{\n\tdefault:\n\n\t\tbreak;\n\t}\n}\n", "void f()\n{\n\tswitch (a)\n\t{\n\tdefault: break;\n\t}\n}\n");
 					// A defaulted member is not a label.
 					fg_ExpectFormat("DefaultedMember", "struct C\n{\n\tC() = default;\n\n\tint m_A;\n};\n", "struct C\n{\n\tC() = default;\n\n\tint m_A;\n};\n");
 					fg_ExpectFormat("BetweenStatements", "void f()\n{\n\tint a;\n\n\tint b;\n}\n", "void f()\n{\n\tint a;\n\n\tint b;\n}\n");
@@ -1550,7 +1550,7 @@ namespace
 						(
 							"Labels"
 							, "void f()\n{\n\tswitch (a)\n\t{\n\t\tcase 1:\n\t\t\t\tg();\n\t\t\tbreak;\n\t\tdefault:\n\t\t\tbreak;\n\t}\n}\n"
-							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\tbreak;\n\tdefault:\n\t\tbreak;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1: g(); break;\n\tdefault: break;\n\t}\n}\n"
 						)
 					;
 					// What a clause guards stands one level in from the clause, each clause
@@ -1631,7 +1631,7 @@ namespace
 					fKept("Empty", "\tif (a)\n\t{\n\t}\n");
 					fKept("Macro", "\tif (a)\n\t{\n\t\tDMibFoo(b)\n\t}\n");
 					fKept("Do", "\tdo\n\t{\n\t\tg();\n\t}\n\twhile (a);\n");
-					fKept("Switch", "\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t}\n");
+					fKept("Switch", "\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\th();\n\t}\n");
 					fKept("TrailingComment", "\tif (a)\n\t{\n\t\tg();\n\t} // why\n");
 					// A comment on the statement's own line follows it out of the block, also in
 					// front of an 'else' on the brace's line; one behind the terminator of a
@@ -1958,12 +1958,16 @@ namespace
 							, "template <typename t_C>\nvoid fg_F(t_C _A)\n\trequires cFoo<t_C>\n;\n"
 						)
 					;
-					// A label and its body are separate statements.
+					// A label and its body are separate statements, and a body of one statement and a
+					// 'break' comes onto the label's line where it fits; a clause, more statements and a
+					// comment keep it under the label.
 					fg_ExpectFormat
 						(
 							"CaseLabel"
-							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\tbreak;\n\t}\n}\n"
-							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\tbreak;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\tbreak;\n\tcase 2:\n\t\treturn 3;\n\tcase 3:\n\t\tif (x)\n\t\t\tg();\n\t\tbreak;\n"
+							"\tcase 4:\n\t\tg();\n\t\th();\n\t\tbreak;\n\tcase 5:\n\t\t// Why\n\t\tg();\n\t\tbreak;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1: g(); break;\n\tcase 2: return 3;\n\tcase 3:\n\t\tif (x)\n\t\t\tg();\n\t\tbreak;\n"
+							"\tcase 4:\n\t\tg();\n\t\th();\n\t\tbreak;\n\tcase 5:\n\t\t// Why\n\t\tg();\n\t\tbreak;\n\t}\n}\n"
 						)
 					;
 					fg_ExpectFormat("AccessSpecifier", "struct C\n{\npublic:\n\tint m_A;\n};\n", "struct C\n{\npublic:\n\tint m_A;\n};\n");
@@ -2341,6 +2345,8 @@ namespace
 					// initializer list.
 					CStr AlignedClass = "struct alignas(32) CA : public CB, CC\n{\n\tint m_A = 3;\n};\n";
 					fg_ExpectFormat("AlignedClassHead", AlignedClass, AlignedClass);
+					CStr MacroCase = "void f()\n{\n\tswitch (a)\n\t{\n\tcase DMibFoo(R32): break;\n\tcase DMibFoo(R8):\n\tcase DMibFoo(B8): break;\n\t}\n}\n";
+					fg_ExpectFormat("MacroCaseLabel", MacroCase, MacroCase);
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(
