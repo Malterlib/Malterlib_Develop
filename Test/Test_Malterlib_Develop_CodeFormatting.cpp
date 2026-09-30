@@ -2226,6 +2226,14 @@ namespace
 							, "void fg_F(ch8 (&_Dest)[4], int (*_pCall)(int));\nvoid f()\n{\n\tstruct CState State = {0};\n\tstruct CState Broken = {0};\n}\n"
 						)
 					;
+					// A constraint in parentheses behind a template header holds an expression, whose
+					// '&&' behind a template argument list is no declarator; a requires expression's
+					// parentheses declare its parameters.
+					CStr Constraint = "template <typename t_C>\nrequires\n(\n\tcA<TCFoo<TCBar<t_C>>>\n\t&& cB\n\t<\n\t\tTCBar<TCFoo<TCBar<t_C>>>\n\t\t, TCFoo<t_C>\n\t>\n)\n"
+						"void f(t_C _Value)\n{\n}\n\ntemplate <typename t_C>\nrequires (cA<t_C> && cB<t_C>)\nvoid g()\n{\n}\n\ntemplate <typename t_C>\n"
+						"concept cC = requires (t_C &&_Value)\n\t{\n\t\t_Value.f_Get();\n\t}\n;\n"
+					;
+					fg_ExpectFormat("ConstraintBehindHeader", Constraint, Constraint);
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(

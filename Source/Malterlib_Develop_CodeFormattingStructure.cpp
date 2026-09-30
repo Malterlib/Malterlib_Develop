@@ -1440,6 +1440,27 @@ namespace
 		if (_Tokens.f_IsText(Tokens[umint(iName)], "catch"))
 			return true;
 
+		// Behind 'requires' a parenthesis declares a requires expression's parameters, and a
+		// requires expression stands where an operand does. A requires clause's parenthesis holds
+		// a constraint, however much a template header in front of it looks like a lambda's:
+		// 'template <...> requires (...)'.
+		if (_Tokens.f_IsText(Tokens[umint(iName)], "requires"))
+		{
+			constexpr ch8 const *c_pOperandLeads[] =
+				{
+					"=", "(", ",", "||", "&&", "!", "?", ":", "return", "requires"
+				}
+			;
+			auto iLead = fg_PreviousCode(_Tokens, umint(iName));
+			auto iBehind = fg_NextCode(_Tokens, Group.m_iLastToken);
+
+			return iLead >= 0
+				&& fg_IsAnyText(_Tokens, Tokens[umint(iLead)], c_pOperandLeads)
+				&& iBehind >= 0
+				&& _Tokens.f_IsText(Tokens[umint(iBehind)], "{")
+			;
+		}
+
 		// 'if constexpr (...)' holds a condition, whatever follows it.
 		if (_Tokens.f_IsText(Tokens[umint(iName)], "constexpr"))
 			return false;
