@@ -2261,6 +2261,15 @@ namespace
 							, "template <typename tf_CType, size_t tf_n>\nsize_t fg_A(tf_CType (&_Array)[tf_n], int _B = g(&c)[1]);\n"
 						)
 					;
+					// A braced list never opened takes its closing brace back behind its last element,
+					// also inside a list that was opened.
+					fg_ExpectFormat
+						(
+							"StrayClosingBrace"
+							, "void f()\n{\n\tstruct timespec Times[2] =\n\t{\n\t\t{1000000000, 0\n\t\t}, {1000000000, 0}\n\t};\n}\n"
+							, "void f()\n{\n\tstruct timespec Times[2] =\n\t{\n\t\t{1000000000, 0}, {1000000000, 0}\n\t};\n}\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(

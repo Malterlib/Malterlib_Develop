@@ -5986,6 +5986,42 @@ namespace
 
 		fp_PrepareBlockEnds();
 		fp_LayoutNode(0, 0);
+
+		// A braced list whose elements all stand on its opening brace's line was never
+		// opened, so a closing brace left on a line of its own goes back behind the last
+		// of them: '{1, 0' over '}' is '{1, 0}'. An opened list around it keeps its lines,
+		// which is what would leave such a brace where it is.
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		for (auto const &Node : m_Structure.f_GetNodes())
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Brace || !fp_IsFirstOnLine(Node.m_iLastToken))
+				continue;
+
+			auto iLast = fp_PreviousCode(Node.m_iLastToken);
+			if (iLast < 0 || umint(iLast) <= Node.m_iFirstToken)
+				continue;
+
+			// Only a list the layout left as the source wrote it, closing brace included.
+			bool bOneLine = EGap(m_GapState[Node.m_iLastToken]) == EGap::mc_Keep;
+			for (auto i = Node.m_iFirstToken + 1; i < Node.m_iLastToken && bOneLine; ++i)
+			{
+				if (fp_IsBreakGap(i))
+				{
+					bOneLine = false;
+
+					break;
+				}
+
+				auto Kind = Tokens[i].m_Kind;
+				if (i > umint(iLast))
+					bOneLine = Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline;
+				else
+					bOneLine = Kind != ECodeTokenKind::mc_Newline && Kind != ECodeTokenKind::mc_LineComment && Kind != ECodeTokenKind::mc_Preprocessor;
+			}
+
+			if (bOneLine && !Tokens[umint(iLast)].m_bMultiLine)
+				fp_MarkInline(umint(iLast), Node.m_iLastToken);
+		}
 	}
 
 	void CFormattingAnalyzer::fp_PrepareBlockEnds()
