@@ -62,8 +62,8 @@ rule must never be reimplemented as a separate regular-expression check.
 Every rule but six conversions changes whitespace only: the trailing return
 type, the braces dropped around a single guarded statement, a qualifier moved
 behind the type it leads, `static` moved in front of `constexpr`, an empty
-statement taken out behind another terminator, and the comma behind an enum's
-last enumerator taken out. A conversion is decided first, on the original
+statement taken out behind another terminator, and an enumerator's comma moved in
+front of it across a comment or a conditional's directive. A conversion is decided first, on the original
 source, and the layout is made on the converted source, so a plan is verified
 with `fg_HasEquivalentCodeTokens` against the converted source, and a whole-file
 plan is re-analyzed to prove it converged; a failing check reports a formatter

@@ -707,7 +707,8 @@ namespace
 		void fp_ConvertQualifiers();
 		void fp_ConvertSpecifiers();
 		void fp_ConvertEmptyStatements();
-		void fp_ConvertTrailingEnumCommas();
+		void fp_ConvertEnumCommas();
+		void fp_ConvertEnumBodyCommas(CCodeNode const &_Body);
 		bool fp_DropBraces(umint _iStatement, umint _iGuard);
 		bool fp_AddBraces(umint _iStatement, umint _iGuard);
 		bool fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const;
@@ -2426,7 +2427,7 @@ namespace
 			fp_ConvertQualifiers();
 			fp_ConvertSpecifiers();
 			fp_ConvertEmptyStatements();
-			fp_ConvertTrailingEnumCommas();
+			fp_ConvertEnumCommas();
 		}
 
 		bool bQualifierStage = !m_Structural.f_IsEmpty();
@@ -2484,8 +2485,8 @@ namespace
 					Explanation = "'static' stands in front of 'constexpr'";
 				else if (Edit.m_Rule == "empty-statement")
 					Explanation = "a terminator that ends nothing is taken out";
-				else if (Edit.m_Rule == "enum-trailing-comma")
-					Explanation = "the last enumerator ends its enum without a comma";
+				else if (Edit.m_Rule == "enum-comma")
+					Explanation = "an enumerator's comma stands in front of it, and the last one has none";
 
 				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
 			}
@@ -3608,63 +3609,216 @@ namespace
 		}
 	}
 
-	// Takes out the comma behind an enum's last enumerator, which the enumerators' leading
-	// commas leave standing alone. Only a comma with nothing but blanks around it goes, and
-	// none in an enum holding a directive, which keeps its commas behind its enumerators.
-	void CFormattingAnalyzer::fp_ConvertTrailingEnumCommas()
+	// Gives each enum's enumerators their commas in front of them wherever the layout could
+	// not move one there by itself.
+	void CFormattingAnalyzer::fp_ConvertEnumCommas()
 	{
 		if (!m_Structure.f_IsComplete())
 			return;
 
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto const &Nodes = m_Structure.f_GetNodes();
+		for (auto const &Node : Nodes)
+		{
+			if (Node.m_Kind != ECodeNodeKind::mc_Block || Node.m_iParent >= Nodes.f_GetLen() || Nodes[Node.m_iParent].m_Kind != ECodeNodeKind::mc_Statement)
+				continue;
+
+			if (m_Tokens.f_IsText(Tokens[fp_SkipTemplateHeader(Nodes[Node.m_iParent].m_iFirstToken)], "enum"))
+				fp_ConvertEnumBodyCommas(Node);
+		}
+	}
+
+	// A comma separated from the enumerator behind it by a comment or a conditional's directive,
+	// and the one behind the last enumerator, goes, and one is put in front of each enumerator
+	// that has another in front of it in every configuration it is compiled in. Every
+	// configuration then spells the enumerators it did, and the layout moves the commas that
+	// only blanks separate from their enumerators. An enum holding another directive, or an
+	// enumerator that is the first in some configurations only, keeps its commas where they are.
+	void CFormattingAnalyzer::fp_ConvertEnumBodyCommas(CCodeNode const &_Body)
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		struct CBranch
+		{
+			umint m_iGroup;
+			umint m_iBranch;
+		};
+		struct CEnumerator
+		{
+			umint m_iFirst;
+			TCVector<CBranch> m_Path;
+		};
+		TCVector<CBranch> Path;
+		TCVector<CEnumerator> Enumerators;
+		TCVector<umint> Commas;
+		umint nGroups = 0;
+		bool bOpen = false;
+		bool bEndedByDirective = false;
+		aint iFirstCode = fp_NextCode(_Body.m_iFirstToken);
+		if (iFirstCode < 0 || umint(iFirstCode) >= _Body.m_iLastToken)
+			return;
+
+		// An enumerator in front of another is always compiled with it where every branch it
+		// stands in is one the other stands in too, and never where the two stand in different
+		// branches of one conditional.
+		auto fRelation = [](TCVector<CBranch> const &_Before, TCVector<CBranch> const &_After) -> int
+			{
+				for (umint iLevel = 0; iLevel < _Before.f_GetLen(); ++iLevel)
+				{
+					if (iLevel >= _After.f_GetLen() || _Before[iLevel].m_iGroup != _After[iLevel].m_iGroup)
+						return 0;
+
+					if (_Before[iLevel].m_iBranch != _After[iLevel].m_iBranch)
+						return -1;
+				}
+
+				return 1;
+			}
+		;
+		auto nLevel = m_TokenDepth[umint(iFirstCode)];
+		for (auto i = _Body.m_iFirstToken + 1; i < _Body.m_iLastToken; ++i)
+		{
+			auto const &Token = Tokens[i];
+			if (Token.m_Kind == ECodeTokenKind::mc_Preprocessor)
+			{
+				auto Keyword = fp_GetDirectiveKeyword(i);
+				if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
+					Path.f_Insert(CBranch{nGroups++, 0});
+				else if (Keyword == "elif" || Keyword == "elifdef" || Keyword == "elifndef" || Keyword == "else")
+				{
+					if (Path.f_IsEmpty())
+						return;
+
+					++Path.f_GetLast().m_iBranch;
+				}
+				else if (Keyword == "endif")
+				{
+					if (Path.f_IsEmpty())
+						return;
+
+					Path.f_Remove(Path.f_GetLen() - 1);
+				}
+				else
+					return;
+
+				bEndedByDirective |= bOpen;
+				bOpen = false;
+
+				continue;
+			}
+
+			if (!fg_IsCodeToken(Token))
+				continue;
+
+			if (m_TokenDepth[i] == nLevel && m_Tokens.f_IsText(Token, ","))
+			{
+				if (!bOpen && !bEndedByDirective)
+					return;
+
+				Commas.f_Insert(i);
+				bOpen = false;
+				bEndedByDirective = false;
+
+				continue;
+			}
+
+			if (bOpen)
+				continue;
+
+			if (m_TokenDepth[i] != nLevel || Token.m_Kind != ECodeTokenKind::mc_Identifier)
+				return;
+
+			// An enumerator a directive ended without a comma is complete only where it is the
+			// last of its branch, with the next one in another branch of the same conditional.
+			if (bEndedByDirective && fRelation(Enumerators.f_GetLast().m_Path, Path) != -1)
+				return;
+
+			bEndedByDirective = false;
+
+			Enumerators.f_Insert(CEnumerator{i, Path});
+			bOpen = true;
+		}
+
+		if (!Path.f_IsEmpty() || Enumerators.f_IsEmpty())
+			return;
+
 		auto fPlain = [&](umint _iFirst, umint _iEnd)
 			{
-				for (auto iGap = _iFirst; iGap < _iEnd; ++iGap)
+				for (auto i = _iFirst; i < _iEnd; ++i)
 				{
-					if (Tokens[iGap].m_Kind != ECodeTokenKind::mc_Whitespace && Tokens[iGap].m_Kind != ECodeTokenKind::mc_Newline)
+					if (Tokens[i].m_Kind != ECodeTokenKind::mc_Whitespace && Tokens[i].m_Kind != ECodeTokenKind::mc_Newline)
 						return false;
 				}
 
 				return true;
 			}
 		;
-		for (auto const &Node : Nodes)
+		TCVector<CCodeFormattingEdit> Edits;
+		for (umint iEnumerator = 0; iEnumerator < Enumerators.f_GetLen(); ++iEnumerator)
 		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Block || Node.m_iParent >= Nodes.f_GetLen() || Nodes[Node.m_iParent].m_Kind != ECodeNodeKind::mc_Statement)
-				continue;
+			auto const &Enumerator = Enumerators[iEnumerator];
+			bool bAlways = false;
+			bool bNever = true;
+			for (umint iBefore = 0; iBefore < iEnumerator; ++iBefore)
+			{
+				auto Relation = fRelation(Enumerators[iBefore].m_Path, Enumerator.m_Path);
+				bAlways |= Relation == 1;
+				bNever &= Relation == -1;
+			}
 
-			if (!m_Tokens.f_IsText(Tokens[fp_SkipTemplateHeader(Nodes[Node.m_iParent].m_iFirstToken)], "enum"))
-				continue;
+			if (!bAlways && !bNever)
+				return;
 
-			bool bDirective = false;
-			for (auto i = Node.m_iFirstToken; i < Node.m_iLastToken && !bDirective; ++i)
-				bDirective = Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor;
+			auto iPrevious = fp_PreviousCode(Enumerator.m_iFirst);
+			bool bCommaInFront = iPrevious >= 0
+				&& m_Tokens.f_IsText(Tokens[umint(iPrevious)], ",")
+				&& fPlain(umint(iPrevious) + 1, Enumerator.m_iFirst)
+			;
+			if (bCommaInFront && !bAlways)
+				return;
 
-			if (bDirective)
-				continue;
-
-			auto iComma = fp_PreviousCode(Node.m_iLastToken);
-			if (iComma < 0 || umint(iComma) <= Node.m_iFirstToken || !m_Tokens.f_IsText(Tokens[umint(iComma)], ","))
-				continue;
-
-			auto iEnumerator = fp_PreviousCode(umint(iComma));
-			if (iEnumerator < 0 || umint(iEnumerator) <= Node.m_iFirstToken)
-				continue;
-
-			if (!fPlain(umint(iEnumerator) + 1, umint(iComma)) || !fPlain(umint(iComma) + 1, Node.m_iLastToken))
-				continue;
-
-			auto iRemove = Tokens[umint(iEnumerator)].f_GetEnd();
-			auto nRemove = Tokens[umint(iComma)].f_GetEnd() - iRemove;
-			if (fp_IsDisabled(iRemove, nRemove) || !fp_IsSelected(iRemove, nRemove))
-				continue;
-
-			auto &Remove = m_Structural.f_Insert();
-			Remove.m_iOffset = iRemove;
-			Remove.m_nLength = nRemove;
-			Remove.m_Rule = "enum-trailing-comma";
+			if (bAlways && !bCommaInFront)
+			{
+				auto &Insert = Edits.f_Insert();
+				Insert.m_iOffset = Tokens[Enumerator.m_iFirst].m_iOffset;
+				Insert.m_nLength = 0;
+				Insert.m_Replacement = ", ";
+				Insert.m_Rule = "enum-comma";
+			}
 		}
+
+		for (auto iComma : Commas)
+		{
+			auto iNext = fp_NextCode(iComma);
+			if (iNext >= 0 && umint(iNext) < _Body.m_iLastToken && fPlain(iComma + 1, umint(iNext)))
+				continue;
+
+			// The blanks in front of the comma go with it where it trails its enumerator's line.
+			auto iRemove = Tokens[iComma].m_iOffset;
+			auto iBefore = fp_PreviousCode(iComma);
+			if (iBefore >= 0)
+			{
+				bool bPlain = true;
+				for (auto iGap = umint(iBefore) + 1; iGap < iComma && bPlain; ++iGap)
+					bPlain = Tokens[iGap].m_Kind == ECodeTokenKind::mc_Whitespace;
+
+				if (bPlain)
+					iRemove = Tokens[umint(iBefore)].f_GetEnd();
+			}
+
+			auto &Remove = Edits.f_Insert();
+			Remove.m_iOffset = iRemove;
+			Remove.m_nLength = Tokens[iComma].f_GetEnd() - iRemove;
+			Remove.m_Rule = "enum-comma";
+		}
+
+		for (auto const &Edit : Edits)
+		{
+			if (fp_IsDisabled(Edit.m_iOffset, Edit.m_nLength) || !fp_IsSelected(Edit.m_iOffset, Edit.m_nLength))
+				return;
+		}
+
+		for (auto &Edit : Edits)
+			m_Structural.f_Insert(fg_Move(Edit));
 	}
 
 	// Moves a qualifier written in front of its type behind it: 'const int &_Value' becomes
@@ -5570,11 +5724,18 @@ namespace
 		if (bBraced && Node.m_iParent < Nodes.f_GetLen() && Nodes[Node.m_iParent].m_Kind == ECodeNodeKind::mc_Statement)
 			bEnumBody = m_Tokens.f_IsText(Tokens[fp_SkipTemplateHeader(Nodes[Node.m_iParent].m_iFirstToken)], "enum");
 
-		// A conditional's branches each end their enumerators with the comma no branch can
-		// lead the next one with, so an enum holding a directive keeps its commas behind them.
+		// A comma a directive stands behind is one the conversion could not move in front of
+		// the enumerator after it, and the enum keeps all of its commas behind its enumerators.
 		bool bEnumTrailingCommas = false;
-		for (auto i = Node.m_iFirstToken; bEnumBody && i < Node.m_iLastToken && !bEnumTrailingCommas; ++i)
-			bEnumTrailingCommas = Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor;
+		for (auto i = Node.m_iFirstToken + 1; bEnumBody && i < Node.m_iLastToken && !bEnumTrailingCommas; ++i)
+		{
+			if (!m_Tokens.f_IsText(Tokens[i], ","))
+				continue;
+
+			auto iNext = fp_NextCode(i);
+			for (auto iGap = i + 1; iNext >= 0 && iGap < umint(iNext) && !bEnumTrailingCommas; ++iGap)
+				bEnumTrailingCommas = Tokens[iGap].m_Kind == ECodeTokenKind::mc_Preprocessor;
+		}
 		// The clause whose statement is still to come, and the depth that clause was
 		// written at: what it guards stands one level in from there.
 		umint iGuard = TCLimitsInt<umint>::mc_Max;

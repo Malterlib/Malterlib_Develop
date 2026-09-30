@@ -2250,26 +2250,32 @@ namespace
 						)
 					;
 					// Each enumerator takes a line, the comma in front of it, and a blank line between
-					// two moves in front of the comma. A comma with a comment behind it keeps its
-					// place, and the one behind the last enumerator is taken out. A type is set off from a '#define' behind it, not from
-					// a conditional or a pragma.
+					// two moves in front of the comma. A comma moves across a comment behind it, and
+					// the one behind the last enumerator is taken out. A type is set off from a
+					// '#define' behind it, not from a conditional or a pragma.
 					fg_ExpectFormat
 						(
 							"EnumeratorLines"
-							, "enum EA\n{\n\tEA_A, EA_B\n};\n#define DA 1\nenum EB\n{\n\tEB_A,\n\tEB_B,\n\n\tEB_C = 2, // c\n\tEB_D,\n};\n#if 1\n#endif\n"
-							, "enum EA\n{\n\tEA_A\n\t, EA_B\n};\n\n#define DA 1\nenum EB\n{\n\tEB_A\n\t, EB_B\n\n\t, EB_C = 2, // c\n\tEB_D\n};\n#if 1\n#endif\n"
+							, "enum EA\n{\n\tEA_A, EA_B\n};\n#define DA 1\nenum EB\n{\n\tEB_A,\n\tEB_B,\n\n\tEB_C = 2, // c\n\tEB_D, // d\n};\n#if 1\n#endif\n"
+							, "enum EA\n{\n\tEA_A\n\t, EA_B\n};\n\n#define DA 1\nenum EB\n{\n\tEB_A\n\t, EB_B\n\n\t, EB_C = 2 // c\n\t, EB_D // d\n};\n#if 1\n#endif\n"
 							, false
 						)
 					;
-					// Only an enum's trailing comma goes, and only one with nothing but blanks around it.
-					CStr KeptCommas = "enum EA\n{\n\tEA_A\n\t, EA_B, // Last\n};\n\nenum EB\n{\n\tEB_A,\n#if 1\n\tEB_B,\n#endif\n};\n\nint gc_A[] = {1, 2,};\n";
+					// An enumerator that is the first in some configurations only, and an enum holding
+					// a directive other than a conditional's, keep their commas, and so does a braced
+					// initializer.
+					CStr KeptCommas = "enum EA\n{\n#if 1\n\tEA_A,\n#endif\n\tEA_B,\n};\n\nenum EB\n{\n\tEB_A,\n#include \"EB.inc\"\n\tEB_B,\n};\n\n"
+						"int gc_A[] = {1, 2,};\n"
+					;
 					fg_ExpectFormat("EnumCommasKept", KeptCommas, KeptCommas);
-					// An enum holding a directive keeps its commas behind its enumerators.
+					// Across a conditional each enumerator's comma stands in front of it in every
+					// branch it is compiled in.
 					fg_ExpectFormat
 						(
-							"EnumCommasBehindDirectives"
+							"EnumCommasAcrossDirectives"
 							, "enum EA\n{\n\tEA_A, EA_B,\n#ifdef DA\n\tEA_C = 1,\n#else\n\tEA_C = 0,\n#endif\n\tEA_D,\n};\n"
-							, "enum EA\n{\n\tEA_A,\n\tEA_B,\n#ifdef DA\n\tEA_C = 1,\n#else\n\tEA_C = 0,\n#endif\n\tEA_D,\n};\n"
+							, "enum EA\n{\n\tEA_A\n\t, EA_B\n#ifdef DA\n\t, EA_C = 1\n#else\n\t, EA_C = 0\n#endif\n\t, EA_D\n};\n"
+							, false
 						)
 					;
 					// A conditional around a whole scope leaves the depths inside it to the scope's
