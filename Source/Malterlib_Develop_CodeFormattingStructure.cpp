@@ -987,9 +987,35 @@ namespace NMib::NDevelop
 			auto Bracket = fg_GetOpeningBracket(*mp_pTokens, Token);
 			if (Bracket != ECodeBracket::mc_None)
 			{
+				auto iOpen = i;
 				mp_Nodes[iNode].m_SplitPoints.f_Insert(mp_Significant[i]);
 				i = fp_BuildGroup(iNode, i, Bracket);
 				bAfterCloseParen = Bracket == ECodeBracket::mc_Paren;
+
+				// A macro invoked as a statement of its own needs no terminator: its argument list
+				// ends the statement where a name on the next line starts another one, or where
+				// the file ends.
+				bool bMacroStatement = Bracket == ECodeBracket::mc_Paren
+					&& iOpen == _iToken + 1
+					&& First.m_Kind == ECodeTokenKind::mc_Identifier
+					&& mp_pTokens->f_HasRole(First, ECodeNameRole::mc_Macro)
+					&& (i >= mp_Significant.f_GetLen() || Tokens[mp_Significant[i]].m_Kind == ECodeTokenKind::mc_Identifier)
+				;
+				for (auto iGap = mp_Significant[i - 1] + 1; bMacroStatement && i < mp_Significant.f_GetLen() && iGap <= mp_Significant[i]; ++iGap)
+				{
+					if (iGap == mp_Significant[i])
+						bMacroStatement = false;
+					else if (Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline)
+						break;
+				}
+
+				if (bMacroStatement)
+				{
+					fp_Finish(iNode, mp_Significant[i - 1]);
+
+					return i;
+				}
+
 				// A clause owns only its condition; the statement it guards is its own.
 				if (bClause && Bracket == ECodeBracket::mc_Paren)
 				{

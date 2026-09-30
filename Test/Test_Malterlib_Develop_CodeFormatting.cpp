@@ -2298,6 +2298,15 @@ namespace
 							, "struct CA\n{\n\tauto f_C(int _A) const -> int\n\t\trequires (cB<int>)\n\t;\n\n\tauto operator () (int _A) const -> int;\n};\n"
 						)
 					;
+					// A macro invoked as a statement of its own ends at its argument list, which is laid
+					// out as any other where it does not fit.
+					fg_ExpectFormat
+						(
+							"MacroStatements"
+							, "DMibA(int, f_A, int _0)\nDMibB(void, f_B, " + Long + " _0, " + Long + " _1)\n"
+							, "DMibA(int, f_A, int _0)\nDMibB\n\t(\n\t\tvoid\n\t\t, f_B\n\t\t, " + Long + " _0\n\t\t, " + Long + " _1\n\t)\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(
