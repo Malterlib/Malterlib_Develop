@@ -511,7 +511,9 @@ further only while it is still too long:
    fits, and where it does not, its `? d` and `: e` stand a level deeper than
    the `:` in front of it. A parameter's default broken at its operators is
    given the way a statement's value is, its `=` starting the first operand's
-   line at the parameter's level. A range holding a gap the standard does not
+   line at the parameter's level. A declaration's name that does not fit in front
+   of its parameter list gives in front of the `::` behind its class's template
+   arguments, which stay whole: `TCFoo<…>` over `::f_Name()`. A range holding a gap the standard does not
    settle has no single-line form to measure, and is left as it stands rather
    than broken at its operators; an operator behind a template argument list
    is settled, so a conditional behind one is laid out wherever it was broken.

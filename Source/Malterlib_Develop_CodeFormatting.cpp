@@ -6718,6 +6718,34 @@ namespace
 			}
 		}
 
+		// A declaration's name qualified with a class's template arguments gives in front of
+		// the '::' behind them before those arguments open: 'TCFoo<...>' over '::f_Name()'.
+		// That is only where the name does not fit in front of its parameter list, which
+		// otherwise opens instead.
+		bool bNameFits = !bStatement || !m_iSplitFirstParen || m_iSplitFirstParen > _iLast || fp_FitsInline(_iFirst, m_iSplitFirstParen, _iIndent);
+		for (auto iChild : Node.m_Children)
+		{
+			auto const &Child = Nodes[iChild];
+			if (bNameFits || _bClause || Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_Bracket != ECodeBracket::mc_Angle)
+				continue;
+
+			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken >= m_iSplitFirstParen || Child.m_iLastToken >= _iLast)
+				continue;
+
+			auto iColons = fp_NextCode(Child.m_iLastToken);
+			if (iColons < 0 || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iColons)], "::"))
+				continue;
+
+			if (!fp_FitsInline(_iFirst, Child.m_iLastToken, _iIndent) || !fp_FitsInline(umint(iColons), _iLast, nContinuation))
+				continue;
+
+			fp_MarkInline(_iFirst, Child.m_iLastToken);
+			fp_BreakBefore(umint(iColons), nContinuation);
+			fp_MarkInline(umint(iColons), _iLast);
+
+			return true;
+		}
+
 		// A value with nothing in it to open goes on a line of its own behind the '=' where
 		// that makes the statement fit, rather than the type in front of the name giving.
 		// Where the type and the name do not fit on one line to begin with, the name goes

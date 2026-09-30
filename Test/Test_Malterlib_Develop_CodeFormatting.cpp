@@ -2322,6 +2322,16 @@ namespace
 							"\tauto Other\n\t\t= bFirst\n\t\t? (@).f_Get()\n\t\t: bSecond\n\t\t\t? " + Operand + "\n\t\t\t: c\n\t;\n}\n"
 						)
 					;
+					// A declaration's name that does not fit in front of its parameter list gives in
+					// front of the '::' behind its class's template arguments, which stay whole.
+					CStr Arguments = "t_CFormatter, t_SignBits, t_ExponentBits, t_MantissaBits, t_PaddingBits, t_CImplicitFloat, t_bDummyOptimize, t_CIntegerStorage, t_bReference";
+					fg_ExpectFormat
+						(
+							"QualifiedNameGivesAtScope"
+							, "template <typename t_C>\ninline_medium TCStrFormatType_Float<" + Arguments + ">::COptionsFloat::COptionsFloat()\n\t: COptions(COptionsStatic())\n{\n}\n"
+							, "template <typename t_C>\ninline_medium TCStrFormatType_Float<" + Arguments + ">\n\t::COptionsFloat::COptionsFloat()\n\t: COptions(COptionsStatic())\n{\n}\n"
+						)
+					;
 					// A parameter's default is given the way a statement's value is, from its own
 					// line, and a conditional behind a template argument list is laid out the same
 					// wherever the source broke it.
