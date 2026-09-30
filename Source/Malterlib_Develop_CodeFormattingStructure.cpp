@@ -2421,7 +2421,10 @@ namespace NMib::NDevelop
 		if (iNext >= 0)
 		{
 			auto const &Next = Tokens[umint(iNext)];
+			// A cv-qualifier is never an operand, so a declarator qualified by one declares:
+			// '(char * const *)'.
 			bool bUnnamed = _Tokens.f_IsText(Next, ",") || _Tokens.f_IsText(Next, ")") || _Tokens.f_IsText(Next, "...") || _Tokens.f_IsText(Next, "=")
+				|| _Tokens.f_IsText(Next, "const") || _Tokens.f_IsText(Next, "volatile")
 				|| (_Structure.f_IsAngleBracket(umint(iNext)) && _Tokens.f_IsText(Next, ">"))
 			;
 			if (bUnnamed)

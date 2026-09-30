@@ -2390,6 +2390,14 @@ namespace
 							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\tdefault:\n\t\treturn 1;\n\tcase 2:\n\tcase 3:\n\t\treturn 2;\n\tcase 4: return 3;\n\t}\n}\n"
 						)
 					;
+					// A declarator a cv-qualifier follows declares, in a cast as anywhere.
+					fg_ExpectFormat
+						(
+							"QualifiedPointerCast"
+							, "void f()\n{\n\tg(0, (char* const *)Commands);\n\tchar* const pA = nullptr;\n}\n"
+							, "void f()\n{\n\tg(0, (char * const *)Commands);\n\tchar * const pA = nullptr;\n}\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(
