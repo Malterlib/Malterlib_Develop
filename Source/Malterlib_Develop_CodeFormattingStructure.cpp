@@ -3038,7 +3038,8 @@ namespace NMib::NDevelop
 
 		// A keyword and the name beside it are separated by one space: 'auto' and the name
 		// it declares, 'template' and an instantiated name, 'return' and its operand. Two
-		// plain names are not settled: a macro written on a line of its own inside a list
+		// plain names are settled only on one line, where one space separates them however
+		// the source aligned them: a macro written on a line of its own inside a list
 		// stands next to a name too, and keeps that line.
 		if (Left.m_Kind == ECodeTokenKind::mc_Identifier && Right.m_Kind == ECodeTokenKind::mc_Identifier)
 		{
@@ -3056,7 +3057,14 @@ namespace NMib::NDevelop
 					return ECodeSpacing::mc_Space;
 			}
 
-			return ECodeSpacing::mc_Preserve;
+			for (auto i = _iLeft + 1; i < _iRight; ++i)
+			{
+				auto Kind = Tokens[i].m_Kind;
+				if (Kind != ECodeTokenKind::mc_Whitespace)
+					return ECodeSpacing::mc_Preserve;
+			}
+
+			return ECodeSpacing::mc_Space;
 		}
 
 		// A bit-field's width hugs the ':' that introduces it, on both sides:

@@ -2361,6 +2361,15 @@ namespace
 							"\tcase 4: i();\n\t}\n}\n"
 						)
 					;
+					// Two names on one line are one space apart however the source aligned them, and
+					// what '#if 0' holds is left as written.
+					fg_ExpectFormat
+						(
+							"AlignedNames"
+							, "void f()\n{\n\tBOOL       bA;   /* 000 */\n\tDWORD      dwB = 0; // B\n\tg(/* a */ 1);\n#if 0\n\tFCGI_PARAMS      x      x\n#endif\n}\n"
+							, "void f()\n{\n\tBOOL bA; /* 000 */\n\tDWORD dwB = 0; // B\n\tg(/* a */ 1);\n#if 0\n\tFCGI_PARAMS      x      x\n#endif\n}\n"
+						)
+					;
 					// A comment behind a list's comma describes the element in front of it, and the
 					// comma goes past it to the element behind.
 					fg_ExpectFormat

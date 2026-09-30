@@ -900,6 +900,53 @@ namespace
 			return false;
 		}
 
+		// What '#if 0' holds is never compiled and is as often prose or a table as code, so
+		// it is left as written, up to the directive that ends the branch.
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor || fp_GetDirectiveKeyword(i) != "if")
+				continue;
+
+			auto Text = m_Tokens.f_GetText(Tokens[i]);
+			auto iIf = Text.f_Find("if");
+			if (iIf < 0 || Text.f_Extract(iIf + 2).f_Trim() != "0")
+				continue;
+
+			umint nNested = 0;
+			for (umint iEnd = i + 1; iEnd < Tokens.f_GetLen(); ++iEnd)
+			{
+				if (Tokens[iEnd].m_Kind != ECodeTokenKind::mc_Preprocessor)
+					continue;
+
+				auto Keyword = fp_GetDirectiveKeyword(iEnd);
+				if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
+				{
+					++nNested;
+
+					continue;
+				}
+
+				bool bEnds = Keyword == "endif" || ((Keyword == "else" || Keyword == "elif" || Keyword == "elifdef" || Keyword == "elifndef") && !nNested);
+				if (Keyword == "endif" && nNested)
+				{
+					--nNested;
+
+					continue;
+				}
+
+				if (!bEnds)
+					continue;
+
+				auto iStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[i].m_iOffset));
+				auto &Range = m_Disabled.f_Insert();
+				Range.m_iOffset = iStart;
+				Range.m_nLength = m_Lines.f_GetLineEnd(m_Lines.f_FindLine(Tokens[iEnd].m_iOffset)) - iStart;
+
+				break;
+			}
+		}
+
 		return true;
 	}
 
@@ -1680,10 +1727,23 @@ namespace
 		}
 
 		// A comment trailing code stands one space behind it; columns aligned with tabs drift
-		// apart as soon as the code in front of them is respaced.
+		// apart as soon as the code in front of them is respaced. A block comment on one line
+		// trails its code where it ends the line.
 		for (umint i = 1; i < Tokens.f_GetLen(); ++i)
 		{
-			if (Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment && !fp_IsFirstOnLine(i))
+			bool bTrailing = Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment;
+			if (Tokens[i].m_Kind == ECodeTokenKind::mc_BlockComment && !Tokens[i].m_bMultiLine)
+			{
+				auto iAfter = i + 1;
+				while (iAfter < Tokens.f_GetLen() && Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Whitespace)
+					++iAfter;
+
+				auto iBefore = fp_PreviousSignificant(i);
+				bool bPreviousCode = iBefore >= 0 && fg_IsCodeToken(Tokens[umint(iBefore)]);
+				bTrailing = bPreviousCode && (iAfter >= Tokens.f_GetLen() || Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Newline);
+			}
+
+			if (bTrailing && !fp_IsFirstOnLine(i))
 				fp_EnsureSingleSpace(i, true, "comment-space", "a trailing comment stands one space behind its code");
 		}
 	}

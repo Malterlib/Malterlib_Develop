@@ -162,7 +162,7 @@ formatter failure, not an edit.
 | `line-ending` | Converts terminators to `end_of_line`. Whole-file requests only. |
 | `clause-space` | Exactly one space between `if`, `for`, `while`, `switch`, or `catch` and its `(` on the same line. |
 | `comma-space` | No space before a comma, one space after it on the same line. |
-| `comment-space` | A line comment trailing code stands one space behind it. The comment lines directly below that are indented past the code line's own indentation continue it, and are aligned with it wherever it lands; a comment line at the code's indentation is a comment of its own. |
+| `comment-space` | A line comment trailing code stands one space behind it, and so does a block comment on one line that trails code and ends its line. The comment lines directly below that are indented past the code line's own indentation continue it, and are aligned with it wherever it lands; a comment line at the code's indentation is a comment of its own. |
 | `string-continuation` | A string literal continued on the next line, adjacent literals being one string, stands one level in when the line it continues starts its statement, and at that line's level when the line is a list element or an operand the statement is split at. |
 | `line-break` (DSL arrays) | A DSL array such as `_o[...]` written across lines keeps its lines, as a braced initializer does, and one written on one line is opened only where it does not fit. An opened array's `[` stands on a line of its own at the element's level, or one level in when the line starts its statement, and its elements and `]` move with it. In an opened array, and an object whose keys are the DSL's, `"Key"_o= ...`, the closing marker takes a line of its own and no blank line stands between elements. A list holding a directive keeps its lines. |
 | `operator-space` | One space around unambiguous binary operators. |
@@ -900,6 +900,10 @@ Both lines are excluded along with everything between them, and none of them is
 reported for its length: data written to a width of its own, such as a raw
 string's test input, is what the region is for. An unmatched or nested
 directive is a failure, not a silently ignored comment.
+
+What `#if 0` holds is never compiled and is as often prose or a table as code,
+so it is excluded the same way, from the `#if 0` line to the end of the line of
+the directive that ends its branch.
 
 A source that ends inside a comment or literal, contains a byte that cannot
 start a token, or is not valid UTF-8 is reported as unsupported and left
