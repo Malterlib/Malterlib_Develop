@@ -641,7 +641,8 @@ does a statement inside a conditional, whose depth the sources decide for
 themselves. A case whose body is one statement, a `break` behind it included,
 stands on its label's line where the whole fits there, `case 1: a = 1; break;`;
 a block, a clause, more statements, a comment or a blank line between them keep
-the body under the label, a block opened like any other. The `if` of an
+the body under the label, a block opened like any other, and so does a label that
+other labels stand directly over, since the body is theirs as well. The `if` of an
 `else if` and an attribute on a clause's line stay where they are written. The `if` is laid out against the line the
 `else` starts, so a condition that does not fit behind both opens under the
 `else`, as it would under an `if` of its own. A statement that opens with such an

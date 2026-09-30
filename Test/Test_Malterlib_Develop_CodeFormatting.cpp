@@ -2345,8 +2345,16 @@ namespace
 					// initializer list.
 					CStr AlignedClass = "struct alignas(32) CA : public CB, CC\n{\n\tint m_A = 3;\n};\n";
 					fg_ExpectFormat("AlignedClassHead", AlignedClass, AlignedClass);
-					CStr MacroCase = "void f()\n{\n\tswitch (a)\n\t{\n\tcase DMibFoo(R32): break;\n\tcase DMibFoo(R8):\n\tcase DMibFoo(B8): break;\n\t}\n}\n";
+					CStr MacroCase = "void f()\n{\n\tswitch (a)\n\t{\n\tcase DMibFoo(R32): break;\n\tcase DMibFoo(R8):\n\tcase DMibFoo(B8):\n\t\tbreak;\n\t}\n}\n";
 					fg_ExpectFormat("MacroCaseLabel", MacroCase, MacroCase);
+					// A body that labels fall through to stays under all of them.
+					fg_ExpectFormat
+						(
+							"FallThroughLabels"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\tdefault:\n\t\treturn 1;\n\tcase 2:\n\tcase 3: return 2;\n\tcase 4:\n\t\treturn 3;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\tdefault:\n\t\treturn 1;\n\tcase 2:\n\tcase 3:\n\t\treturn 2;\n\tcase 4: return 3;\n\t}\n}\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(

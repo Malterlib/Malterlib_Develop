@@ -5818,7 +5818,18 @@ namespace
 			// A case written on its label's line stays there where it is one statement and no
 			// block, a 'break' behind it included: 'case 1: a = 1; break;'. A block, or more
 			// statements than that, takes lines of its own under the label like any other body.
-			if (bLabelled && !bFirstOnLine)
+			bool bSharedLabel = false;
+			if (bLabelled && iChildIndex >= 2)
+			{
+				auto const &BeforeLabel = Nodes[Node.m_Children[iChildIndex - 2]];
+				bSharedLabel = m_Tokens.f_IsText(Tokens[BeforeLabel.m_iLastToken], ":")
+					&& (m_Tokens.f_IsText(Tokens[BeforeLabel.m_iFirstToken], "case") || m_Tokens.f_IsText(Tokens[BeforeLabel.m_iFirstToken], "default"))
+				;
+			}
+
+			if (bLabelled && !bFirstOnLine && bSharedLabel)
+				bOnLabelLine = false;
+			else if (bLabelled && !bFirstOnLine)
 			{
 				umint nOnLine = 0;
 				bool bBlockOnLine = false;
@@ -5874,8 +5885,9 @@ namespace
 			// its label's line where the whole fits there: 'case 1: a = 1; break;'. A block, a
 			// clause and a comment keep the body under the label.
 			bool bJoinedToLabel = iJoinedLabel != TCLimitsInt<umint>::mc_Max && iChildIndex > iJoinedLabel && iChildIndex <= iJoinedUntil;
+			// A body that labels in front of this one fall through to stays under all of them.
 			bool bCaseLabel = bLabel && (m_Tokens.f_IsText(First, "case") || m_Tokens.f_IsText(First, "default"));
-			if (bCaseLabel && !bGuarded && Child.m_Kind == ECodeNodeKind::mc_Statement)
+			if (bCaseLabel && !bLabelled && !bGuarded && Child.m_Kind == ECodeNodeKind::mc_Statement)
 			{
 				umint iBodyLast = iChildIndex;
 				umint nStatements = 0;
