@@ -2332,6 +2332,17 @@ namespace
 							, "template <typename t_C>\ninline_medium TCStrFormatType_Float<" + Arguments + ">\n\t::COptionsFloat::COptionsFloat()\n\t: COptions(COptionsStatic())\n{\n}\n"
 						)
 					;
+					// A requires expression's body stands one level in under its clause wherever the
+					// source put the brace, in a declaration and in front of a body alike.
+					fg_ExpectFormat
+						(
+							"RequirementsBodyPlaced"
+							, "struct CA\n{\n\ttemplate <typename t_C>\n\taint f_A(t_C &_Args) const\n\t\trequires requires\n\t{\n\t\t_Args.f_Parse();\n\t}\n\t;\n\n"
+							"\ttemplate <typename t_C>\n\taint f_B() const\n\t\trequires requires\n\t{\n\t\tg();\n\t}\n\t{\n\t}\n};\n"
+							, "struct CA\n{\n\ttemplate <typename t_C>\n\taint f_A(t_C &_Args) const\n\t\trequires requires\n\t\t{\n\t\t\t_Args.f_Parse();\n\t\t}\n\t;\n\n"
+							"\ttemplate <typename t_C>\n\taint f_B() const\n\t\trequires requires\n\t\t{\n\t\t\tg();\n\t\t}\n\t{\n\t}\n};\n"
+						)
+					;
 					// An empty parameter list has nothing to open, even where the name fits in front of it.
 					fg_ExpectFormat
 						(

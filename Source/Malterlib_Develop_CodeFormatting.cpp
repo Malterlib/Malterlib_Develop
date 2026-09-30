@@ -720,6 +720,7 @@ namespace
 		bool fp_IsGuard(umint _iNode) const;
 		void fp_LayoutBlockLines(umint _iNode, umint _iIndent);
 		bool fp_KeepsOwnLines(umint _iNode) const;
+		bool fp_IsRequirementsBody(umint _iNode, umint _iBrace) const;
 		void fp_PlaceBody(umint _iNode, umint _iBlock, umint _iIndent, bool _bDeclarator);
 		bool fp_PlaceBlock(umint _iBlock, umint _iIndent, umint _nReference);
 		bool fp_CanPlaceBlock(umint _iBlock) const;
@@ -4633,32 +4634,7 @@ namespace
 				bLambdaBody |= fp_ClosesLambdaIntroducer(Child.m_iLastToken);
 			}
 
-			// A requires expression's body is an expression's like a lambda's, and stands where
-			// one does: 'concept cFoo = requires (t_C _Value)' with the body one level in.
-			auto iBeforeBrace = fp_PreviousCode(iBrace);
-			if (iBeforeBrace >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeBrace)], ")"))
-			{
-				for (auto iChild : Node.m_Children)
-				{
-					auto const &Child = Nodes[iChild];
-					if (Child.m_Kind == ECodeNodeKind::mc_Group && Child.m_iLastToken == umint(iBeforeBrace))
-						iBeforeBrace = fp_PreviousCode(Child.m_iFirstToken);
-				}
-			}
-
-			// A requires clause stands behind a declarator and constrains the body that follows
-			// it, while a requires expression stands where an operand does.
-			if (iBeforeBrace >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeBrace)], "requires"))
-			{
-				auto iLead = fp_PreviousCode(umint(iBeforeBrace));
-				constexpr ch8 const *c_pOperandLeads[] =
-					{
-						"=", "(", ",", "||", "!", "?", ":", "return", "requires"
-					}
-				;
-				for (auto pLead : c_pOperandLeads)
-					bLambdaBody |= iLead >= 0 && m_Tokens.f_IsText(Tokens[umint(iLead)], pLead);
-			}
+			bLambdaBody |= fp_IsRequirementsBody(_iNode, iBrace);
 		}
 
 		// A lambda's body stands one level in, under the expression the lambda is written
@@ -5056,11 +5032,14 @@ namespace
 
 		if (!bJoinable)
 		{
-			// The head cannot be relaid out, but its inner constructs still can.
+			// The head cannot be relaid out, but its inner constructs still can, and a requires
+			// expression's body still stands one level in wherever the source put its brace.
 			for (auto iChild : Node.m_Children)
 			{
 				if (Nodes[iChild].m_Kind != ECodeNodeKind::mc_Block)
 					fp_JoinNode(iChild);
+				else if (fp_IsFirstOnLine(Nodes[iChild].m_iFirstToken) && fp_IsRequirementsBody(_iNode, Nodes[iChild].m_iFirstToken))
+					fp_PlaceBody(_iNode, iChild, _iIndent, false);
 			}
 		}
 
@@ -5081,6 +5060,43 @@ namespace
 			fp_LayoutNode(iBlock, _iIndent);
 			fLayoutTail();
 		}
+	}
+
+	// A requires expression's body is an expression's like a lambda's, and stands where one
+	// does: 'concept cFoo = requires (t_C _Value)' with the body one level in. A requires
+	// clause stands behind a declarator and constrains the body that follows it, while a
+	// requires expression stands where an operand does.
+	bool CFormattingAnalyzer::fp_IsRequirementsBody(umint _iNode, umint _iBrace) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto iBeforeBrace = fp_PreviousCode(_iBrace);
+		if (iBeforeBrace >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeBrace)], ")"))
+		{
+			for (auto iChild : Nodes[_iNode].m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_Kind == ECodeNodeKind::mc_Group && Child.m_iLastToken == umint(iBeforeBrace))
+					iBeforeBrace = fp_PreviousCode(Child.m_iFirstToken);
+			}
+		}
+
+		if (iBeforeBrace < 0 || !m_Tokens.f_IsText(Tokens[umint(iBeforeBrace)], "requires"))
+			return false;
+
+		auto iLead = fp_PreviousCode(umint(iBeforeBrace));
+		constexpr ch8 const *c_pOperandLeads[] =
+			{
+				"=", "(", ",", "||", "!", "?", ":", "return", "requires"
+			}
+		;
+		for (auto pLead : c_pOperandLeads)
+		{
+			if (iLead >= 0 && m_Tokens.f_IsText(Tokens[umint(iLead)], pLead))
+				return true;
+		}
+
+		return false;
 	}
 
 	// A body that shares a line with its head opens on a line of its own, and takes its
