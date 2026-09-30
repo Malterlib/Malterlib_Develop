@@ -7453,9 +7453,13 @@ namespace
 		umint iLineFirst = _iFirst;
 		umint nLineIndent = _iIndent;
 		umint iScope = 0;
+		// A line that has to be split stays one until a break starts the next, also where the
+		// scope it would open first is passed over for a later one.
 		bool bMustSplit = _bMustSplit;
+		umint iMustSplitLine = iLineFirst;
 		while (true)
 		{
+			bMustSplit &= iLineFirst == iMustSplitLine;
 			// Deciding the rest fits is also deciding to write it that way.
 			if (!bMustSplit && fp_FitsInline(iLineFirst, _iLast, nLineIndent))
 			{
@@ -7471,7 +7475,6 @@ namespace
 			if (!fp_MeasureJoinedWidth(iLineFirst, _iLast, nLine))
 				break;
 
-			bMustSplit = false;
 			umint iBreak = TCLimitsInt<umint>::mc_Max;
 			for (umint i = 0; i < Breaks.f_GetLen(); ++i)
 			{
@@ -7545,7 +7548,13 @@ namespace
 				// An exception specification on a line of its own is a qualifier moved below the
 				// parameter list, and a trailing return type behind it takes the next line.
 				for (umint i = iBreak + 1; m_Tokens.f_IsText(Tokens[iLineFirst], "noexcept") && i < Breaks.f_GetLen(); ++i)
-					bMustSplit |= m_Tokens.f_IsText(Tokens[Breaks[i]], "->");
+				{
+					if (m_Tokens.f_IsText(Tokens[Breaks[i]], "->"))
+					{
+						bMustSplit = true;
+						iMustSplitLine = iLineFirst;
+					}
+				}
 
 				continue;
 			}

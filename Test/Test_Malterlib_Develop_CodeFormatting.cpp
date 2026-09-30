@@ -2371,6 +2371,20 @@ namespace
 							"\t// malterlib-format off\n\tFCGI_PARAMS      x      x\n\t// malterlib-format on\n}\n"
 						)
 					;
+					// A statement that fits only without its terminator is split, also where the scope
+					// it opens is the call behind a member access, so the terminator never takes a line
+					// of its own behind a line that was not split.
+					CStr Filler;
+					for (umint i = 0; i < 112; ++i)
+						Filler += "W";
+
+					fg_ExpectFormat
+						(
+							"FitsOnlyWithoutTerminator"
+							, "void f()\n{\n\tco_return co_await mp_A(a, b).f_Timeout(mp_Timeout, \"" + Filler + " {}\"_f << _Namespace);\n}\n"
+							, "void f()\n{\n\tco_return co_await mp_A(a, b).f_Timeout\n\t\t(\n\t\t\tmp_Timeout\n\t\t\t, \"" + Filler + " {}\"_f << _Namespace\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// A string continued as a value behind a DSL key stands one level in, with the
 					// operators continuing it; one that is the element itself stays at its level.
 					fg_ExpectFormat
