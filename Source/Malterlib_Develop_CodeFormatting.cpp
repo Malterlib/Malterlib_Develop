@@ -6721,8 +6721,13 @@ namespace
 		// A declaration's name qualified with a class's template arguments gives in front of
 		// the '::' behind them before those arguments open: 'TCFoo<...>' over '::f_Name()'.
 		// That is only where the name does not fit in front of its parameter list, which
-		// otherwise opens instead.
+		// otherwise opens instead; an empty one has nothing to open.
 		bool bNameFits = !bStatement || !m_iSplitFirstParen || m_iSplitFirstParen > _iLast || fp_FitsInline(_iFirst, m_iSplitFirstParen, _iIndent);
+		if (bNameFits && bStatement && m_iSplitFirstParen && m_iSplitFirstParen < _iLast)
+		{
+			auto iInner = fp_NextCode(m_iSplitFirstParen);
+			bNameFits = iInner < 0 || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iInner)], ")");
+		}
 		for (auto iChild : Node.m_Children)
 		{
 			auto const &Child = Nodes[iChild];

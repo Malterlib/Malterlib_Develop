@@ -2332,6 +2332,14 @@ namespace
 							, "template <typename t_C>\ninline_medium TCStrFormatType_Float<" + Arguments + ">\n\t::COptionsFloat::COptionsFloat()\n\t: COptions(COptionsStatic())\n{\n}\n"
 						)
 					;
+					// An empty parameter list has nothing to open, even where the name fits in front of it.
+					fg_ExpectFormat
+						(
+							"QualifiedNameEmptyParameters"
+							, "template <typename t_C>\naint TCStrFormatType_Float<" + Arguments + ">::f_Get_aint_WWWWWWWW() const\n{\n}\n"
+							, "template <typename t_C>\naint TCStrFormatType_Float<" + Arguments + ">\n\t::f_Get_aint_WWWWWWWW() const\n{\n}\n"
+						)
+					;
 					// A parameter's default is given the way a statement's value is, from its own
 					// line, and a conditional behind a template argument list is laid out the same
 					// wherever the source broke it.
