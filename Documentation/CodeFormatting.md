@@ -179,7 +179,7 @@ formatter failure, not an edit.
 | `east-qualifier` | A `const` or `volatile` written in front of its type moves behind it: `const int &_Value` becomes `int const &_Value`. |
 | `specifier-order` | `static` stands in front of `constexpr`: `constexpr static umint` becomes `static constexpr umint`. |
 | `empty-statement` | A statement terminator that ends nothing is taken out: `f_Call();;` becomes `f_Call();`. Only an empty statement standing directly behind another terminator goes, with nothing but spaces and line breaks between them; a comment between the two keeps both. |
-| `enum-trailing-comma` | The comma behind an enum's last enumerator is taken out, since the enumerators' leading commas would leave it standing alone: `EA`, `, EB,` becomes `EA`, `, EB`. Only a comma with nothing but spaces and line breaks around it goes. |
+| `enum-trailing-comma` | The comma behind an enum's last enumerator is taken out, since the enumerators' leading commas would leave it standing alone: `EA`, `, EB,` becomes `EA`, `, EB`. Only a comma with nothing but spaces and line breaks around it goes, and none in an enum holding a directive. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
@@ -247,7 +247,10 @@ Each enumerator of an `enum` body takes a line of its own with the comma in fron
 of it, `EA` over `, EB`; a comma written at the end of a line moves to the front of
 the enumerator behind it, and a blank line between the two stays in front of the
 comma. A comma with a comment behind it keeps its place, and so does a trailing
-comma, which ends the list rather than starting an enumerator.
+comma, which ends the list rather than starting an enumerator. An enum holding a
+directive keeps its commas behind its enumerators instead, since a conditional's
+branches each end their enumerators with one that no branch could lead the next
+with, and breaks behind a comma rather than in front of it.
 
 `access-blank-line` leaves a specifier alone where a comment or a directive
 stands between it and what is in front of it, since the blank line then belongs

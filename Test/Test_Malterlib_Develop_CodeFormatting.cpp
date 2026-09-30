@@ -2255,6 +2255,14 @@ namespace
 					// Only an enum's trailing comma goes, and only one with nothing but blanks around it.
 					CStr KeptCommas = "enum EA\n{\n\tEA_A\n\t, EA_B, // Last\n};\n\nenum EB\n{\n\tEB_A,\n#if 1\n\tEB_B,\n#endif\n};\n\nint gc_A[] = {1, 2,};\n";
 					fg_ExpectFormat("EnumCommasKept", KeptCommas, KeptCommas);
+					// An enum holding a directive keeps its commas behind its enumerators.
+					fg_ExpectFormat
+						(
+							"EnumCommasBehindDirectives"
+							, "enum EA\n{\n\tEA_A, EA_B,\n#ifdef DA\n\tEA_C = 1,\n#else\n\tEA_C = 0,\n#endif\n\tEA_D,\n};\n"
+							, "enum EA\n{\n\tEA_A,\n\tEA_B,\n#ifdef DA\n\tEA_C = 1,\n#else\n\tEA_C = 0,\n#endif\n\tEA_D,\n};\n"
+						)
+					;
 					// A conditional around a whole scope leaves the depths inside it to the scope's
 					// braces; only lines directly inside a conditional keep the depth they have.
 					fg_ExpectFormat

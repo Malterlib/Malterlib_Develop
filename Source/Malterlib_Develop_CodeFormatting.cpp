@@ -3608,8 +3608,8 @@ namespace
 	}
 
 	// Takes out the comma behind an enum's last enumerator, which the enumerators' leading
-	// commas leave standing alone. Only a comma with nothing but blanks around it goes; one
-	// a comment or a directive stands next to is left where it is.
+	// commas leave standing alone. Only a comma with nothing but blanks around it goes, and
+	// none in an enum holding a directive, which keeps its commas behind its enumerators.
 	void CFormattingAnalyzer::fp_ConvertTrailingEnumCommas()
 	{
 		if (!m_Structure.f_IsComplete())
@@ -3634,6 +3634,13 @@ namespace
 				continue;
 
 			if (!m_Tokens.f_IsText(Tokens[fp_SkipTemplateHeader(Nodes[Node.m_iParent].m_iFirstToken)], "enum"))
+				continue;
+
+			bool bDirective = false;
+			for (auto i = Node.m_iFirstToken; i < Node.m_iLastToken && !bDirective; ++i)
+				bDirective = Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor;
+
+			if (bDirective)
 				continue;
 
 			auto iComma = fp_PreviousCode(Node.m_iLastToken);
@@ -5546,6 +5553,12 @@ namespace
 		bool bEnumBody = false;
 		if (bBraced && Node.m_iParent < Nodes.f_GetLen() && Nodes[Node.m_iParent].m_Kind == ECodeNodeKind::mc_Statement)
 			bEnumBody = m_Tokens.f_IsText(Tokens[fp_SkipTemplateHeader(Nodes[Node.m_iParent].m_iFirstToken)], "enum");
+
+		// A conditional's branches each end their enumerators with the comma no branch can
+		// lead the next one with, so an enum holding a directive keeps its commas behind them.
+		bool bEnumTrailingCommas = false;
+		for (auto i = Node.m_iFirstToken; bEnumBody && i < Node.m_iLastToken && !bEnumTrailingCommas; ++i)
+			bEnumTrailingCommas = Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor;
 		// The clause whose statement is still to come, and the depth that clause was
 		// written at: what it guards stands one level in from there.
 		umint iGuard = TCLimitsInt<umint>::mc_Max;
@@ -5605,9 +5618,10 @@ namespace
 
 			bool bStays = (Child.m_Kind == ECodeNodeKind::mc_Unsupported && !bEnumerators) || bOnLabelLine || bElseIf || bAttribute || m_Tokens.f_IsText(First, ";");
 
-			// Each enumerator takes a line of its own, the comma in front of it: 'EA' over ', EB'.
-			// A comma with a comment or a directive behind it keeps its place, and so does a
-			// trailing one, which ends the list rather than starting an enumerator.
+			// Each enumerator takes a line of its own, the comma in front of it: 'EA' over ', EB',
+			// or behind the one in front of it in an enum holding a directive. A comma with a
+			// comment or a directive behind it keeps its place, and so does a trailing one,
+			// which ends the list rather than starting an enumerator.
 			if (bEnumBody && iPrevious == TCLimitsInt<umint>::mc_Max)
 			{
 				for (auto i = iFirst; i < Node.m_iLastToken && i <= Child.m_iLastToken; ++i)
@@ -5626,6 +5640,14 @@ namespace
 
 					if (bTrivia || bTrailing)
 						continue;
+
+					if (bEnumTrailingCommas)
+					{
+						if (!fp_IsLastOnLine(i))
+							fp_OwnLineBefore(umint(iNextCode), nPlace);
+
+						continue;
+					}
 
 					// A comma ending its line moves to the front of the enumerator behind it, and a
 					// blank line in front of that enumerator moves in front of the comma.
