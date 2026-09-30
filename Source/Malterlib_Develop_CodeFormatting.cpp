@@ -4637,6 +4637,15 @@ namespace
 				{
 					auto const &Owner = m_Tokens.f_GetTokens()[umint(iOwner)];
 					bool bOwns = Owner.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Owner, ")") || m_Tokens.f_IsText(Owner, "]") || m_Tokens.f_IsText(Owner, ">");
+					// Behind a list written across lines the call starts a line of its own, as the
+					// layout puts it: '>' over '().promise()'.
+					if (bOwns && Owner.m_Kind != ECodeTokenKind::mc_Identifier)
+					{
+						auto iOwnerList = m_Structure.f_FindNodeClosingAt(umint(iOwner));
+						if (iOwnerList < Nodes.f_GetLen() && fp_SpansLines(Nodes[iOwnerList].m_iFirstToken, umint(iOwner)))
+							bOwns = false;
+					}
+
 					// A lambda's introducer parts are units of their own, so one never pulls
 					// the next onto its line the way a name pulls its argument list.
 					if (bOwns && !fp_ClosesLambdaIntroducer(umint(iOwner)))
@@ -7745,46 +7754,18 @@ namespace
 				iNext = aint(iResume);
 			}
 
-			// An empty call and a pack expansion stay on the closing marker's line, having
-			// nothing to open: '>()', ')...'. A lambda's parameter list is a part of its
-			// introducer instead, and takes a line of its own.
+			// A pack expansion stays on the closing marker's line: ')...'.
 			bool bPastEnd = false;
-			bool bEmptyCall = false;
-			for (auto iMarker = Scope.m_iLastToken; iNext >= 0 && umint(iNext) <= _iLast; )
+			for (auto iMarker = Scope.m_iLastToken; iNext >= 0 && umint(iNext) <= _iLast && m_Tokens.f_IsText(Tokens[umint(iNext)], "..."); )
 			{
-				umint iHugged = umint(iNext);
-				if (m_Tokens.f_IsText(Tokens[umint(iNext)], "("))
-				{
-					if (fp_ClosesLambdaIntroducer(iMarker))
-						break;
-
-					auto iClose = fp_NextCode(umint(iNext));
-					if (iClose < 0 || !m_Tokens.f_IsText(Tokens[umint(iClose)], ")"))
-						break;
-
-					iHugged = umint(iClose);
-				}
-				else if (!m_Tokens.f_IsText(Tokens[umint(iNext)], "..."))
-					break;
-
-				fp_MarkInline(iMarker, iHugged);
-				bEmptyCall = m_Tokens.f_IsText(Tokens[iHugged], ")");
-				iMarker = iHugged;
-				iNext = fp_NextCode(iHugged);
+				fp_MarkInline(iMarker, umint(iNext));
+				iMarker = umint(iNext);
+				iNext = fp_NextCode(iMarker);
 				bPastEnd = iNext < 0 || umint(iNext) > _iLast;
 			}
 
 			if (bPastEnd)
 				break;
-
-			// Behind an empty call the rest stays on the marker's line where it fits there:
-			// '>().promise()'.
-			if (bEmptyCall && fp_FitsInline(Scope.m_iLastToken, _iLast, nLineIndent))
-			{
-				fp_MarkInline(Scope.m_iLastToken, _iLast);
-
-				break;
-			}
 
 			// What follows the scope resumes under its closing marker.
 			iLineFirst = umint(iNext);

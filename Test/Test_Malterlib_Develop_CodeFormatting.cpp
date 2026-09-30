@@ -2286,9 +2286,8 @@ namespace
 							, "void f()\n{\n\tstruct timespec Times[2] =\n\t{\n\t\t{1000000000, 0}, {1000000000, 0}\n\t};\n}\n"
 						)
 					;
-					// An empty call and a pack expansion stay behind the closing marker of an opened
-					// scope, with what follows on that line where it fits; a lambda's parameter list
-					// takes its own. An element on one line too long for it is laid out even in a
+					// A pack expansion stays behind the closing marker of an opened scope, and an empty
+					// call starts the line below it with what follows. An element on one line too long for it is laid out even in a
 					// braced list that keeps its lines.
 					CStr Long;
 					for (umint i = 0; i < 170; ++i)
@@ -2299,9 +2298,9 @@ namespace
 							"EmptyCallAndPackBehindMarker"
 							, "void f()\n{\n\tauto X = fs_Calc<" + Long + ">().f_Get();\n}\n\nstruct CA\n{\n\tstatic CIndex constexpr mc_N[1] =\n\t\t{\n\t\t\tCIndex\n\t\t\t(\n\t\t\t\t"
 							"fs_Calc<" + Long + ">()\n\t\t\t)...\n\t\t}\n\t;\n};\n"
-							, "void f()\n{\n\tauto X = fs_Calc\n\t\t<\n\t\t\t" + Long + "\n\t\t>().f_Get()\n\t;\n}\n\n"
+							, "void f()\n{\n\tauto X = fs_Calc\n\t\t<\n\t\t\t" + Long + "\n\t\t>\n\t\t().f_Get()\n\t;\n}\n\n"
 							"struct CA\n{\n\tstatic CIndex constexpr mc_N[1] =\n\t\t{\n\t\t\tCIndex\n\t\t\t(\n\t\t\t\t"
-							"fs_Calc\n\t\t\t\t<\n\t\t\t\t\t" + Long + "\n\t\t\t\t>()\n\t\t\t)...\n\t\t}\n\t;\n};\n"
+							"fs_Calc\n\t\t\t\t<\n\t\t\t\t\t" + Long + "\n\t\t\t\t>\n\t\t\t\t()\n\t\t\t)...\n\t\t}\n\t;\n};\n"
 						)
 					;
 					// A declaration with a requires clause on a line of its own is laid out in front of
