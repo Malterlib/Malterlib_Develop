@@ -2964,15 +2964,21 @@ namespace NMib::NDevelop
 				"const", "volatile", "noexcept", "override", "final", "mutable", "requires", "&", "&&"
 			}
 		;
-		// The placement arguments of a 'new' stand apart from the type it constructs:
-		// 'new (_pMemory) CFoo(1)'.
+		// The placement arguments of a 'new' stand apart from the type it constructs, and a
+		// declaration's alignment and a type 'decltype' names stand apart from what follows
+		// them: 'new (_pMemory) CFoo(1)', 'alignas(CData) uint8 m_Space[4]'.
 		if (fLeft(")") && (Right.m_Kind == ECodeTokenKind::mc_Identifier || fRight("::")))
 		{
 			auto iNode = fg_FindGroupClosingAt(_Structure, _iLeft, ECodeBracket::mc_None);
 			if (iNode >= 0)
 			{
+				constexpr ch8 const *c_pApart[] =
+					{
+						"new", "alignas", "decltype"
+					}
+				;
 				auto iKeyword = fg_PreviousCode(_Tokens, _Structure.f_GetNodes()[umint(iNode)].m_iFirstToken);
-				if (iKeyword >= 0 && _Tokens.f_IsText(Tokens[umint(iKeyword)], "new"))
+				if (iKeyword >= 0 && fg_IsAnyText(_Tokens, Tokens[umint(iKeyword)], c_pApart) && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))
 					return ECodeSpacing::mc_Space;
 			}
 		}
@@ -2990,10 +2996,16 @@ namespace NMib::NDevelop
 			// A parenthesis holding nothing but a type's name is a cast as well: '(aint)-1'.
 			// Malterlib's naming says which names are types, and the fundamental aliases
 			// are a closed set.
+			// A parenthesis behind a name is a call's or a keyword's operand instead.
 			if (!bCast && iInner >= 0)
 			{
 				auto iOpen = fg_PreviousCode(_Tokens, umint(iInner));
-				bCast = iOpen >= 0 && _Tokens.f_IsText(Tokens[umint(iOpen)], "(") && fg_NamesType(_Tokens, Tokens[umint(iInner)]);
+				auto iBeforeOpen = iOpen >= 0 ? fg_PreviousCode(_Tokens, umint(iOpen)) : aint(-1);
+				bCast = iOpen >= 0
+					&& _Tokens.f_IsText(Tokens[umint(iOpen)], "(")
+					&& fg_NamesType(_Tokens, Tokens[umint(iInner)])
+					&& !(iBeforeOpen >= 0 && Tokens[umint(iBeforeOpen)].m_Kind == ECodeTokenKind::mc_Identifier)
+				;
 			}
 
 			bool bOperand = (Right.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))

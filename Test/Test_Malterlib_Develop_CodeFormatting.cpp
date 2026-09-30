@@ -2307,6 +2307,15 @@ namespace
 							, "DMibA(int, f_A, int _0)\nDMibB\n\t(\n\t\tvoid\n\t\t, f_B\n\t\t, " + Long + " _0\n\t\t, " + Long + " _1\n\t)\n"
 						)
 					;
+					// What 'alignas' and 'decltype' take in parentheses is no cast, and what follows
+					// them stands apart.
+					fg_ExpectFormat
+						(
+							"AlignasAndDecltype"
+							, "struct CA\n{\n\talignas(CData)uint8 m_Space[sizeof(CData)];\n\tdecltype(CFoo())m_Value;\n};\n"
+							, "struct CA\n{\n\talignas(CData) uint8 m_Space[sizeof(CData)];\n\tdecltype(CFoo()) m_Value;\n};\n"
+						)
+					;
 					// A cv-qualifier ends the type a declarator in parentheses follows, too.
 					fg_ExpectFormat
 						(
