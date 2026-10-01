@@ -44,6 +44,40 @@ namespace
 		return false;
 	}
 
+	// Whether the parenthesis opening at the token holds an asm statement's operands: 'asm volatile ('.
+	bool fg_OpensAsmOperands(CCodeTokenStream const &_Tokens, umint _iOpen)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		if (!_Tokens.f_IsText(Tokens[_iOpen], "("))
+			return false;
+
+		auto iBefore = fg_PreviousCode(_Tokens, _iOpen);
+		while (iBefore >= 0 && fg_IsAsmQualifier(_Tokens, Tokens[umint(iBefore)]))
+			iBefore = fg_PreviousCode(_Tokens, umint(iBefore));
+
+		if (iBefore < 0)
+			return false;
+
+		auto const &Keyword = Tokens[umint(iBefore)];
+
+		return _Tokens.f_IsText(Keyword, "asm") || _Tokens.f_IsText(Keyword, "__asm__") || _Tokens.f_IsText(Keyword, "__asm");
+	}
+
+	// Whether the token separates an asm statement's operand sections: ':', or '::' where a section is empty.
+	bool fg_IsAsmSectionSeparator(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken)
+	{
+		auto const &Token = _Tokens.f_GetTokens()[_iToken];
+		if (!_Tokens.f_IsText(Token, ":") && !_Tokens.f_IsText(Token, "::"))
+			return false;
+
+		auto iGroup = _Structure.f_FindEnclosingNode(_iToken);
+		auto const &Nodes = _Structure.f_GetNodes();
+		if (iGroup >= Nodes.f_GetLen() || Nodes[iGroup].m_Kind != ECodeNodeKind::mc_Group)
+			return false;
+
+		return fg_OpensAsmOperands(_Tokens, Nodes[iGroup].m_iFirstToken);
+	}
+
 	ECodeBracket fg_GetOpeningBracket(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)
 	{
 		if (_Token.m_Kind != ECodeTokenKind::mc_Punctuator)
@@ -679,7 +713,10 @@ namespace NMib::NDevelop
 			}
 
 			// A top-level separator is where the canonical split form starts a new line.
-			bool bSeparator = mp_pTokens->f_IsText(Token, ",") || mp_pTokens->f_IsText(Token, ";") || (bAsm && mp_pTokens->f_IsText(Token, ":"));
+			bool bSeparator = mp_pTokens->f_IsText(Token, ",")
+				|| mp_pTokens->f_IsText(Token, ";")
+				|| (bAsm && (mp_pTokens->f_IsText(Token, ":") || mp_pTokens->f_IsText(Token, "::")))
+			;
 			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && bSeparator)
 			{
 				mp_Nodes[iNode].m_SplitPoints.f_Insert(mp_Significant[i]);
@@ -2579,6 +2616,18 @@ namespace NMib::NDevelop
 
 		if (fRight("(") && fg_NamesOperator(_Tokens, _Structure, _iLeft))
 			return ECodeSpacing::mc_Space;
+
+		// An asm statement's section separators stand apart from its operands, and the ones of
+		// empty sections together: '"" :: "r"(_pFirst) : "memory"', '"yield" ::: "memory"'.
+		{
+			bool bLeftSeparator = fg_IsAsmSectionSeparator(_Tokens, _Structure, _iLeft);
+			bool bRightSeparator = fg_IsAsmSectionSeparator(_Tokens, _Structure, _iRight);
+			if (bLeftSeparator && bRightSeparator)
+				return ECodeSpacing::mc_None;
+
+			if (bLeftSeparator || bRightSeparator)
+				return ECodeSpacing::mc_Space;
+		}
 
 		// A resolved template bracket hugs its arguments and separates the list from the
 		// declarator after it. An unresolved '<' or '>' is an ordinary binary operator.

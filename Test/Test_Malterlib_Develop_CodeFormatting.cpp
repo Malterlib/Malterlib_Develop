@@ -1861,6 +1861,14 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// An asm statement's section separators stand apart from its operands, those of empty sections together.
+					fg_ExpectFormat
+						(
+							"AsmSeparators"
+							, "void f()\n{\n\t__asm__ __volatile__(\"\"::\"r\"(_pFirst) : \"memory\");\n\tasm volatile(\"yield\":::\"memory\");\n\tg(NA::CB::fs_C(), a ? b : c);\n}\n"
+							, "void f()\n{\n\t__asm__ __volatile__(\"\" :: \"r\"(_pFirst) : \"memory\");\n\tasm volatile(\"yield\" ::: \"memory\");\n\tg(NA::CB::fs_C(), a ? b : c);\n}\n"
+						)
+					;
 					// A pointer to member function's declarator stands apart from the return type in front of it, and its
 					// '*' apart from the class and on the name.
 					fg_ExpectFormat
