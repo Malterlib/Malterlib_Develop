@@ -2870,6 +2870,39 @@ namespace NMib::NDevelop
 						auto iStar = fg_NextCode(_Tokens, umint(iInner));
 						if (iStar >= 0 && (_Tokens.f_IsText(Tokens[umint(iStar)], "*") || _Tokens.f_IsText(Tokens[umint(iStar)], "&")))
 							iInner = iStar;
+						else
+						{
+							// A pointer to member names its class in front of the '*': 'tf_CReturn (CFoo::* _pMember)(int)'.
+							auto iScope = umint(iInner);
+							while (true)
+							{
+								auto iNext = fg_NextCode(_Tokens, iScope);
+								if (iNext >= 0 && _Structure.f_IsAngleBracket(umint(iNext)) && _Tokens.f_IsText(Tokens[umint(iNext)], "<"))
+								{
+									auto iArguments = _Structure.f_FindNodeOpeningAt(umint(iNext));
+									if (iArguments >= Nodes.f_GetLen())
+										break;
+
+									iNext = fg_NextCode(_Tokens, Nodes[iArguments].m_iLastToken);
+								}
+
+								if (iNext < 0 || !_Tokens.f_IsText(Tokens[umint(iNext)], "::"))
+									break;
+
+								auto iAfter = fg_NextCode(_Tokens, umint(iNext));
+								if (iAfter >= 0 && _Tokens.f_IsText(Tokens[umint(iAfter)], "*"))
+								{
+									iInner = iAfter;
+
+									break;
+								}
+
+								if (iAfter < 0 || Tokens[umint(iAfter)].m_Kind != ECodeTokenKind::mc_Identifier)
+									break;
+
+								iScope = umint(iAfter);
+							}
+						}
 					}
 
 					// A pointer or a reference to an array is followed by the bound instead: 'ch8

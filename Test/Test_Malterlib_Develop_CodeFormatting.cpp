@@ -1861,6 +1861,14 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A pointer to member function's declarator stands apart from the return type in front of it.
+					fg_ExpectFormat
+						(
+							"MemberPointerParameter"
+							, "void f(tf_CReturn(CFoo::* _pA)(int), tf_C(NA::TCB<int>::* _pB)(int));\nvoid g()\n{\n\tf(CFoo::fs_Get(), 1);\n}\n"
+							, "void f(tf_CReturn (CFoo::* _pA)(int), tf_C (NA::TCB<int>::* _pB)(int));\nvoid g()\n{\n\tf(CFoo::fs_Get(), 1);\n}\n"
+						)
+					;
 					// A clause's variable is declared like any other, and its operands stay operands.
 					fg_ExpectFormat
 						(
