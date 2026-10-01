@@ -2371,6 +2371,18 @@ namespace
 							"\t// malterlib-format off\n\tFCGI_PARAMS      x      x\n\t// malterlib-format on\n}\n"
 						)
 					;
+					// An operator's declaration too long for its line gives at the '::' behind its
+					// class's template arguments rather than opening them.
+					CStr OperatorClass = "TCFloat<t_CFormatter, t_SignBits, t_ExponentBits, t_MantissaBits, t_PaddingBits, t_bDummyOptimize, t_CIntegerStorage, "
+						"t_bReference, t_CImplicitFloat>"
+					;
+					fg_ExpectFormat
+						(
+							"OperatorGivesAtScope"
+							, "namespace NA\n{\n\ttemplate <typename t_C>\n\tauto " + OperatorClass + "::operator + (TCFloat const &_Value) const -> TCFloat\n\t{\n\t}\n}\n"
+							, "namespace NA\n{\n\ttemplate <typename t_C>\n\tauto " + OperatorClass + "\n\t\t::operator + (TCFloat const &_Value) const\n\t\t-> TCFloat\n\t{\n\t}\n}\n"
+						)
+					;
 					// A class's head cut by a conditional keeps its lines at the class's level.
 					fg_ExpectFormat("ClassHeadAcrossConditional", "class\n#ifdef DFoo\n\talignas(16)\n#endif\n\tCFoo\n{\n};\n", "class\n#ifdef DFoo\nalignas(16)\n#endif\nCFoo\n{\n};\n");
 					// A statement that fits only without its terminator is split, also where the scope

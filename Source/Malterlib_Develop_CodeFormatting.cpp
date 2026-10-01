@@ -7291,10 +7291,48 @@ namespace
 		// the '::' behind them before those arguments open: 'TCFoo<...>' over '::f_Name()'.
 		// That is only where the name does not fit in front of its parameter list, which
 		// otherwise opens instead; an empty one has nothing to open.
-		bool bNameFits = !bStatement || !m_iSplitFirstParen || m_iSplitFirstParen > _iLast || fp_FitsInline(_iFirst, m_iSplitFirstParen, _iIndent);
-		if (bNameFits && bStatement && m_iSplitFirstParen && m_iSplitFirstParen < _iLast)
+		// An operator's name is no name the parameter list can open behind, so its declaration
+		// gives at the '::' wherever it does not fit: 'TCFoo<...>' over '::operator + (...)'.
+		umint iParameters = m_iSplitFirstParen;
+		bool bOperator = false;
+		for (auto i = _iFirst; bStatement && !iParameters && i <= _iLast; ++i)
 		{
-			auto iInner = fp_NextCode(m_iSplitFirstParen);
+			auto const &AllTokens = m_Tokens.f_GetTokens();
+			if (m_TokenDepth[i] != m_TokenDepth[_iFirst] || !m_Tokens.f_IsText(AllTokens[i], "operator"))
+				continue;
+
+			for (auto iParen = i + 1; iParen <= _iLast; ++iParen)
+			{
+				if (m_TokenDepth[iParen] != m_TokenDepth[_iFirst] || !m_Tokens.f_IsText(AllTokens[iParen], "("))
+					continue;
+
+				auto iAfter = fp_NextCode(iParen);
+				auto iBefore = fp_PreviousCode(iParen);
+				// The brackets of 'operator ()' are its name.
+				if (iAfter >= 0 && m_Tokens.f_IsText(AllTokens[umint(iAfter)], ")") && iBefore >= 0 && umint(iBefore) == i)
+					continue;
+
+				iParameters = iParen;
+				bOperator = true;
+
+				break;
+			}
+
+			break;
+		}
+
+		// The name in front of a known parameter list can be an operator's as well.
+		if (bStatement && iParameters && !bOperator)
+		{
+			auto iName = fp_PreviousCode(iParameters);
+			for (umint nSteps = 0; iName >= 0 && nSteps < 3 && !bOperator; ++nSteps, iName = fp_PreviousCode(umint(iName)))
+				bOperator = m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iName)], "operator");
+		}
+
+		bool bNameFits = !bOperator && (!bStatement || !iParameters || iParameters > _iLast || fp_FitsInline(_iFirst, iParameters, _iIndent));
+		if (bNameFits && bStatement && iParameters && iParameters < _iLast)
+		{
+			auto iInner = fp_NextCode(iParameters);
 			bNameFits = iInner < 0 || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iInner)], ")");
 		}
 		for (auto iChild : Node.m_Children)
@@ -7303,7 +7341,7 @@ namespace
 			if (bNameFits || _bClause || Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_Bracket != ECodeBracket::mc_Angle)
 				continue;
 
-			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken >= m_iSplitFirstParen || Child.m_iLastToken >= _iLast)
+			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken >= iParameters || Child.m_iLastToken >= _iLast)
 				continue;
 
 			auto iColons = fp_NextCode(Child.m_iLastToken);
