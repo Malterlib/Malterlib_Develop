@@ -2979,6 +2979,32 @@ namespace NMib::NDevelop
 			return ECodeSpacing::mc_Preserve;
 		}
 
+		// A pointer to member is declared with its '*' apart from the class it qualifies and on
+		// what it declares, the way a pointer's is: 'tf_CReturn (CFoo:: *_pMember)(int)'.
+		// No expression puts a '*' behind a '::'.
+		if (fLeft("::") && fRight("*"))
+		{
+			auto iClass = fg_PreviousCode(_Tokens, _iLeft);
+			bool bClass = iClass >= 0
+				&& (Tokens[umint(iClass)].m_Kind == ECodeTokenKind::mc_Identifier || (_Structure.f_IsAngleBracket(umint(iClass)) && _Tokens.f_IsText(Tokens[umint(iClass)], ">")))
+			;
+
+			return bClass ? ECodeSpacing::mc_Space : ECodeSpacing::mc_Preserve;
+		}
+
+		if (fLeft("*"))
+		{
+			auto iColons = fg_PreviousCode(_Tokens, _iLeft);
+			if (iColons >= 0 && _Tokens.f_IsText(Tokens[umint(iColons)], "::"))
+			{
+				if (fRight("const") || fRight("volatile"))
+					return ECodeSpacing::mc_Space;
+
+				if (Right.m_Kind == ECodeTokenKind::mc_Identifier || fRight(")") || fRight(",") || fRight(">") || fRight("*") || fRight("&"))
+					return ECodeSpacing::mc_None;
+			}
+		}
+
 		// Member access and qualification never take spaces.
 		if (fLeft(".") || fLeft("::") || fRight(".") || fRight("::"))
 			return ECodeSpacing::mc_None;

@@ -1861,12 +1861,13 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
-					// A pointer to member function's declarator stands apart from the return type in front of it.
+					// A pointer to member function's declarator stands apart from the return type in front of it, and its
+					// '*' apart from the class and on the name.
 					fg_ExpectFormat
 						(
 							"MemberPointerParameter"
 							, "void f(tf_CReturn(CFoo::* _pA)(int), tf_C(NA::TCB<int>::* _pB)(int));\nvoid g()\n{\n\tf(CFoo::fs_Get(), 1);\n}\n"
-							, "void f(tf_CReturn (CFoo::* _pA)(int), tf_C (NA::TCB<int>::* _pB)(int));\nvoid g()\n{\n\tf(CFoo::fs_Get(), 1);\n}\n"
+							, "void f(tf_CReturn (CFoo:: *_pA)(int), tf_C (NA::TCB<int>:: *_pB)(int));\nvoid g()\n{\n\tf(CFoo::fs_Get(), 1);\n}\n"
 						)
 					;
 					// A clause's variable is declared like any other, and its operands stay operands.
@@ -3028,7 +3029,7 @@ namespace
 					;
 					// What follows the type is no part of it: a member pointer's class, and the
 					// class of a member defined outside it.
-					fMoves("Member", "const int CFoo::*g_pA;\nconst NStr::CStr CFoo::ms_Name;\n", "int const CFoo::*g_pA;\nNStr::CStr const CFoo::ms_Name;\n");
+					fMoves("Member", "const int CFoo::*g_pA;\nconst NStr::CStr CFoo::ms_Name;\n", "int const CFoo:: *g_pA;\nNStr::CStr const CFoo::ms_Name;\n");
 					fMoves
 						(
 							"Places"
