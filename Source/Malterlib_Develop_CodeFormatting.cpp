@@ -1850,6 +1850,82 @@ namespace
 			}
 		}
 
+		// The comment lines directly above a statement, written at its depth, describe it and move
+		// with it. One at the very start of its line comments out what it stands in front of and
+		// keeps its place, and so does a run with a blank line or a directive between it and the code.
+		for (umint i = 0; m_Structure.f_IsComplete() && i < Tokens.f_GetLen(); ++i)
+		{
+			auto Kind = Tokens[i].m_Kind;
+			bool bComment = Kind == ECodeTokenKind::mc_LineComment || (Kind == ECodeTokenKind::mc_BlockComment && !Tokens[i].m_bMultiLine);
+			if (!bComment || !fp_IsFirstOnLine(i))
+				continue;
+
+			auto iLine = m_Lines.f_FindLine(Tokens[i].m_iOffset);
+			if (m_bProtectedStart[iLine] || Tokens[i].m_iOffset == m_Lines.f_GetLineStart(iLine))
+				continue;
+
+			// A comment continuing the one that trails the line above is aligned with that one.
+			auto iAbove = fp_PreviousSignificant(i);
+			while (iAbove >= 0 && Tokens[umint(iAbove)].m_Kind == ECodeTokenKind::mc_LineComment && fp_IsFirstOnLine(umint(iAbove)))
+				iAbove = fp_PreviousSignificant(umint(iAbove));
+
+			if (iAbove >= 0 && Tokens[umint(iAbove)].m_Kind == ECodeTokenKind::mc_LineComment)
+				continue;
+
+			// The run ends at the first code token, every line up to it a comment line.
+			umint iCode = i + 1;
+			bool bAttached = true;
+			umint nNewlines = 0;
+			for (; iCode < Tokens.f_GetLen() && bAttached; ++iCode)
+			{
+				auto CodeKind = Tokens[iCode].m_Kind;
+				if (CodeKind == ECodeTokenKind::mc_Newline)
+				{
+					bAttached = ++nNewlines < 2;
+
+					continue;
+				}
+
+				if (CodeKind == ECodeTokenKind::mc_Whitespace)
+					continue;
+
+				if (CodeKind == ECodeTokenKind::mc_LineComment || CodeKind == ECodeTokenKind::mc_BlockComment)
+				{
+					bAttached = !Tokens[iCode].m_bMultiLine && fp_IsFirstOnLine(iCode);
+					nNewlines = 0;
+
+					continue;
+				}
+
+				break;
+			}
+
+			if (!bAttached || nNewlines != 1 || iCode >= Tokens.f_GetLen() || Tokens[iCode].m_Kind == ECodeTokenKind::mc_Preprocessor)
+				continue;
+
+			if (m_Tokens.f_IsText(Tokens[iCode], "}") || m_bProtectedStart[m_Lines.f_FindLine(Tokens[iCode].m_iOffset)])
+				continue;
+
+			// A label has a depth of its own, and the comment above it stays with the body it follows.
+			constexpr ch8 const *c_pLabels[] = {"public", "private", "protected", "case", "default"};
+			bool bLabel = false;
+			for (auto pLabel : c_pLabels)
+				bLabel |= m_Tokens.f_IsText(Tokens[iCode], pLabel);
+
+			if (bLabel)
+				continue;
+
+			// Only a comment written where its statement was follows it to where it goes.
+			if (fp_GetSourceLineIndent(i) != fp_GetSourceLineIndent(iCode))
+				continue;
+
+			umint nTarget = 0;
+			if (!fFormattedColumn(Tokens[iCode].m_iOffset, nTarget))
+				continue;
+
+			fPlaceLine(m_Lines.f_GetLineStart(iLine), Tokens[i].m_iOffset, nTarget, "comment-indent", "a comment above a statement moves with it");
+		}
+
 		auto const &Nodes = m_Structure.f_GetNodes();
 		// An opened DSL array's bracket stands on a line of its own, at the element's level, or
 		// one level in when the line starts its statement, and what it holds moves with it:
@@ -6052,6 +6128,7 @@ namespace
 		umint iJoinedLabel = TCLimitsInt<umint>::mc_Max;
 		umint iJoinedUntil = TCLimitsInt<umint>::mc_Max;
 		umint iChildIndex = TCLimitsInt<umint>::mc_Max;
+		bool bPreviousGuarded = false;
 		for (auto iChild : Node.m_Children)
 		{
 			++iChildIndex;
@@ -6271,6 +6348,37 @@ namespace
 				fp_IndentBefore(iFirst, nPlace);
 				nWritten = nPlace;
 			}
+			else if
+			(
+				!bStays
+				&& !bGuarded
+				&& nWritten != nPlaced
+				&& !fp_KeepsOwnLines(iChild)
+				&& iPrevious != TCLimitsInt<umint>::mc_Max
+				&& fp_IsInConditionalWithin(iFirst, iScopeFirst)
+				&& !fp_HasOpaqueDirective(Nodes[iPrevious].m_iFirstToken, Child.m_iLastToken)
+			)
+			{
+				// Inside a conditional the depth is the branch's own, and a statement follows the one in
+				// front of it in the same branch: no directive between them, and no guard to step in from.
+				// That holds in a scope an opaque conditional runs through as well, away from it.
+				auto const &Previous = Nodes[iPrevious];
+				bool bSameBranch = !fp_IsGuard(iPrevious)
+					&& !bPreviousGuarded
+					&& fp_IsFirstOnLine(Previous.m_iFirstToken)
+					&& m_iConditionalOpen[iFirst] == m_iConditionalOpen[Previous.m_iFirstToken]
+					&& !bLabelled
+					&& !m_Tokens.f_IsText(Tokens[Child.m_iLastToken], ":")
+				;
+				for (auto i = Previous.m_iLastToken + 1; bSameBranch && i < iFirst; ++i)
+					bSameBranch = Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor;
+
+				if (bSameBranch)
+				{
+					fp_IndentBefore(iFirst, nPlaced);
+					nWritten = nPlaced;
+				}
+			}
 
 			if (fp_IsGuard(iChild))
 			{
@@ -6282,6 +6390,7 @@ namespace
 
 			nPlaced = nWritten;
 			iPrevious = iChild;
+			bPreviousGuarded = bGuarded || bLabelled;
 		}
 	}
 

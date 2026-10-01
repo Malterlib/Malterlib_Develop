@@ -1861,6 +1861,15 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A statement in a conditional follows the depth of the one in front of it in the same branch, and the
+					// comment written above it moves with it; one written elsewhere keeps its place.
+					fg_ExpectFormat
+						(
+							"ConditionalBranchDepth"
+							, "namespace NA\n{\n#if 1\n\tvoid f()\n\t{\n\t}\n#else\n\tvoid h()\n\t{\n\t}\n\n\t\t// C\n\t\tvoid g()\n\t\t{\n\t\t\treturn;\n\t\t}\n#endif\n}\n"
+							, "namespace NA\n{\n#if 1\n\tvoid f()\n\t{\n\t}\n#else\n\tvoid h()\n\t{\n\t}\n\n\t// C\n\tvoid g()\n\t{\n\t\treturn;\n\t}\n#endif\n}\n"
+						)
+					;
 					// An asm statement's section separators stand apart from its operands, those of empty sections together.
 					fg_ExpectFormat
 						(
