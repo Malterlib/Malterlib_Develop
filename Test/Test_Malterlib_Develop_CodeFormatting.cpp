@@ -1861,6 +1861,16 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A clause's variable is declared like any other, and its operands stay operands.
+					fg_ExpectFormat
+						(
+							"ClauseDeclarators"
+							, "void f()\n{\n\tfor (auto && Element : _BSON)\n\t\tg(Element);\n\tfor (auto & [A, B] : _BSON)\n\t\tg(A);\n\tfor (char** p = g(); *p; ++p)\n\t\tg(p);\n"
+							"\tif (auto && Value = g())\n\t\tg(Value);\n\tif (a && b)\n\t\tg(a);\n}\n"
+							, "void f()\n{\n\tfor (auto &&Element : _BSON)\n\t\tg(Element);\n\tfor (auto &[A, B] : _BSON)\n\t\tg(A);\n\tfor (char **p = g(); *p; ++p)\n\t\tg(p);\n"
+							"\tif (auto &&Value = g())\n\t\tg(Value);\n\tif (a && b)\n\t\tg(a);\n}\n"
+						)
+					;
 					// A named call streamed into a plain target opens rather than taking a line of its own.
 					CStr StreamedWord;
 					for (umint i = 0; i < 110; ++i)

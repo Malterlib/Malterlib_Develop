@@ -2380,6 +2380,77 @@ namespace NMib::NDevelop
 	// it stands in a parameter list, outside a default argument. Elsewhere the same
 	// token is an operator, or has no settled reading: 'TCFoo<T> &&_Other' and
 	// 'cFoo<T> && cBar<T>' spell the same tokens.
+	// Whether the declarator token in a clause's parenthesis declares the clause's variable:
+	// 'for (auto &&Element : Range)', 'if (CFoo &&Value = fg_Get())'. A type stands in front of
+	// it and a name behind it that a ':' or an '=' follows, which no operand of '&&' or '&' has.
+	bool fg_DeclaresInClause(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup, umint _iToken)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto const &Group = Nodes[_iGroup];
+		if (Group.m_Kind != ECodeNodeKind::mc_Group || Group.m_Bracket != ECodeBracket::mc_Paren)
+			return false;
+
+		auto iKeyword = fg_PreviousCode(_Tokens, Group.m_iFirstToken);
+		constexpr ch8 const *c_pClauses[] = {"for", "if", "while", "switch"};
+		if (iKeyword < 0 || !fg_IsAnyText(_Tokens, Tokens[umint(iKeyword)], c_pClauses))
+			return false;
+
+		bool bType = false;
+		umint iChild = 0;
+		for (auto i = Group.m_iFirstToken + 1; i < _iToken; ++i)
+		{
+			auto const &Token = Tokens[i];
+			if (!fg_IsSignificant(Token.m_Kind))
+				continue;
+
+			while (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iLastToken < i)
+				++iChild;
+
+			if (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iFirstToken <= i)
+			{
+				if (Nodes[Group.m_Children[iChild]].m_Bracket != ECodeBracket::mc_Angle)
+					return false;
+
+				i = Nodes[Group.m_Children[iChild]].m_iLastToken;
+
+				continue;
+			}
+
+			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
+			{
+				if (fg_IsAnyText(_Tokens, Token, gc_pExpressionKeywords))
+					return false;
+
+				bType = true;
+			}
+			else if (!fg_IsDeclaratorText(_Tokens, Token) && !_Tokens.f_IsText(Token, "::"))
+				return false;
+		}
+
+		if (!bType)
+			return false;
+
+		auto iName = fg_NextCode(_Tokens, _iToken);
+		while (iName >= 0 && fg_IsDeclaratorText(_Tokens, Tokens[umint(iName)]))
+			iName = fg_NextCode(_Tokens, umint(iName));
+
+		if (iName < 0)
+			return false;
+
+		auto iAfter = aint(-1);
+		if (Tokens[umint(iName)].m_Kind == ECodeTokenKind::mc_Identifier)
+			iAfter = fg_NextCode(_Tokens, umint(iName));
+		else if (_Tokens.f_IsText(Tokens[umint(iName)], "["))
+		{
+			auto iBinding = _Structure.f_FindNodeOpeningAt(umint(iName));
+			if (iBinding < Nodes.f_GetLen())
+				iAfter = fg_NextCode(_Tokens, Nodes[iBinding].m_iLastToken);
+		}
+
+		return iAfter >= 0 && (_Tokens.f_IsText(Tokens[umint(iAfter)], ":") || _Tokens.f_IsText(Tokens[umint(iAfter)], "="));
+	}
+
 	bool fg_IsDeclaratorToken(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken)
 	{
 		auto const &Tokens = _Tokens.f_GetTokens();
@@ -2440,6 +2511,9 @@ namespace NMib::NDevelop
 		// spells a type: 'CFoo &&operator ()', 'TCActor<t_C> &f_Get()'.
 		if (Nodes[iGroup].m_Kind == ECodeNodeKind::mc_Statement)
 			return fg_SpellsType(_Tokens, _Structure, iGroup, umint(iPrevious));
+
+		if (fg_DeclaresInClause(_Tokens, _Structure, iGroup, _iToken))
+			return true;
 
 		if (!fg_IsParameterList(_Tokens, _Structure, iGroup))
 			return false;
@@ -2931,7 +3005,8 @@ namespace NMib::NDevelop
 			if (fRight("..."))
 				return ECodeSpacing::mc_Space;
 
-			if (Right.m_Kind == ECodeTokenKind::mc_Identifier)
+			// A structured binding's names hug the declarator the way a name does: 'auto &[A, B]'.
+			if (Right.m_Kind == ECodeTokenKind::mc_Identifier || fRight("["))
 				return ECodeSpacing::mc_None;
 		}
 
