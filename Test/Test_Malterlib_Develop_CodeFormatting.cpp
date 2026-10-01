@@ -1861,6 +1861,19 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A named call streamed into a plain target opens rather than taking a line of its own.
+					CStr StreamedWord;
+					for (umint i = 0; i < 110; ++i)
+						StreamedWord += "W";
+
+					fg_ExpectFormat
+						(
+							"StreamedCallOpens"
+							, "void f()\n{\n\tParams << fg_CreateVector<CStr>(\"" + StreamedWord + "\", \"--forceTableScan\", \"--quiet\", \"--oplog\");\n}\n"
+							, "void f()\n{\n\tParams << fg_CreateVector<CStr>\n\t\t(\n\t\t\t\"" + StreamedWord + "\"\n\t\t\t, \"--forceTableScan\"\n\t\t\t, \"--quiet\"\n"
+							"\t\t\t, \"--oplog\"\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// A call behind a leading parenthesis's closing marker opens at the member's level,
 					// which is the statement's.
 					fg_ExpectFormat

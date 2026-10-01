@@ -8217,6 +8217,54 @@ namespace
 		if (!_bMustSplit && !fp_MeasureJoinedWidth(_iFirst, _iLast, nJoined))
 			return false;
 
+		// A single stream operator writing a named call into a plain target stays on the line with
+		// the call where the line fits up to its parenthesis, and the call opens instead:
+		// 'Params << fg_CreateVector<CStr>' over '('.
+		bool bStreamsCall = Operators.f_GetLen() == 1
+			&& m_Tokens.f_IsText(Tokens[_iLast], ")")
+			&& (m_Tokens.f_IsText(Tokens[Operators[0]], "<<") || m_Tokens.f_IsText(Tokens[Operators[0]], ">>"))
+		;
+		for (auto i = _iFirst; bStreamsCall && i < Operators[0]; i = umint(fp_NextCode(i)))
+		{
+			auto const &Token = Tokens[i];
+			bStreamsCall = Token.m_Kind == ECodeTokenKind::mc_Identifier
+				|| m_Tokens.f_IsText(Token, "::")
+				|| m_Tokens.f_IsText(Token, ".")
+				|| m_Tokens.f_IsText(Token, "->")
+			;
+		}
+
+		// The right operand is the call's name and template arguments, and the call.
+		if (bStreamsCall)
+		{
+			auto iCall = m_Structure.f_FindNodeClosingAt(_iLast);
+			for (auto i = Operators[0] + 1; bStreamsCall && iCall < Nodes.f_GetLen() && i < Nodes[iCall].m_iFirstToken; ++i)
+			{
+				auto const &Token = Tokens[i];
+				bStreamsCall = m_TokenDepth[i] != m_TokenDepth[Operators[0]]
+					|| Token.m_Kind != ECodeTokenKind::mc_Punctuator
+					|| m_Tokens.f_IsText(Token, "::")
+					|| m_Structure.f_IsAngleBracket(i)
+				;
+			}
+		}
+
+		if (bStreamsCall)
+		{
+			auto iCall = m_Structure.f_FindNodeClosingAt(_iLast);
+			auto iName = iCall < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iCall].m_iFirstToken) : aint(-1);
+			auto iInner = iCall < Nodes.f_GetLen() ? fp_NextCode(Nodes[iCall].m_iFirstToken) : aint(-1);
+			bool bNamedCall = iName >= 0
+				&& umint(iName) > Operators[0]
+				&& umint(iInner) != _iLast
+				&& !fp_IsCastGroup(iCall)
+				&& (Tokens[umint(iName)].m_Kind == ECodeTokenKind::mc_Identifier || (m_Structure.f_IsAngleBracket(umint(iName)) && m_Tokens.f_IsText(Tokens[umint(iName)], ">")))
+				&& fp_FitsInline(_iFirst, umint(iName), _iIndent)
+			;
+			if (bNamedCall)
+				return fp_LayoutScopes(_iNode, _iFirst, _iLast, _iIndent, _bClause, _bIndentContinuations, _bMustSplit);
+		}
+
 		// A statement's continuation is indented past its own start; an element of a group
 		// already sits at the group's content indentation and its continuation aligns there.
 		// So does what follows a parenthesis the range opens with, once that parenthesis is
