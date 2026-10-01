@@ -2407,13 +2407,15 @@ namespace
 							, "void f()\n{\n\tco_return co_await mp_A(a, b).f_Timeout\n\t\t(\n\t\t\tmp_Timeout\n\t\t\t, \"" + Filler + " {}\"_f << _Namespace\n\t\t)\n\t;\n}\n"
 						)
 					;
-					// A string continued as a value behind a DSL key stands one level in, with the
-					// operators continuing it; one that is the element itself stays at its level.
+					// A string continued as a value behind a DSL key stands at the key's level, with the
+					// operators continuing it; behind a single string the operator stands one level in.
 					fg_ExpectFormat
 						(
 							"ContinuedValueString"
-							, "auto g_A = _o\n\t{\n\t\t\"Description\"_o= \"a\\n\"\n\t\t\"b\\n\"\n\t\t\t+ Warning\n\t\t, \"c\"\n\t\t\"d\"\n\t}\n;\n"
-							, "auto g_A = _o\n\t{\n\t\t\"Description\"_o= \"a\\n\"\n\t\t\t\"b\\n\"\n\t\t\t+ Warning\n\t\t, \"c\"\n\t\t\"d\"\n\t}\n;\n"
+							, "auto g_A = _o\n\t{\n\t\t\"Description\"_o= \"a\\n\"\n\t\t\t\"b\\n\"\n\t\t\t+ Warning\n\t\t, \"Other\"_o= \"e\\n\"\n\t\t\t+ Warning\n"
+							"\t\t, \"c\"\n\t\t\"d\"\n\t}\n;\n"
+							, "auto g_A = _o\n\t{\n\t\t\"Description\"_o= \"a\\n\"\n\t\t\"b\\n\"\n\t\t+ Warning\n\t\t, \"Other\"_o= \"e\\n\"\n\t\t\t+ Warning\n"
+							"\t\t, \"c\"\n\t\t\"d\"\n\t}\n;\n"
 						)
 					;
 					// Without an operator behind them, a DSL key's continued strings stand at the key's level.

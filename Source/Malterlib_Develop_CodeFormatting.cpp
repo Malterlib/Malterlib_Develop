@@ -674,6 +674,8 @@ namespace
 		bool fp_EndsOperand(aint _iToken) const;
 		aint fp_ContinuesLiteral(umint _iToken) const;
 		bool fp_ContinuesValue(umint _iContinued) const;
+		bool fp_IsKeyAssign(umint _iAssign) const;
+		aint fp_FindContinuedStringLead(umint _iContinued) const;
 		void fp_RuleBlankLines();
 		void fp_RuleLineBreaks();
 		void fp_LayoutNode(umint _iNode, umint _iIndent);
@@ -1260,9 +1262,34 @@ namespace
 	bool CFormattingAnalyzer::fp_ContinuesValue(umint _iContinued) const
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto iLead = fp_FindContinuedStringLead(_iContinued);
+		if (iLead < 0)
+			return false;
+
+		auto const &Lead = Tokens[umint(iLead)];
+		if (Lead.m_Kind == ECodeTokenKind::mc_Identifier)
+			return true;
+
+		return m_Tokens.f_IsText(Lead, "=") && !fp_IsKeyAssign(umint(iLead));
+	}
+
+	// Whether the '=' gives a DSL key its value: '"Key"_o='. The strings a key's value
+	// continues over lines stand at the key's level, and so do the operators behind them.
+	bool CFormattingAnalyzer::fp_IsKeyAssign(umint _iAssign) const
+	{
+		auto iKey = fp_PreviousCode(_iAssign);
+
+		return iKey >= 0 && m_Tokens.f_HasRole(m_Tokens.f_GetTokens()[umint(iKey)], ECodeNameRole::mc_DSLMarker);
+	}
+
+	// The token in front of the string run the token continues, on the run's first line, or -1
+	// where the token continues no string or the run starts a line.
+	aint CFormattingAnalyzer::fp_FindContinuedStringLead(umint _iContinued) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto iPrevious = fp_ContinuesLiteral(_iContinued);
 		if (iPrevious < 0)
-			return false;
+			return -1;
 
 		auto iRun = umint(iPrevious);
 		while (true)
@@ -1285,34 +1312,9 @@ namespace
 
 		auto iLead = fp_PreviousCode(iRun);
 		if (iLead < 0 || fp_SpansLines(umint(iLead), iRun))
-			return false;
+			return -1;
 
-		auto const &Lead = Tokens[umint(iLead)];
-		if (Lead.m_Kind == ECodeTokenKind::mc_Identifier)
-			return true;
-
-		if (!m_Tokens.f_IsText(Lead, "="))
-			return false;
-
-		// A DSL key's strings stand at the key's level, unless an operator continues the value
-		// behind them: '"Key"_o= "a"' over '"b"' over '+ Warning' moves '"b"' in.
-		auto iKey = fp_PreviousCode(umint(iLead));
-		if (iKey < 0 || !m_Tokens.f_HasRole(Tokens[umint(iKey)], ECodeNameRole::mc_DSLMarker))
-			return true;
-
-		auto iLast = _iContinued;
-		for (auto iNext = fp_NextCode(iLast); iNext >= 0 && Tokens[umint(iNext)].m_Kind == ECodeTokenKind::mc_StringLiteral; iNext = fp_NextCode(iLast))
-			iLast = umint(iNext);
-
-		auto iAfter = fp_NextCode(iLast);
-		if (iAfter < 0)
-			return false;
-
-		auto const &After = Tokens[umint(iAfter)];
-
-		return !(m_Tokens.f_IsText(After, ",") || m_Tokens.f_IsText(After, "}") || m_Tokens.f_IsText(After, ")") || m_Tokens.f_IsText(After, "]")
-			|| m_Tokens.f_IsText(After, ";"))
-		;
+		return iLead;
 	}
 
 	bool CFormattingAnalyzer::fp_EndsOperand(aint _iToken) const
@@ -2043,6 +2045,43 @@ namespace
 					, bStartsStatement ? "a string continued on the next line stands one level in" : "a string continued on the next line stands at its element's level"
 				)
 			;
+
+			// The operators continuing a DSL key's value behind its continued strings stand at the
+			// key's level with them: '"Key"_o= "a"' over '"b"' over '+ Warning'.
+			auto iNext = fp_NextCode(i);
+			if (iNext < 0 || fp_ContinuesLiteral(umint(iNext)) >= 0)
+				continue;
+
+			auto iLead = fp_FindContinuedStringLead(i);
+			if (iLead < 0 || !m_Tokens.f_IsText(Tokens[umint(iLead)], "=") || !fp_IsKeyAssign(umint(iLead)))
+				continue;
+
+			for (auto iOperand = iNext; iOperand >= 0; iOperand = fp_NextCode(umint(iOperand)))
+			{
+				auto const &Operand = Tokens[umint(iOperand)];
+				if (m_TokenDepth[umint(iOperand)] < m_TokenDepth[i])
+					break;
+
+				if (m_TokenDepth[umint(iOperand)] == m_TokenDepth[i] && (m_Tokens.f_IsText(Operand, ",") || m_Tokens.f_IsText(Operand, ";")))
+					break;
+
+				if (m_TokenDepth[umint(iOperand)] != m_TokenDepth[i] || !fp_IsFirstOnLine(umint(iOperand)))
+					continue;
+
+				auto iOperandLine = m_Lines.f_FindLine(Operand.m_iOffset);
+				if (m_bProtectedStart[iOperandLine])
+					continue;
+
+				fPlaceLine
+					(
+						m_Lines.f_GetLineStart(iOperandLine)
+						, Operand.m_iOffset
+						, umint(fg_Max(aint(nColumns) + fShiftAt(m_Lines.f_FindLine(Tokens[iHead].m_iOffset)), aint(0)))
+						, "string-continuation"
+						, "an operator continuing a key's strings stands at the key's level"
+					)
+				;
+			}
 		}
 	}
 
@@ -8185,7 +8224,16 @@ namespace
 			}
 		}
 
-		auto nContinuation = _bIndentContinuations && !bLeadsOpened ? _iIndent + nTab : _iIndent;
+		// The operators behind a DSL key's string continued over lines stand at the key's level
+		// with the string: '"Key"_o= "a"' over '"b"' over '+ Warning'.
+		bool bKeyString = false;
+		if (auto iOperand = fp_PreviousCode(Operators[0]); iOperand >= 0 && Tokens[umint(iOperand)].m_Kind == ECodeTokenKind::mc_StringLiteral)
+		{
+			auto iLead = fp_FindContinuedStringLead(umint(iOperand));
+			bKeyString = iLead >= 0 && m_Tokens.f_IsText(Tokens[umint(iLead)], "=") && fp_IsKeyAssign(umint(iLead));
+		}
+
+		auto nContinuation = _bIndentContinuations && !bLeadsOpened && !bKeyString ? _iIndent + nTab : _iIndent;
 		m_bOperatorSplit |= _bIndentContinuations;
 		// A lambda is written behind the operator that takes it, so that operator stays on
 		// the line its left hand side ends, and so does the capture list where it fits
