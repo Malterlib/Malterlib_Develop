@@ -7921,7 +7921,10 @@ namespace
 					&& fp_NextCode(umint(iName)) == aint(Scope.m_iFirstToken)
 				;
 			}
-			auto nMarkerIndent = bStartsLine || bClassArguments ? nLineIndent : nContinuation;
+			// A line the statement continues on already stands at its continuation level, and
+			// behind a leading parenthesis's closing marker at the statement's, which has none:
+			// ')' over '.f_Call' over '('.
+			auto nMarkerIndent = bStartsLine || bClassArguments || iLineFirst != _iFirst ? nLineIndent : nContinuation;
 			++iScope;
 			if (!fp_LayoutGroup(Scopes[iScope - 1], nMarkerIndent, !bStartsLine))
 				continue;

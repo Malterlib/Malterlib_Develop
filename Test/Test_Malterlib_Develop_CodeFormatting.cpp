@@ -1861,6 +1861,17 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A call behind a leading parenthesis's closing marker opens at the member's level,
+					// which is the statement's.
+					fg_ExpectFormat
+						(
+							"LeadingParenMemberCall"
+							, "void f()\n{\n\t(\n\t\tg_D / [A]() mutable -> TCFuture<CB>\n\t\t{\n\t\t\tco_return {};\n\t\t}\n\t)\n\t.f_OnResultSet\n\t\t(\n"
+							"\t\t\t[Promise](TCAsyncResult<CB> &&_Result)\n\t\t\t{\n\t\t\t\tPromise.f_SetResult(fg_Move(_Result));\n\t\t\t}\n\t\t);\n}\n"
+							, "void f()\n{\n\t(\n\t\tg_D / [A]() mutable -> TCFuture<CB>\n\t\t{\n\t\t\tco_return {};\n\t\t}\n\t)\n\t.f_OnResultSet\n\t(\n"
+							"\t\t[Promise](TCAsyncResult<CB> &&_Result)\n\t\t{\n\t\t\tPromise.f_SetResult(fg_Move(_Result));\n\t\t}\n\t);\n}\n"
+						)
+					;
 					// A line comment ends the line it stands on, so what stands behind it is a
 					// line of its own, measured as one: a base clause under a commented head
 					// stays closed where it fits, and comes back closed where it was opened.
