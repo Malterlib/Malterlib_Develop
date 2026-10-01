@@ -2383,6 +2383,14 @@ namespace
 							, "namespace NA\n{\n\ttemplate <typename t_C>\n\tauto " + OperatorClass + "\n\t\t::operator + (TCFloat const &_Value) const\n\t\t-> TCFloat\n\t{\n\t}\n}\n"
 						)
 					;
+					// So does one whose rest only fits once its exception specification takes a line of its own.
+					fg_ExpectFormat
+						(
+							"OperatorGivesAtScopeAndSpecification"
+							, "namespace NA\n{\n\tbool " + OperatorClass + "::operator == (" + OperatorClass + " &_R) const noexcept\n\t{\n\t}\n}\n"
+							, "namespace NA\n{\n\tbool " + OperatorClass + "\n\t\t::operator == (" + OperatorClass + " &_R) const\n\t\tnoexcept\n\t{\n\t}\n}\n"
+						)
+					;
 					// A class's head cut by a conditional keeps its lines at the class's level.
 					fg_ExpectFormat("ClassHeadAcrossConditional", "class\n#ifdef DFoo\n\talignas(16)\n#endif\n\tCFoo\n{\n};\n", "class\n#ifdef DFoo\nalignas(16)\n#endif\nCFoo\n{\n};\n");
 					// A statement that fits only without its terminator is split, also where the scope

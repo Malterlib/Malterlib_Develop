@@ -7335,6 +7335,11 @@ namespace
 			auto iInner = fp_NextCode(iParameters);
 			bNameFits = iInner < 0 || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iInner)], ")");
 		}
+		// Where what follows the '::' does not fit either, the '::' is the first of the line's
+		// breaks and the arguments stay closed: 'TCFoo<...>' over '::operator == (...) const'
+		// over 'noexcept'.
+		umint iQualifiedBreak = 0;
+		umint iQualifiedScope = 0;
 		for (auto iChild : Node.m_Children)
 		{
 			auto const &Child = Nodes[iChild];
@@ -7348,8 +7353,25 @@ namespace
 			if (iColons < 0 || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iColons)], "::"))
 				continue;
 
-			if (!fp_FitsInline(_iFirst, Child.m_iLastToken, _iIndent) || !fp_FitsInline(umint(iColons), _iLast, nContinuation))
+			if (!fp_FitsInline(_iFirst, Child.m_iLastToken, _iIndent))
 				continue;
+
+			if (!fp_FitsInline(umint(iColons), _iLast, nContinuation))
+			{
+				// Only the name itself follows: a further qualification or template argument list
+				// is where the line gives instead.
+				bool bName = iParameters <= _iLast;
+				for (auto i = umint(iColons) + 1; bName && i < iParameters; ++i)
+					bName = m_TokenDepth[i] == m_TokenDepth[umint(iColons)] && !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "::");
+
+				if (bName)
+				{
+					iQualifiedBreak = umint(iColons);
+					iQualifiedScope = iChild;
+				}
+
+				break;
+			}
 
 			fp_MarkInline(_iFirst, Child.m_iLastToken);
 			fp_BreakBefore(umint(iColons), nContinuation);
@@ -7485,6 +7507,36 @@ namespace
 			{
 				fg_Swap(Breaks[j - 1], Breaks[j]);
 				fg_Swap(Introducer[j - 1], Introducer[j]);
+			}
+		}
+
+		// The '::' is only taken where the line up to its next break does not fit without it.
+		if (iQualifiedBreak)
+		{
+			umint iNext = 0;
+			while (iNext < Breaks.f_GetLen() && Breaks[iNext] <= iQualifiedBreak)
+				++iNext;
+
+			auto iHeadLast = iNext < Breaks.f_GetLen() ? fp_PreviousCode(Breaks[iNext]) : aint(_iLast);
+			if (iHeadLast >= 0 && !fp_FitsInline(_iFirst, umint(iHeadLast), _iIndent))
+			{
+				Breaks.f_Insert(iQualifiedBreak);
+				Introducer.f_Insert(false);
+				for (umint j = Breaks.f_GetLen() - 1; j > iNext; --j)
+				{
+					fg_Swap(Breaks[j - 1], Breaks[j]);
+					fg_Swap(Introducer[j - 1], Introducer[j]);
+				}
+
+				for (umint i = 0; i < Scopes.f_GetLen(); ++i)
+				{
+					if (Scopes[i] == iQualifiedScope)
+					{
+						Scopes.f_Remove(i);
+
+						break;
+					}
+				}
 			}
 		}
 
