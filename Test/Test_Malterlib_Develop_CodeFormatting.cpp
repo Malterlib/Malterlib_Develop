@@ -2416,6 +2416,14 @@ namespace
 							, "auto g_A = _o\n\t{\n\t\t\"Description\"_o= \"a\\n\"\n\t\t\t\"b\\n\"\n\t\t\t+ Warning\n\t\t, \"c\"\n\t\t\"d\"\n\t}\n;\n"
 						)
 					;
+					// Without an operator behind them, a DSL key's continued strings stand at the key's level.
+					fg_ExpectFormat
+						(
+							"ContinuedKeyString"
+							, "auto g_A = _o\n\t{\n\t\t\"Description\"_o= \"a\\n\"\n\t\t\t\"b\\n\"\n\t\t, \"Other\"_o= \"c\\n\"\n\t\t\"d\\n\"\n\t}\n;\n"
+							, "auto g_A = _o\n\t{\n\t\t\"Description\"_o= \"a\\n\"\n\t\t\"b\\n\"\n\t\t, \"Other\"_o= \"c\\n\"\n\t\t\"d\\n\"\n\t}\n;\n"
+						)
+					;
 					// A comment behind a list's comma describes the element in front of it, and the
 					// comma goes past it to the element behind.
 					fg_ExpectFormat

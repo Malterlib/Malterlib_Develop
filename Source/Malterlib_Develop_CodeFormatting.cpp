@@ -1254,9 +1254,9 @@ namespace
 		return bContinues ? iPrevious : aint(-1);
 	}
 
-	// Whether the string the token continues is a value given behind an '=', a DSL key's
-	// included, or a macro's name on its line: '"Key"_o= "a"' over '"b"', 'DPrefix " a"'
-	// over '"b"'. Such a continuation stands one level in from that line.
+	// Whether the string the token continues is a value given behind an '=' or a macro's name
+	// on its line: 'Value = "a"' over '"b"', 'DPrefix " a"' over '"b"'. Such a continuation
+	// stands one level in from that line.
 	bool CFormattingAnalyzer::fp_ContinuesValue(umint _iContinued) const
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
@@ -1288,8 +1288,31 @@ namespace
 			return false;
 
 		auto const &Lead = Tokens[umint(iLead)];
+		if (Lead.m_Kind == ECodeTokenKind::mc_Identifier)
+			return true;
 
-		return m_Tokens.f_IsText(Lead, "=") || Lead.m_Kind == ECodeTokenKind::mc_Identifier;
+		if (!m_Tokens.f_IsText(Lead, "="))
+			return false;
+
+		// A DSL key's strings stand at the key's level, unless an operator continues the value
+		// behind them: '"Key"_o= "a"' over '"b"' over '+ Warning' moves '"b"' in.
+		auto iKey = fp_PreviousCode(umint(iLead));
+		if (iKey < 0 || !m_Tokens.f_HasRole(Tokens[umint(iKey)], ECodeNameRole::mc_DSLMarker))
+			return true;
+
+		auto iLast = _iContinued;
+		for (auto iNext = fp_NextCode(iLast); iNext >= 0 && Tokens[umint(iNext)].m_Kind == ECodeTokenKind::mc_StringLiteral; iNext = fp_NextCode(iLast))
+			iLast = umint(iNext);
+
+		auto iAfter = fp_NextCode(iLast);
+		if (iAfter < 0)
+			return false;
+
+		auto const &After = Tokens[umint(iAfter)];
+
+		return !(m_Tokens.f_IsText(After, ",") || m_Tokens.f_IsText(After, "}") || m_Tokens.f_IsText(After, ")") || m_Tokens.f_IsText(After, "]")
+			|| m_Tokens.f_IsText(After, ";"))
+		;
 	}
 
 	bool CFormattingAnalyzer::fp_EndsOperand(aint _iToken) const
