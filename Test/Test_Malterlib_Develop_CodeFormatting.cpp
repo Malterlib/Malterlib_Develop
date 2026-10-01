@@ -2327,8 +2327,8 @@ namespace
 					fg_ExpectFormat
 						(
 							"AlignasAndDecltype"
-							, "struct CA\n{\n\talignas(CData)uint8 m_Space[sizeof(CData)];\n\tdecltype(CFoo())m_Value;\n};\n"
-							, "struct CA\n{\n\talignas(CData) uint8 m_Space[sizeof(CData)];\n\tdecltype(CFoo()) m_Value;\n};\n"
+							, "struct CA\n{\n\talignas(CData)uint8 m_Space[sizeof(CData)];\n\tdecltype(CFoo())m_Value;\n\tDMibCache(TCFloat)Cache;\n};\n"
+							, "struct CA\n{\n\talignas(CData) uint8 m_Space[sizeof(CData)];\n\tdecltype(CFoo()) m_Value;\n\tDMibCache(TCFloat) Cache;\n};\n"
 						)
 					;
 					// An exception specification too long for the head's line takes a line of its own

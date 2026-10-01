@@ -2980,8 +2980,14 @@ namespace NMib::NDevelop
 						"new", "alignas", "decltype"
 					}
 				;
+				// A macro's argument list with a name behind it spells a type or a prefix for
+				// what follows: 'DMibFloatConstexprCache(TCFloat) Cache'.
 				auto iKeyword = fg_PreviousCode(_Tokens, _Structure.f_GetNodes()[umint(iNode)].m_iFirstToken);
-				if (iKeyword >= 0 && fg_IsAnyText(_Tokens, Tokens[umint(iKeyword)], c_pApart) && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))
+				bool bApart = iKeyword >= 0
+					&& (fg_IsAnyText(_Tokens, Tokens[umint(iKeyword)], c_pApart)
+						|| (Right.m_Kind == ECodeTokenKind::mc_Identifier && _Tokens.f_HasRole(Tokens[umint(iKeyword)], ECodeNameRole::mc_Macro)))
+				;
+				if (bApart && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))
 					return ECodeSpacing::mc_Space;
 			}
 		}
