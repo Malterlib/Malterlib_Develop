@@ -2383,6 +2383,24 @@ namespace
 							, "namespace NA\n{\n\ttemplate <typename t_C>\n\tauto " + OperatorClass + "\n\t\t::operator + (TCFloat const &_Value) const\n\t\t-> TCFloat\n\t{\n\t}\n}\n"
 						)
 					;
+					// One that fits in front of its exception specification gives there instead.
+					fg_ExpectFormat
+						(
+							"OperatorGivesAtSpecification"
+							, "namespace NA\n{\n\tauto TCOptional<t_CType, t_MoveSemantics>::operator == (TCOptional<tf_CType, tf_MoveSemantics> const &_Right) const "
+							"noexcept(noexcept(fg_GetType<t_CType const &>() == fg_GetType<tf_CType const &>())) -> bool\n\t{\n\t}\n}\n"
+							, "namespace NA\n{\n\tauto TCOptional<t_CType, t_MoveSemantics>::operator == (TCOptional<tf_CType, tf_MoveSemantics> const &_Right) const\n"
+							"\t\tnoexcept(noexcept(fg_GetType<t_CType const &>() == fg_GetType<tf_CType const &>()))\n\t\t-> bool\n\t{\n\t}\n}\n"
+						)
+					;
+					// The '=' of 'operator =' names the function and gives no value.
+					fg_ExpectFormat
+						(
+							"AssignOperatorGivesAtScope"
+							, "namespace NA\n{\n\tconstexpr auto " + OperatorClass + "::operator = (t_CImplicitFloat const &_Value) noexcept -> TCFloat &\n\t{\n\t}\n}\n"
+							, "namespace NA\n{\n\tconstexpr auto " + OperatorClass + "\n\t\t::operator = (t_CImplicitFloat const &_Value) noexcept\n\t\t-> TCFloat &\n\t{\n\t}\n}\n"
+						)
+					;
 					// So does one whose rest only fits once its exception specification takes a line of its own.
 					fg_ExpectFormat
 						(

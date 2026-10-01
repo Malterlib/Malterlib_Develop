@@ -7254,8 +7254,15 @@ namespace
 		umint iAssign = 0;
 		for (umint i = _iFirst; (bStatement || bElement) && i <= _iLast && !iAssign; ++i)
 		{
-			if (m_TokenDepth[i] == m_TokenDepth[_iFirst] && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "="))
-				iAssign = i;
+			if (m_TokenDepth[i] != m_TokenDepth[_iFirst] || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "="))
+				continue;
+
+			// The '=' of 'operator =' is the name of the function it declares.
+			auto iBefore = fp_PreviousCode(i);
+			if (iBefore >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBefore)], "operator"))
+				continue;
+
+			iAssign = i;
 		}
 
 		// Behind a declaration's parameter list the '=' makes it pure, defaulted or deleted,
@@ -7397,8 +7404,7 @@ namespace
 			auto iInner = fp_NextCode(iParameters);
 			bNameFits = iInner < 0 || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iInner)], ")");
 		}
-		// Where what follows the '::' does not fit either, the '::' is the first of the line's
-		// breaks and the arguments stay closed: 'TCFoo<...>' over '::operator == (...) const'
+		// The arguments stay closed where the '::' gives: 'TCFoo<...>' over '::operator == (...) const'
 		// over 'noexcept'.
 		umint iQualifiedBreak = 0;
 		umint iQualifiedScope = 0;
@@ -7418,22 +7424,24 @@ namespace
 			if (!fp_FitsInline(_iFirst, Child.m_iLastToken, _iIndent))
 				continue;
 
-			if (!fp_FitsInline(umint(iColons), _iLast, nContinuation))
-			{
-				// Only the name itself follows: a further qualification or template argument list
-				// is where the line gives instead.
-				bool bName = iParameters <= _iLast;
-				for (auto i = umint(iColons) + 1; bName && i < iParameters; ++i)
-					bName = m_TokenDepth[i] == m_TokenDepth[umint(iColons)] && !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "::");
+			// Where only the name itself follows, the '::' is one of the line's breaks, so an
+			// exception specification or a trailing return type behind it gives first.
+			bool bName = iParameters <= _iLast;
+			for (auto i = umint(iColons) + 1; bName && i < iParameters; ++i)
+				bName = m_TokenDepth[i] == m_TokenDepth[umint(iColons)] && !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "::");
 
-				if (bName)
-				{
-					iQualifiedBreak = umint(iColons);
-					iQualifiedScope = iChild;
-				}
+			if (bName)
+			{
+				iQualifiedBreak = umint(iColons);
+				iQualifiedScope = iChild;
 
 				break;
 			}
+
+			// A further qualification or template argument list behind it is where the line gives
+			// instead.
+			if (!fp_FitsInline(umint(iColons), _iLast, nContinuation))
+				break;
 
 			fp_MarkInline(_iFirst, Child.m_iLastToken);
 			fp_BreakBefore(umint(iColons), nContinuation);
