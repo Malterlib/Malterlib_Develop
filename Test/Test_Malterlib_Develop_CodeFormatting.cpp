@@ -1861,6 +1861,14 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A name qualified from the global scope stands apart from the keyword in front of it.
+					fg_ExpectFormat
+						(
+							"GlobalScopeBehindKeyword"
+							, "namespace std\n{\n\tusing::size_t;\n\tusing namespace::NA;\n\tint f()\n\t{\n\t\treturn::fg_A() + NA::fg_B();\n\t}\n}\n"
+							, "namespace std\n{\n\tusing ::size_t;\n\tusing namespace ::NA;\n\tint f()\n\t{\n\t\treturn ::fg_A() + NA::fg_B();\n\t}\n}\n"
+						)
+					;
 					// The brackets of 'operator new[]' name the function and capture nothing.
 					fg_ExpectFormat
 						(

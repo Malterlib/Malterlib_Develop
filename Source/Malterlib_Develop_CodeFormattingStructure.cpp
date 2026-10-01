@@ -3055,6 +3055,20 @@ namespace NMib::NDevelop
 			}
 		}
 
+		// A name qualified from the global scope behind a keyword stands apart from the keyword:
+		// 'using ::size_t', 'return ::fg_Get()', 'class CFoo : public ::NA::CBase'.
+		if (fRight("::") && Left.m_Kind == ECodeTokenKind::mc_Identifier)
+		{
+			constexpr ch8 const *c_pDeclarationKeywords[] =
+				{
+					"using", "typename", "namespace", "const", "volatile", "static", "constexpr", "consteval", "constinit", "inline", "virtual"
+					, "friend", "extern", "struct", "class", "enum", "union", "mutable", "thread_local", "public", "private", "protected"
+				}
+			;
+			if (fg_IsAnyText(_Tokens, Left, gc_pExpressionKeywords) || fg_IsAnyText(_Tokens, Left, c_pDeclarationKeywords))
+				return ECodeSpacing::mc_Space;
+		}
+
 		// Member access and qualification never take spaces.
 		if (fLeft(".") || fLeft("::") || fRight(".") || fRight("::"))
 			return ECodeSpacing::mc_None;
