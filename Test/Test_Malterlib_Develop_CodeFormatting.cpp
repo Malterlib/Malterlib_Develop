@@ -2371,6 +2371,8 @@ namespace
 							"\t// malterlib-format off\n\tFCGI_PARAMS      x      x\n\t// malterlib-format on\n}\n"
 						)
 					;
+					// A class's head cut by a conditional keeps its lines at the class's level.
+					fg_ExpectFormat("ClassHeadAcrossConditional", "class\n#ifdef DFoo\n\talignas(16)\n#endif\n\tCFoo\n{\n};\n", "class\n#ifdef DFoo\nalignas(16)\n#endif\nCFoo\n{\n};\n");
 					// A statement that fits only without its terminator is split, also where the scope
 					// it opens is the call behind a member access, so the terminator never takes a line
 					// of its own behind a line that was not split.

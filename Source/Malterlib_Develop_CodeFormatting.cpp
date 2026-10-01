@@ -7984,6 +7984,11 @@ namespace
 				bCutAtMember |= m_Tokens.f_IsText(Tokens[iCut], ".") || m_Tokens.f_IsText(Tokens[iCut], "->");
 
 			auto nContinuation = _bIndentContinuations ? _iIndent + nTab : _iIndent;
+			// A class's head is no expression continued: the words naming it stand at its own
+			// level, the directives between them included, and only its base clause one in.
+			auto const &RangeKey = Tokens[fp_SkipTemplateHeader(_iFirst)];
+			bool bClassHead = m_Tokens.f_IsText(RangeKey, "class") || m_Tokens.f_IsText(RangeKey, "struct") || m_Tokens.f_IsText(RangeKey, "union");
+
 			for (umint iCut = 0; iCut <= Cuts.f_GetLen(); ++iCut)
 			{
 				auto iStart = iCut ? Cuts[iCut - 1] : _iFirst;
@@ -8005,6 +8010,9 @@ namespace
 					bSplitMembers |= m_TokenDepth[iMember] == nLevel && (m_Tokens.f_IsText(Tokens[iMember], ".") || m_Tokens.f_IsText(Tokens[iMember], "->"));
 
 				auto nSegmentIndent = iCut ? nContinuation : _iIndent;
+				if (iCut && bClassHead && !m_Tokens.f_IsText(Tokens[iStart], ":") && !m_Tokens.f_IsText(Tokens[iStart], ","))
+					nSegmentIndent = _iIndent;
+
 				// A string continued as a value stands one level in: 'DPrefix " a"' over '"b"'.
 				if (iCut && nContinuation == _iIndent && fp_ContinuesValue(iStart))
 					nSegmentIndent = _iIndent + nTab;
