@@ -2279,10 +2279,11 @@ namespace NMib::NDevelop
 		if (iBefore < 0)
 			return true;
 
-		// The brackets of 'delete []' say what is deleted and capture nothing.
+		// The brackets of 'delete []' say what is deleted and capture nothing, and those of
+		// 'operator new[]' name the function.
 		auto const &Before = Tokens[umint(iBefore)];
 		if (Before.m_Kind == ECodeTokenKind::mc_Identifier)
-			return fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords) && !_Tokens.f_IsText(Before, "delete");
+			return fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords) && !_Tokens.f_IsText(Before, "delete") && !_Tokens.f_IsText(Before, "new");
 
 		if (Before.m_Kind != ECodeTokenKind::mc_Punctuator)
 			return false;

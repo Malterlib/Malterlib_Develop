@@ -1861,6 +1861,14 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// The brackets of 'operator new[]' name the function and capture nothing.
+					fg_ExpectFormat
+						(
+							"OperatorNewArray"
+							, "void *operator new[](std::size_t _Size)\n\t{\n\t\treturn operator new(_Size);\n\t}\n"
+							, "void *operator new[] (std::size_t _Size)\n{\n\treturn operator new (_Size);\n}\n"
+						)
+					;
 					// A statement in a conditional follows the depth of the one in front of it in the same branch, and the
 					// comment written above it moves with it; one written elsewhere keeps its place.
 					fg_ExpectFormat
