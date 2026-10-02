@@ -16,6 +16,7 @@ namespace
 
 	aint fg_PreviousCode(CCodeTokenStream const &_Tokens, umint _iToken);
 	bool fg_IsDSLMarker(CCodeTokenStream const &_Tokens, CCodeToken const &_Token);
+	bool fg_IsCast(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose);
 
 	bool fg_IsSignificant(ECodeTokenKind _Kind)
 	{
@@ -1998,9 +1999,10 @@ namespace
 		auto iBeforeOpen = fg_PreviousCode(_Tokens, umint(iOpen));
 		if (iBeforeOpen >= 0)
 		{
+			// A cast converts what another cast yields: '(umint)(void *)*pBuffer'.
 			auto const &BeforeOpen = Tokens[umint(iBeforeOpen)];
 			bool bOperand = BeforeOpen.m_Kind == ECodeTokenKind::mc_Identifier
-				|| _Tokens.f_IsText(BeforeOpen, ")")
+				|| (_Tokens.f_IsText(BeforeOpen, ")") && !fg_IsCast(_Tokens, _Structure, umint(iBeforeOpen)))
 				|| _Tokens.f_IsText(BeforeOpen, "]")
 				|| (_Structure.f_IsAngleBracket(umint(iBeforeOpen)) && _Tokens.f_IsText(BeforeOpen, ">"))
 			;
@@ -3451,6 +3453,14 @@ namespace NMib::NDevelop
 			}
 
 			if (!bOperand)
+				return ECodeSpacing::mc_None;
+		}
+
+		// Behind a cast a '*' or '&' is unary and hugs its operand: '(void *)*pJumpBuffer'.
+		if (fLeft("*") || fLeft("&"))
+		{
+			auto iBefore = fg_PreviousCode(_Tokens, _iLeft);
+			if (iBefore >= 0 && _Tokens.f_IsText(Tokens[umint(iBefore)], ")") && fg_IsCast(_Tokens, _Structure, umint(iBefore)))
 				return ECodeSpacing::mc_None;
 		}
 

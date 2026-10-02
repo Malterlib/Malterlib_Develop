@@ -1861,6 +1861,15 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A '*' or '&' behind a cast is unary, behind a cast behind another cast as well; behind a call it
+					// is the binary operator.
+					fg_ExpectFormat
+						(
+							"UnaryBehindCast"
+							, "void f()\n{\n\ta = (umint)(void *) * pBuffer;\n\tb = (uint64)(umint) & Value;\n\tc = (void *) *pB;\n\td = f(a)(b) * c;\n}\n"
+							, "void f()\n{\n\ta = (umint)(void *)*pBuffer;\n\tb = (uint64)(umint)&Value;\n\tc = (void *)*pB;\n\td = f(a)(b) * c;\n}\n"
+						)
+					;
 					// A block comment ending its line is a line comment, and one that makes the line it trails too long moves
 					// above it; one documenting what it trails stays, and so does one behind code too long by itself.
 					CStr CommentWords;
