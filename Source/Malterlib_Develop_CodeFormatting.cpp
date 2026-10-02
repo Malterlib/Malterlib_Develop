@@ -7380,6 +7380,7 @@ namespace
 			iAssign = 0;
 
 		TCVector<umint> Scopes;
+		TCVector<umint> Placements;
 		for (umint iPass = 0; iPass < 2; ++iPass)
 		{
 			for (auto iChild : Node.m_Children)
@@ -7411,6 +7412,11 @@ namespace
 				;
 				if (bPlacement && fp_FitsInline(umint(iBeforeScope), Child.m_iLastToken, _iIndent))
 					fp_MarkInline(umint(iBeforeScope), Child.m_iLastToken);
+
+				// The type a placement constructs starts a line of its own before anything in it
+				// opens: 'new(pMemory)' over 'TCFoo<t_C>(_Params)'.
+				if (bPlacement && iPass && Child.m_iLastToken < _iLast)
+					Placements.f_Insert(Child.m_iLastToken);
 
 				if (fp_IsCastGroup(iChild) || bPlacement)
 					continue;
@@ -7651,6 +7657,32 @@ namespace
 
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto nLevel = m_TokenDepth[_iFirst];
+		for (auto iPlacement : Placements)
+		{
+			auto iType = fp_NextCode(iPlacement);
+			if (iType < 0 || umint(iType) > _iLast)
+				continue;
+
+			// Only where the type does not fit behind the placement up to its own argument list,
+			// which opens instead otherwise.
+			umint iTypeLast = _iLast;
+			for (auto iScopeNode : Scopes)
+			{
+				if (Nodes[iScopeNode].m_iFirstToken <= umint(iType))
+					continue;
+
+				auto iHead = fp_PreviousCode(Nodes[iScopeNode].m_iFirstToken);
+				if (iHead >= 0)
+					iTypeLast = fg_Min(iTypeLast, umint(iHead));
+			}
+
+			if (fp_FitsInline(_iFirst, iTypeLast, _iIndent))
+				continue;
+
+			Breaks.f_Insert(umint(iType));
+			Introducer.f_Insert(false);
+		}
+
 		// So may an exception specification behind a parameter list, which gives its line
 		// before the list opens: 'fs_Call(t_C &&_This)' over 'noexcept(noexcept(...))'.
 		for (umint i = _iFirst; i <= _iLast; ++i)

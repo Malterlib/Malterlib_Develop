@@ -1861,6 +1861,19 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A placement new gives in front of the type it constructs where the type does not fit behind it,
+					// rather than opening the type's template arguments.
+					CStr PlacementArgument;
+					for (umint i = 0; i < 150; ++i)
+						PlacementArgument += "W";
+
+					fg_ExpectFormat
+						(
+							"PlacementGivesAtType"
+							, "void f()\n{\n\tpA = new(fg_Alloc(" + PlacementArgument + ")) TCFooArena<t_CParams>(NumaNode, this, m_Magic);\n}\n"
+							, "void f()\n{\n\tpA = new(fg_Alloc(" + PlacementArgument + "))\n\t\tTCFooArena<t_CParams>(NumaNode, this, m_Magic)\n\t;\n}\n"
+						)
+					;
 					// A name qualified from the global scope stands apart from the keyword in front of it.
 					fg_ExpectFormat
 						(
