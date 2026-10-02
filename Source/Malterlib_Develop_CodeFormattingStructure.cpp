@@ -1504,8 +1504,10 @@ namespace
 		while (i >= 0 && umint(i) < Group.m_iLastToken && Tokens[umint(i)].m_Kind == ECodeTokenKind::mc_Identifier && _Tokens.f_HasRole(Tokens[umint(i)], ECodeNameRole::mc_Macro))
 			i = fg_NextCode(_Tokens, umint(i));
 
+		// A block pointer, Clang's extension, is declared with '^' where a pointer to function has '*':
+		// 'void (^fReport)(void *_pMemory)'.
 		bool bDeclarator = false;
-		while (i >= 0 && umint(i) < Group.m_iLastToken && fg_IsDeclaratorText(_Tokens, Tokens[umint(i)]))
+		while (i >= 0 && umint(i) < Group.m_iLastToken && (fg_IsDeclaratorText(_Tokens, Tokens[umint(i)]) || _Tokens.f_IsText(Tokens[umint(i)], "^")))
 		{
 			bDeclarator = true;
 			i = fg_NextCode(_Tokens, umint(i));
@@ -2944,6 +2946,21 @@ namespace NMib::NDevelop
 					return ECodeSpacing::mc_Space;
 			}
 
+			// A block pointer's declarator stands apart from the type in front of it, which a '^' opening a
+			// parenthesis, never an operand of the operator, says: 'void (^fReport)(void *_pMemory)'.
+			if (Left.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Left, gc_pExpressionKeywords))
+			{
+				auto iCaret = fg_NextCode(_Tokens, _iRight);
+				auto iDeclarator = _Structure.f_FindNodeOpeningAt(_iRight);
+				bool bBlock = iCaret >= 0
+					&& _Tokens.f_IsText(Tokens[umint(iCaret)], "^")
+					&& iDeclarator < _Structure.f_GetNodes().f_GetLen()
+					&& fg_IsFunctionPointerDeclarator(_Tokens, _Structure, iDeclarator)
+				;
+				if (bBlock)
+					return ECodeSpacing::mc_Space;
+			}
+
 			// A pointer return type's declarator hugs the pointer to function's declarator behind it:
 			// 'void *(DMibCrossmoduleAPI *m_fAlloc)(umint _Size)'.
 			if (fg_IsDeclaratorText(_Tokens, Left) && fg_IsDeclaratorToken(_Tokens, _Structure, _iLeft))
@@ -3453,6 +3470,15 @@ namespace NMib::NDevelop
 			}
 
 			if (!bOperand)
+				return ECodeSpacing::mc_None;
+		}
+
+		// A block pointer's '^' hugs what it declares: '(^fReport)'.
+		if (fLeft("^"))
+		{
+			auto iOpen = fg_PreviousCode(_Tokens, _iLeft);
+			auto iDeclarator = iOpen >= 0 ? _Structure.f_FindNodeOpeningAt(umint(iOpen)) : _Structure.f_GetNodes().f_GetLen();
+			if (iDeclarator < _Structure.f_GetNodes().f_GetLen() && fg_IsFunctionPointerDeclarator(_Tokens, _Structure, iDeclarator))
 				return ECodeSpacing::mc_None;
 		}
 

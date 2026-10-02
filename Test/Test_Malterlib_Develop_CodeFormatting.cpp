@@ -1861,6 +1861,14 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A block pointer's declarator is spelled like a pointer to function's, and '^' anywhere else is the operator.
+					fg_ExpectFormat
+						(
+							"BlockPointerDeclarator"
+							, "void f(void(^ fReport)(void *_pMemory));\nvoid g()\n{\n\ta = b ^ c;\n\td = (b) ^ c;\n}\n"
+							, "void f(void (^fReport)(void *_pMemory));\nvoid g()\n{\n\ta = b ^ c;\n\td = (b) ^ c;\n}\n"
+						)
+					;
 					// A '*' or '&' behind a cast is unary, behind a cast behind another cast as well; behind a call it
 					// is the binary operator.
 					fg_ExpectFormat
