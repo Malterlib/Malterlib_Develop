@@ -1013,7 +1013,10 @@ namespace NMib::NDevelop
 						&& i + 1 < mp_Significant.f_GetLen()
 						&& mp_pTokens->f_IsText(Tokens[mp_Significant[i + 1]], "[")
 					;
-					if (Next.m_Kind == ECodeTokenKind::mc_Punctuator && !mp_pTokens->f_IsText(Next, "{") && !mp_pTokens->f_IsText(Next, "}") && !bAttribute)
+					// A '~' is only ever unary, so behind a body it continues no expression and starts the
+					// next declaration, a destructor: 'CData() {}' over '~CData() {}'.
+					bool bUnary = mp_pTokens->f_IsText(Next, "~");
+					if (Next.m_Kind == ECodeTokenKind::mc_Punctuator && !mp_pTokens->f_IsText(Next, "{") && !mp_pTokens->f_IsText(Next, "}") && !bAttribute && !bUnary)
 						continue;
 				}
 

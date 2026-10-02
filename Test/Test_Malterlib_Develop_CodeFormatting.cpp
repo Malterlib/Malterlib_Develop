@@ -1861,6 +1861,14 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A destructor behind another function's body is a declaration of its own.
+					fg_ExpectFormat
+						(
+							"DestructorBehindBody"
+							, "struct CData\n{\n\tCData() {m_Valid = true;}\n\t~CData() {m_Valid = false;}\n};\n"
+							, "struct CData\n{\n\tCData()\n\t{\n\t\tm_Valid = true;\n\t}\n\n\t~CData()\n\t{\n\t\tm_Valid = false;\n\t}\n};\n"
+						)
+					;
 					// A return type that 'typename' introduces moves behind the parameter list like any other, also
 					// from a head written across lines; one with a gap nothing settles stays.
 					CStr AggregateType = "TCAVLTreeAggregate<t_pLinkMember, t_CCompare, t_CAllocator, t_COverrideNodeType>";
