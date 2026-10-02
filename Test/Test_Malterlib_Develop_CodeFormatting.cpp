@@ -1861,6 +1861,14 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// Behind an operator or a compound assignment no declaration starts, so '*' and '&' are binary there.
+					fg_ExpectFormat
+						(
+							"BinaryBehindOperator"
+							, "void f()\n{\n\tm_Sum1 += m_Sum0 - m_Count*(_Out + gc_Offset);\n\tx += y&z;\n\tg(CFoo *p, CBar &q);\n}\n"
+							, "void f()\n{\n\tm_Sum1 += m_Sum0 - m_Count * (_Out + gc_Offset);\n\tx += y & z;\n\tg(CFoo *p, CBar &q);\n}\n"
+						)
+					;
 					// A function type's pointer return type hugs its parameter list as it hugs a pointer to function's
 					// declarator; a conversion operator's name and an expression keep their spelling.
 					fg_ExpectFormat

@@ -2186,6 +2186,30 @@ namespace
 		if (Before.m_Kind == ECodeTokenKind::mc_Number || Before.m_Kind == ECodeTokenKind::mc_StringLiteral || Before.m_Kind == ECodeTokenKind::mc_CharLiteral)
 			return true;
 
+		// Nor behind an operator, which a declaration never starts behind: 'Sum - m_Count*(a + b)',
+		// 'Value += a & b'. The left operand's qualified name is stepped over to find what stands in front.
+		if (Before.m_Kind == ECodeTokenKind::mc_Identifier)
+		{
+			auto iLead = fg_PreviousCode(_Tokens, umint(iBefore));
+			while (iLead >= 0 && _Tokens.f_IsText(Tokens[umint(iLead)], "::"))
+			{
+				auto iScope = fg_PreviousCode(_Tokens, umint(iLead));
+				if (iScope < 0 || Tokens[umint(iScope)].m_Kind != ECodeTokenKind::mc_Identifier)
+					break;
+
+				iLead = fg_PreviousCode(_Tokens, umint(iScope));
+			}
+
+			constexpr ch8 const *c_pOperators[] =
+				{
+					"+", "-", "/", "%", "|", "^", "<<", ">>", "==", "!=", "<=", ">=", "<=>", "&&", "||", "?"
+					, "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
+				}
+			;
+			if (iLead >= 0 && !_Structure.f_IsAngleBracket(umint(iLead)) && fg_IsAnyText(_Tokens, Tokens[umint(iLead)], c_pOperators))
+				return true;
+		}
+
 		// Nor does a declaration stand in front of what only an operand starts with: 'Value & ~Mask'.
 		bool bOperandAfter = _Tokens.f_IsText(After, "~")
 			|| _Tokens.f_IsText(After, "!")
