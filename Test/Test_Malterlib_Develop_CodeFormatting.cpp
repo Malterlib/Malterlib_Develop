@@ -1861,6 +1861,15 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A declaration's head cut by a comment keeps its name at the statement's level, the parameter list
+					// one level in; a cut in front of the list leaves the list where it is.
+					fg_ExpectFormat
+						(
+							"DeclarationHeadCut"
+							, "bool // Comment\n\tCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n{\n}\n"
+							, "bool // Comment\nCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n{\n}\n"
+						)
+					;
 					// Behind an operator or a compound assignment no declaration starts, so '*' and '&' are binary there.
 					fg_ExpectFormat
 						(

@@ -8483,6 +8483,22 @@ namespace
 				if (iCut && bClassHead && !m_Tokens.f_IsText(Tokens[iStart], ":") && !m_Tokens.f_IsText(Tokens[iStart], ","))
 					nSegmentIndent = _iIndent;
 
+				// A declaration's head is no expression continued either: the words up to its name's parameter
+				// list stand at the statement's level, the list one level in from them.
+				// 'bool // Comment' over 'CFoo::f_Process' over '('.
+				bool bDeclarationHead = iCut && _bIndentContinuations && m_iSplitFirstParen && iStart < m_iSplitFirstParen && iEnd >= m_iSplitFirstParen;
+				if (bDeclarationHead)
+				{
+					auto iList = m_Structure.f_FindNodeOpeningAt(m_iSplitFirstParen);
+					bDeclarationHead = iList < Nodes.f_GetLen() && fg_ClosesParameterList(m_Tokens, m_Structure, Nodes[iList].m_iLastToken);
+				}
+
+				for (auto i = iStart; bDeclarationHead && i < m_iSplitFirstParen; ++i)
+					bDeclarationHead = m_TokenDepth[i] != nLevel || !m_Tokens.f_IsText(Tokens[i], "=");
+
+				if (bDeclarationHead)
+					nSegmentIndent = _iIndent;
+
 				// A string continued as a value stands one level in: 'DPrefix " a"' over '"b"'.
 				if (iCut && nContinuation == _iIndent && fp_ContinuesValue(iStart))
 					nSegmentIndent = _iIndent + nTab;
@@ -8497,7 +8513,7 @@ namespace
 				if (!iCut && _bIndentContinuations && bCutAtOperator && !bSplitSegment && fp_BreakAtAssign(iStart, Cuts[0], _iIndent, nContinuation))
 					continue;
 
-				fp_LayoutRange(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iCut, _bIndentContinuations && !iCut, bSplitSegment);
+				fp_LayoutRange(_iNode, iStart, iEnd, nSegmentIndent, _bClause && !iCut, (_bIndentContinuations && !iCut) || bDeclarationHead, bSplitSegment);
 			}
 
 			return true;
