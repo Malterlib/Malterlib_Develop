@@ -8512,6 +8512,57 @@ namespace
 			return false;
 		}
 
+		// A class head too long for its line gives at its base clause first: the clause's colon and
+		// each base's comma start a line one level in, and only a base still too long opens.
+		// 'class CFoo' over ': public CBar' over ', public CBaz'.
+		{
+			auto const &Tokens = m_Tokens.f_GetTokens();
+			auto const &Key = Tokens[fp_SkipTemplateHeader(_iFirst)];
+			bool bClassHead = m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "union");
+			auto nLevel = m_TokenDepth[_iFirst];
+			TCVector<umint> Bases;
+			for (auto i = _iFirst; bClassHead && i <= _iLast; ++i)
+			{
+				if (m_TokenDepth[i] != nLevel || m_Structure.f_IsAngleBracket(i))
+					continue;
+
+				if (Bases.f_IsEmpty() ? m_Tokens.f_IsText(Tokens[i], ":") : m_Tokens.f_IsText(Tokens[i], ","))
+					Bases.f_Insert(i);
+			}
+
+			bool bMeasured = true;
+			for (umint iBase = 0; iBase < Bases.f_GetLen() && bMeasured; ++iBase)
+			{
+				auto iBefore = fp_PreviousCode(Bases[iBase]);
+				umint nWidth = 0;
+				bMeasured = iBefore >= 0 && umint(iBefore) >= _iFirst && fp_MeasureJoinedWidth(_iFirst, umint(iBefore), nWidth);
+			}
+
+			// A head too long by itself opens its own argument list first, as the scopes lay it out.
+			if (!Bases.f_IsEmpty() && bMeasured && !fp_FitsInline(_iFirst, umint(fp_PreviousCode(Bases[0])), _iIndent))
+				bMeasured = false;
+
+			if (!Bases.f_IsEmpty() && bMeasured)
+			{
+				auto nTab = m_Request.m_Settings.m_nTabWidth;
+				for (umint iSegment = 0; iSegment <= Bases.f_GetLen(); ++iSegment)
+				{
+					auto iStart = iSegment ? Bases[iSegment - 1] : _iFirst;
+					auto iEnd = iSegment < Bases.f_GetLen() ? umint(fp_PreviousCode(Bases[iSegment])) : _iLast;
+					auto nSegmentIndent = iSegment ? _iIndent + nTab : _iIndent;
+					if (iSegment)
+						fp_BreakBefore(iStart, nSegmentIndent);
+
+					if (fp_FitsInline(iStart, iEnd, nSegmentIndent))
+						fp_MarkInline(iStart, iEnd);
+					else
+						fp_LayoutScopes(_iNode, iStart, iEnd, nSegmentIndent, false, false);
+				}
+
+				return true;
+			}
+		}
+
 		TCVector<umint> Operators;
 		fp_FindLooseOperators(_iFirst, _iLast, Operators);
 		if (Operators.f_IsEmpty())

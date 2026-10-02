@@ -2983,14 +2983,22 @@ namespace
 							, "struct C\n{\n\tTCMap<CStr, TCFunction<void (@)>>\n\t\tm_Values_@\n\t;\n};\n"
 						)
 					;
-					// A class's own argument list opens at the head's level, since nothing
-					// extends the head as an expression; 'final' stays behind its closing marker
-					// and the base clause continues the head below it.
+					// A class's own argument list opens at the head's level where the head is too long by
+					// itself, since nothing extends the head as an expression; 'final' stays behind its
+					// closing marker and the base clause continues the head below it. A head that fits
+					// keeps its arguments, and only the base clause moves down.
 					fSplit
 						(
 							"FinalAfterArguments"
+							, "struct TCFoo<@, @, @> final : public CBase\n{\n};\n"
+							, "struct TCFoo\n<\n\t@\n\t, @\n\t, @\n> final\n\t: public CBase\n{\n};\n"
+						)
+					;
+					fSplit
+						(
+							"BaseClauseMovesDown"
 							, "struct TCFoo<@, @> final : public CBase\n{\n};\n"
-							, "struct TCFoo\n<\n\t@\n\t, @\n> final\n\t: public CBase\n{\n};\n"
+							, "struct TCFoo<@, @> final\n\t: public CBase\n{\n};\n"
 						)
 					;
 				};
