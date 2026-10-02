@@ -5248,6 +5248,33 @@ namespace
 		auto iSecond = fp_NextCode(Node.m_iFirstToken);
 		bool bOpensWithLambda = m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "[") && !(iSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSecond)], "["));
 		bool bBodyIn = bLambdaBody && !bOpensWithLambda;
+		// A guard's head cut by a conditional continues behind the directive with its parenthesis, one
+		// level in from the guard, and the body behind it opens where the guard stands: 'for' '#if'
+		// '(...)' '#else' '(...)' '#endif' '{'.
+		umint nBodyIndent = _iIndent;
+		if (m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], "(") && Node.m_iParent < Nodes.f_GetLen())
+		{
+			auto iBlank = Node.m_iFirstToken;
+			while (iBlank && (Tokens[iBlank - 1].m_Kind == ECodeTokenKind::mc_Whitespace || Tokens[iBlank - 1].m_Kind == ECodeTokenKind::mc_Newline))
+				--iBlank;
+
+			umint iGuard = TCLimitsInt<umint>::mc_Max;
+			for (auto iSibling : Nodes[Node.m_iParent].m_Children)
+			{
+				if (iSibling == _iNode)
+					break;
+
+				iGuard = iSibling;
+			}
+
+			bool bContinuesGuard = iBlank
+				&& Tokens[iBlank - 1].m_Kind == ECodeTokenKind::mc_Preprocessor
+				&& iGuard != TCLimitsInt<umint>::mc_Max
+				&& fp_IsGuard(iGuard)
+			;
+			if (bContinuesGuard)
+				nBodyIndent = fp_GetStatementIndent(Nodes[iGuard].m_iFirstToken);
+		}
 		// A name can end in a template argument list, and nothing before it is ever broken.
 		// A lambda's own template parameter list ends the same way but names nothing.
 		bool bNamed = bDeclarator
@@ -5466,8 +5493,8 @@ namespace
 		{
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
 			{
-				fp_PlaceBody(_iNode, iBlock, _iIndent, !bBodyIn);
-				fp_LayoutNode(iBlock, _iIndent);
+				fp_PlaceBody(_iNode, iBlock, nBodyIndent, !bBodyIn);
+				fp_LayoutNode(iBlock, nBodyIndent);
 			}
 
 			fp_ProbeBodies(_iNode, _iIndent);
@@ -5542,8 +5569,8 @@ namespace
 
 			if (iBlock != TCLimitsInt<umint>::mc_Max)
 			{
-				fp_PlaceBody(_iNode, iBlock, _iIndent, !bBodyIn);
-				fp_LayoutNode(iBlock, _iIndent);
+				fp_PlaceBody(_iNode, iBlock, nBodyIndent, !bBodyIn);
+				fp_LayoutNode(iBlock, nBodyIndent);
 				fLayoutTail();
 
 				// A lambda's terminator stands on a line of its own, at the statement's
@@ -5661,11 +5688,11 @@ namespace
 			// After an operator split the brace is already on a continuation line.
 			auto iBrace = Nodes[iBlock].m_iFirstToken;
 			if (!fp_IsFirstOnLine(iBrace))
-				fp_PlaceBody(_iNode, iBlock, _iIndent, !bBodyIn);
+				fp_PlaceBody(_iNode, iBlock, nBodyIndent, !bBodyIn);
 			else if (bJoinable && !m_bOperatorSplit)
-				fp_BreakBefore(iBrace, bBodyIn ? _iIndent + nTab : _iIndent);
+				fp_BreakBefore(iBrace, bBodyIn ? nBodyIndent + nTab : nBodyIndent);
 
-			fp_LayoutNode(iBlock, _iIndent);
+			fp_LayoutNode(iBlock, nBodyIndent);
 			fLayoutTail();
 		}
 	}

@@ -1861,6 +1861,15 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A guard's head cut by a conditional continues in the other branch one level in, and the body behind
+					// it opens where the guard stands.
+					fg_ExpectFormat
+						(
+							"GuardHeadAcrossConditional"
+							, "void f()\n{\n\tfor\n#if 1\n\t\t(int i = 0; i < 2; ++i)\n#else\n\t\t(int i = 0; i < 3; ++i)\n#endif\n\t{\n\t\tg(i);\n\t}\n}\n"
+							, "void f()\n{\n\tfor\n#if 1\n\t\t(int i = 0; i < 2; ++i)\n#else\n\t\t(int i = 0; i < 3; ++i)\n#endif\n\t{\n\t\tg(i);\n\t}\n}\n"
+						)
+					;
 					// Behind a parenthesis grouping an expression, or in front of what only an operand starts with,
 					// '&' and '*' are binary; behind a parenthesis holding only a name they keep their spelling.
 					fg_ExpectFormat
