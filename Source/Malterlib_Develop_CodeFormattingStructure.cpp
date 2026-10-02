@@ -1298,8 +1298,21 @@ namespace
 		auto const &Nodes = _Structure.f_GetNodes();
 		auto const &Tokens = _Tokens.f_GetTokens();
 		auto const &Statement = Nodes[_iStatement];
+		// A conditional's branch spells its own head, which starts behind the directive in front of it:
+		// '#if' 'void *f_A()' '#else' 'void *f_B()' '#endif' over one body.
+		auto iFirst = Statement.m_iFirstToken;
+		for (auto i = _iLast; i > Statement.m_iFirstToken; --i)
+		{
+			if (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor)
+			{
+				iFirst = i + 1;
+
+				break;
+			}
+		}
+
 		bool bSpelled = false;
-		for (auto i = Statement.m_iFirstToken; i <= _iLast; ++i)
+		for (auto i = iFirst; i <= _iLast; ++i)
 		{
 			auto const &Token = Tokens[i];
 			if (!fg_IsSignificant(Token.m_Kind))

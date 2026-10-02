@@ -1861,6 +1861,14 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// Each of a conditional's heads over one body spells its own type.
+					fg_ExpectFormat
+						(
+							"ConditionalHeads"
+							, "#if DA\nextern \"C\" void * fA(int _Size)\n#else\nextern \"C\" void * fB(int _Size)\n#endif\n{\n\treturn nullptr;\n}\n"
+							, "#if DA\nextern \"C\" void *fA(int _Size)\n#else\nextern \"C\" void *fB(int _Size)\n#endif\n{\n\treturn nullptr;\n}\n"
+						)
+					;
 					// A linkage specification is one of a declaration's specifiers, and a parameter list behind a name is
 					// no cast, whatever it holds.
 					fg_ExpectFormat
