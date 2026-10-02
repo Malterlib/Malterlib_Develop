@@ -1861,6 +1861,19 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A return type that 'typename' introduces moves behind the parameter list like any other, also
+					// from a head written across lines; one with a gap nothing settles stays.
+					CStr AggregateType = "TCAVLTreeAggregate<t_pLinkMember, t_CCompare, t_CAllocator, t_COverrideNodeType>";
+					fg_ExpectFormat
+						(
+							"TypenameTrailingReturn"
+							, "namespace NA\n{\n\tinline_small typename " + AggregateType + "\n\t\t::CNode *" + AggregateType + "::TCIterator<t_Depth>::f_GetCurrent() const\n"
+							"\t{\n\t\treturn nullptr;\n\t}\n}\n"
+							, "namespace NA\n{\n\tinline_small auto " + AggregateType + "::TCIterator<t_Depth>::f_GetCurrent() const\n\t\t-> typename "
+							+ AggregateType + "::CNode *\n\t{\n\t\treturn nullptr;\n\t}\n}\n"
+							, false
+						)
+					;
 					// A guard's head cut by a conditional continues in the other branch one level in, and the body behind
 					// it opens where the guard stands.
 					fg_ExpectFormat

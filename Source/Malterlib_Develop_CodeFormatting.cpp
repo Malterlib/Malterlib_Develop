@@ -4521,6 +4521,11 @@ namespace
 		if (iBeforeOpen < 0)
 			return false;
 
+		// A head with a gap the standard does not settle has no width to be too long by.
+		umint nHead = 0;
+		if (!fp_MeasureJoinedWidth(_iDeclFirst, iClose, nHead))
+			return false;
+
 		// Whether the name already fits in front of the parameter list decides, further
 		// down, whether converting is worth anything when the trailing type on its own
 		// line does not make the signature fit.
@@ -4751,7 +4756,7 @@ namespace
 				continue;
 			}
 
-			if (nAngle || Token.m_Kind == ECodeTokenKind::mc_Whitespace)
+			if (nAngle || Token.m_Kind == ECodeTokenKind::mc_Whitespace || Token.m_Kind == ECodeTokenKind::mc_Newline)
 				continue;
 
 			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
@@ -4769,7 +4774,14 @@ namespace
 				if (bAfterName && !bTypeWord)
 					return false;
 
-				bAfterName = true;
+				// These introduce the name behind them rather than completing a type: 'typename TCFoo<t_C>::CNode'.
+				bool bIntroduces = m_Tokens.f_IsText(Token, "typename")
+					|| m_Tokens.f_IsText(Token, "struct")
+					|| m_Tokens.f_IsText(Token, "class")
+					|| m_Tokens.f_IsText(Token, "union")
+					|| m_Tokens.f_IsText(Token, "enum")
+				;
+				bAfterName = !bIntroduces;
 
 				continue;
 			}
