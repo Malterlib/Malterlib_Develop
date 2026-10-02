@@ -5086,6 +5086,15 @@ namespace
 		{
 			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Group && Nodes[iChild].m_Bracket == ECodeBracket::mc_Paren)
 			{
+				// An attribute's parenthesis stands among the specifiers: '__attribute__((weak)) f()'.
+				auto iAttribute = fp_PreviousCode(Nodes[iChild].m_iFirstToken);
+				bool bAttribute = false;
+				for (auto pAttribute : {"__attribute__", "__declspec", "alignas"})
+					bAttribute |= iAttribute >= 0 && m_Tokens.f_IsText(Tokens[umint(iAttribute)], pAttribute);
+
+				if (bAttribute)
+					continue;
+
 				iFirstParenGroup = Nodes[iChild].m_iLastToken;
 				iFirstParenGroupStart = Nodes[iChild].m_iFirstToken;
 

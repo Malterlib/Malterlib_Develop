@@ -1861,6 +1861,20 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// An attribute's parenthesis stands among the specifiers, and the parameter list behind the
+					// name opens instead.
+					CStr AttributeParameters;
+					for (umint i = 0; i < 6; ++i)
+						AttributeParameters += "{}void (*_fCallback{})(void)"_f << (i ? ", " : "") << i;
+
+					fg_ExpectFormat
+						(
+							"AttributeParenthesis"
+							, "void __attribute__\n\t(\n\t\t(weak)\n\t)\n\t__libc_init(" + AttributeParameters + ")\n{\n}\n"
+							, "void __attribute__((weak)) __libc_init\n\t(\n\t\tvoid (*_fCallback0)(void)\n\t\t, void (*_fCallback1)(void)\n"
+							"\t\t, void (*_fCallback2)(void)\n\t\t, void (*_fCallback3)(void)\n\t\t, void (*_fCallback4)(void)\n\t\t, void (*_fCallback5)(void)\n\t)\n{\n}\n"
+						)
+					;
 					// A trailing return type's declarator belongs to its type, behind an attribute macro as well, and
 					// a specifier behind it stays apart.
 					fg_ExpectFormat

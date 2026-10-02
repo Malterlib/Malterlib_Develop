@@ -1650,7 +1650,9 @@ namespace
 			bool bOperand = iBeforeChild >= 0
 				&& (fg_IsAnyText(_Tokens, Tokens[umint(iBeforeChild)], gc_pExpressionKeywords)
 					|| _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "operator")
-					|| _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "requires"))
+					|| _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "requires")
+					|| _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "__attribute__")
+					|| _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "__declspec"))
 			;
 			if (iChild != _iGroup && bOperand)
 				continue;
@@ -3293,7 +3295,7 @@ namespace NMib::NDevelop
 			{
 				constexpr ch8 const *c_pApart[] =
 					{
-						"new", "alignas", "decltype"
+						"new", "alignas", "decltype", "__attribute__", "__declspec"
 					}
 				;
 				// A macro's argument list with a name behind it spells a type or a prefix for
