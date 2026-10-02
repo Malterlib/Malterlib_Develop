@@ -1361,6 +1361,11 @@ namespace
 			if (bNested)
 				continue;
 
+			// A linkage specification's string is one of the declaration's specifiers: 'extern "C" void'.
+			auto iExtern = Token.m_Kind == ECodeTokenKind::mc_StringLiteral ? fg_PreviousCode(_Tokens, i) : aint(-1);
+			if (iExtern >= 0 && _Tokens.f_IsText(Tokens[umint(iExtern)], "extern"))
+				continue;
+
 			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
 			{
 				if (fg_IsAnyText(_Tokens, Token, gc_pExpressionKeywords) && !_Tokens.f_IsText(Token, "decltype"))
@@ -3328,6 +3333,10 @@ namespace NMib::NDevelop
 					return ECodeSpacing::mc_Space;
 			}
 
+			// An attribute behind a parameter list stands apart from it: '(void *) __attribute__((weak))'.
+			if ((fRight("__attribute__") || fRight("__declspec")) && fg_ClosesParameterList(_Tokens, _Structure, _iLeft))
+				return ECodeSpacing::mc_Space;
+
 			// An attribute macro behind a parameter list, in front of the trailing return type,
 			// stands apart from both: '(int _A) DMibSuppressUndefinedSanitizer -> void *'.
 			auto iArrow = fg_NextCode(_Tokens, _iRight);
@@ -3346,11 +3355,10 @@ namespace NMib::NDevelop
 		// unary operator: '(ch8 const *)&Value'.
 		if (fLeft(")"))
 		{
+			// A parenthesis behind a name is that name's parameter list or call, whatever it holds:
+			// 'extern "C" void _ZdaPv(void *) __attribute__((weak_import))'.
 			auto iInner = fg_PreviousCode(_Tokens, _iLeft);
-			bool bCast = (iInner >= 0
-					&& (fg_IsDeclaratorText(_Tokens, Tokens[umint(iInner)]) || _Tokens.f_IsText(Tokens[umint(iInner)], "const") || _Tokens.f_IsText(Tokens[umint(iInner)], "volatile")))
-				|| fg_ClosesFundamentalCast(_Tokens, _Structure, _iLeft)
-			;
+			bool bCast = fg_IsCast(_Tokens, _Structure, _iLeft);
 			// A parenthesis holding nothing but a type's name is a cast as well: '(aint)-1'.
 			// Malterlib's naming says which names are types, and the fundamental aliases
 			// are a closed set.

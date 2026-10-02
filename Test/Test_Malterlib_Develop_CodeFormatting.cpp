@@ -1861,6 +1861,15 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A linkage specification is one of a declaration's specifiers, and a parameter list behind a name is
+					// no cast, whatever it holds.
+					fg_ExpectFormat
+						(
+							"LinkageDeclaration"
+							, "extern \"C\" void * _ZdaPv(void *)__attribute__((weak_import));\nextern \"C\" char**    __argv;\n"
+							, "extern \"C\" void *_ZdaPv(void *) __attribute__((weak_import));\nextern \"C\" char **__argv;\n"
+						)
+					;
 					// A block pointer's declarator is spelled like a pointer to function's, and '^' anywhere else is the operator.
 					fg_ExpectFormat
 						(
