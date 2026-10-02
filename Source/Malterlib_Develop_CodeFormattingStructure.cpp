@@ -2128,6 +2128,28 @@ namespace
 		if (!fg_IsDeclaratorText(_Tokens, Token))
 			return true;
 
+		// Behind an alias declaration's '=' stands a type, whose declarators are no operators:
+		// 'using FDuplicate = void *(void const *_pImpl)'.
+		{
+			auto iStatement = fg_FindEnclosingNode(_Structure, _iToken);
+			auto const &AliasNodes = _Structure.f_GetNodes();
+			if (iStatement < AliasNodes.f_GetLen() && AliasNodes[iStatement].m_Kind == ECodeNodeKind::mc_Statement)
+			{
+				auto iUsing = AliasNodes[iStatement].m_iFirstToken;
+				auto iAlias = fg_NextCode(_Tokens, iUsing);
+				auto iAssign = iAlias >= 0 ? fg_NextCode(_Tokens, umint(iAlias)) : aint(-1);
+				bool bAlias = _Tokens.f_IsText(Tokens[iUsing], "using")
+					&& iAlias >= 0
+					&& Tokens[umint(iAlias)].m_Kind == ECodeTokenKind::mc_Identifier
+					&& iAssign >= 0
+					&& _Tokens.f_IsText(Tokens[umint(iAssign)], "=")
+					&& umint(iAssign) < _iToken
+				;
+				if (bAlias)
+					return false;
+			}
+		}
+
 		// Behind a declarator stands a name, never a literal or an operator spelled as a
 		// keyword, so an operand of that kind settles the reading: 'nMove * sizeof(t_CKey)'.
 		constexpr ch8 const *c_pValueOperands[] =
@@ -3012,6 +3034,44 @@ namespace NMib::NDevelop
 				;
 				if (bBlock)
 					return ECodeSpacing::mc_Space;
+			}
+
+			// A function type's pointer return type hugs its parameter list the way it hugs a pointer to
+			// function's declarator, where a function type stands: in an alias declaration or a template
+			// argument list, behind a type's name. 'using FDuplicate = void *(void const *_pImpl)'.
+			// Behind a cast it is unary and hugs its operand: '(int)*(pF)'.
+			if (fLeft("*") || fLeft("&"))
+			{
+				auto iCast = fg_PreviousCode(_Tokens, _iLeft);
+				if (iCast >= 0 && _Tokens.f_IsText(Tokens[umint(iCast)], ")") && fg_IsCast(_Tokens, _Structure, umint(iCast)))
+					return ECodeSpacing::mc_None;
+			}
+
+			if ((fLeft("*") || fLeft("&")) && !fg_ClosesParameterList(_Tokens, _Structure, _iLeft))
+			{
+				auto iType = fg_PreviousCode(_Tokens, _iLeft);
+				while (iType >= 0 && (fg_IsDeclaratorText(_Tokens, Tokens[umint(iType)]) || _Tokens.f_IsText(Tokens[umint(iType)], "const")))
+					iType = fg_PreviousCode(_Tokens, umint(iType));
+
+				bool bType = iType >= 0 && fg_NamesType(_Tokens, Tokens[umint(iType)]);
+				bool bFunctionTypePlace = false;
+				if (bType)
+				{
+					auto iGroup = fg_FindEnclosingNode(_Structure, _iLeft);
+					auto const &Nodes = _Structure.f_GetNodes();
+					if (iGroup < Nodes.f_GetLen() && Nodes[iGroup].m_Kind == ECodeNodeKind::mc_Group && Nodes[iGroup].m_Bracket == ECodeBracket::mc_Angle)
+						bFunctionTypePlace = true;
+					else if (iGroup < Nodes.f_GetLen() && Nodes[iGroup].m_Kind == ECodeNodeKind::mc_Statement)
+					{
+						auto iUsing = Nodes[iGroup].m_iFirstToken;
+						auto iAlias = fg_NextCode(_Tokens, iUsing);
+						auto iAssign = iAlias >= 0 ? fg_NextCode(_Tokens, umint(iAlias)) : aint(-1);
+						bFunctionTypePlace = _Tokens.f_IsText(Tokens[iUsing], "using") && iAssign >= 0 && _Tokens.f_IsText(Tokens[umint(iAssign)], "=");
+					}
+				}
+
+				if (bFunctionTypePlace)
+					return ECodeSpacing::mc_None;
 			}
 
 			// A pointer return type's declarator hugs the pointer to function's declarator behind it:

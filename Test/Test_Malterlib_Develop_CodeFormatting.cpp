@@ -1861,6 +1861,17 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A function type's pointer return type hugs its parameter list as it hugs a pointer to function's
+					// declarator; a conversion operator's name and an expression keep their spelling.
+					fg_ExpectFormat
+						(
+							"FunctionTypePointerReturn"
+							, "struct C\n{\n\tusing FA = void * (void const *_pImpl);\n\tusing FB = TCFunction<CFoo * (int)>;\n\tusing FC = void * (*)(int);\n"
+							"\toperator ch8 const * () const;\n\tvoid f()\n\t{\n\t\ta = b * (c + d);\n\t\te = (int) * (pF);\n\t}\n};\n"
+							, "struct C\n{\n\tusing FA = void *(void const *_pImpl);\n\tusing FB = TCFunction<CFoo *(int)>;\n\tusing FC = void *(*)(int);\n"
+							"\toperator ch8 const * () const;\n\tvoid f()\n\t{\n\t\ta = b * (c + d);\n\t\te = (int)*(pF);\n\t}\n};\n"
+						)
+					;
 					// A destructor behind another function's body is a declaration of its own.
 					fg_ExpectFormat
 						(
