@@ -711,6 +711,7 @@ namespace
 		void fp_ConvertSpecifiers();
 		void fp_ConvertEmptyStatements();
 		void fp_ConvertEnumCommas();
+		void fp_ConvertTrailingComments();
 		void fp_ConvertEnumBodyCommas(CCodeNode const &_Body);
 		bool fp_DropBraces(umint _iStatement, umint _iGuard);
 		bool fp_AddBraces(umint _iStatement, umint _iGuard);
@@ -2619,6 +2620,7 @@ namespace
 			fp_ConvertSpecifiers();
 			fp_ConvertEmptyStatements();
 			fp_ConvertEnumCommas();
+			fp_ConvertTrailingComments();
 		}
 
 		bool bQualifierStage = !m_Structural.f_IsEmpty();
@@ -2680,6 +2682,8 @@ namespace
 					Explanation = "an enumerator's comma stands in front of it, and the last one has none";
 				else if (Edit.m_Rule == "list-comma")
 					Explanation = "a comment describes the element in front of it, which the comma behind it goes past";
+				else if (Edit.m_Rule == "trailing-comment")
+					Explanation = "a comment that makes the line it trails too long stands on a line of its own above it";
 
 				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
 			}
@@ -3804,6 +3808,90 @@ namespace
 
 	// Gives each enum's enumerators their commas in front of them wherever the layout could
 	// not move one there by itself.
+	// A comment trailing a line it makes longer than the limit moves to a line of its own above
+	// that line, at its indentation, and a block comment becomes a line comment there:
+	// 'f_Call(); /* Text */' becomes '// Text' over 'f_Call();'. A comment documenting what it
+	// trails, '///<', stays where it documents it.
+	void CFormattingAnalyzer::fp_ConvertTrailingComments()
+	{
+		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		if (!nMaxColumns)
+			return;
+
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Source = m_Request.m_Source;
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto const &LineEnding = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			auto const &Comment = Tokens[i];
+			bool bBlock = Comment.m_Kind == ECodeTokenKind::mc_BlockComment;
+			if ((Comment.m_Kind != ECodeTokenKind::mc_LineComment && !bBlock) || Comment.m_bMultiLine || fp_IsFirstOnLine(i))
+				continue;
+
+			auto iAfter = i + 1;
+			while (iAfter < Tokens.f_GetLen() && Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Whitespace)
+				++iAfter;
+
+			if (iAfter < Tokens.f_GetLen() && Tokens[iAfter].m_Kind != ECodeTokenKind::mc_Newline)
+				continue;
+
+			auto Text = m_Tokens.f_GetText(Comment);
+			if (Text.f_StartsWith("///<") || Text.f_StartsWith("//!<") || Text.f_StartsWith("/**<") || Text.f_StartsWith("/*!<") || Text.f_Find("malterlib-format") >= 0)
+				continue;
+
+			auto iLine = m_Lines.f_FindLine(Comment.m_iOffset);
+			auto iLineStart = m_Lines.f_GetLineStart(iLine);
+			if (m_bProtectedStart[iLine])
+				continue;
+
+			umint nColumns = 0;
+			if (!fg_MeasureTextColumns(Source.f_GetStr() + iLineStart, Comment.f_GetEnd() - iLineStart, nTab, nColumns) || nColumns <= nMaxColumns)
+				continue;
+
+			auto iFirst = m_Tokens.f_FindToken(iLineStart);
+			while (iFirst < i && (Tokens[iFirst].m_Kind == ECodeTokenKind::mc_Whitespace || Tokens[iFirst].m_Kind == ECodeTokenKind::mc_ByteOrderMark))
+				++iFirst;
+
+			auto iBefore = fp_PreviousSignificant(i);
+			if (iFirst >= i || iBefore < 0 || Tokens[iFirst].m_Kind == ECodeTokenKind::mc_Preprocessor || Tokens[umint(iBefore)].m_Kind == ECodeTokenKind::mc_Preprocessor)
+				continue;
+
+			// Code too long for the line by itself is split by the layout, which leaves the comment
+			// room behind it.
+			umint nCodeColumns = 0;
+			if (!fg_MeasureTextColumns(Source.f_GetStr() + iLineStart, Tokens[umint(iBefore)].f_GetEnd() - iLineStart, nTab, nCodeColumns) || nCodeColumns > nMaxColumns)
+				continue;
+
+			CStr Moved = Text;
+			if (bBlock)
+			{
+				auto Inner = CStr(Text.f_GetStr() + 2, Text.f_GetLen() - 4).f_Trim();
+				if (Inner.f_IsEmpty())
+					continue;
+
+				Moved = "// " + Inner;
+			}
+
+			auto iRemove = Tokens[umint(iBefore)].f_GetEnd();
+			auto nRemove = Comment.f_GetEnd() - iRemove;
+			auto iInsert = Tokens[iFirst].m_iOffset;
+			if (fp_IsDisabled(iRemove, nRemove) || !fp_IsSelected(iRemove, nRemove) || fp_IsDisabled(iInsert, 0) || !fp_IsSelected(iInsert, 0))
+				continue;
+
+			auto &Insert = m_Structural.f_Insert();
+			Insert.m_iOffset = iInsert;
+			Insert.m_nLength = 0;
+			Insert.m_Replacement = Moved + LineEnding + CStr(Source.f_GetStr() + iLineStart, iInsert - iLineStart);
+			Insert.m_Rule = "trailing-comment";
+
+			auto &Remove = m_Structural.f_Insert();
+			Remove.m_iOffset = iRemove;
+			Remove.m_nLength = nRemove;
+			Remove.m_Rule = "trailing-comment";
+		}
+	}
+
 	void CFormattingAnalyzer::fp_ConvertEnumCommas()
 	{
 		if (!m_Structure.f_IsComplete())

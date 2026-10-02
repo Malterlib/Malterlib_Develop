@@ -1861,6 +1861,21 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A comment that makes the line it trails too long moves above it, a block comment as a line
+					// comment; one documenting what it trails stays, and so does one behind code too long by itself.
+					CStr CommentWords;
+					for (umint i = 0; i < 36; ++i)
+						CommentWords += "Word ";
+
+					CommentWords = CommentWords.f_Trim();
+					fg_ExpectFormat
+						(
+							"TrailingCommentMoves"
+							, "void f()\n{\n\tint a = g(1); // " + CommentWords + "\n\tint b = g(1); /* " + CommentWords + " */\n\tint c = g(1); ///< " + CommentWords + "\n}\n"
+							, "void f()\n{\n\t// " + CommentWords + "\n\tint a = g(1);\n\t// " + CommentWords + "\n\tint b = g(1);\n\tint c = g(1); ///< " + CommentWords + "\n}\n"
+							, false
+						)
+					;
 					// An attribute's parenthesis stands among the specifiers, and the parameter list behind the
 					// name opens instead.
 					CStr AttributeParameters;
