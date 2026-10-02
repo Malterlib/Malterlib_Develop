@@ -1861,6 +1861,17 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A pointer to function's declarator hugs its name, behind a calling convention macro as well, a
+					// pointer return type's '*' hugs the declarator, and the lists behind it are parameter lists.
+					fg_ExpectFormat
+						(
+							"FunctionPointerDeclarators"
+							, "struct C\n{\n\tvoid * (DMibCrossmoduleAPI * m_fA)(void * _pB, bool (* _fC)(void * _pD));\n};\n"
+							"extern int (* g_fE)(int);\nvoid g()\n{\n\th((*pF)(x) * y);\n}\n"
+							, "struct C\n{\n\tvoid *(DMibCrossmoduleAPI *m_fA)(void *_pB, bool (*_fC)(void *_pD));\n};\n\n"
+							"extern int (*g_fE)(int);\nvoid g()\n{\n\th((*pF)(x) * y);\n}\n"
+						)
+					;
 					// A macro spelling a parameter's type is followed by the parameter's declarator; in an expression
 					// the same spelling is an operator.
 					fg_ExpectFormat
@@ -3508,7 +3519,7 @@ namespace
 							"};\n\nvoid f()\n{\n\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint) - 16324 + (smint)-1 + sizeof(void *)*4;\n"
 							"\tDMibTestSuite(\"Level {}\"_f << nLevel)->TCFuture<void>\n\t{\n\t\tco_return {};\n\t};\n}\n"
 							, "struct C\n{\n\tauto operator = (C &&) noexcept(false) -> C & = default;\n"
-							"\tvoid * (DMibCrossmoduleAPI * m_fFree)(void * _pMemory, umint _Size);\n\tinline_always static void * DMibCrossmoduleAPI fs_Alloc\n\t\t(\n"
+							"\tvoid *(DMibCrossmoduleAPI *m_fFree)(void *_pMemory, umint _Size);\n\tinline_always static void * DMibCrossmoduleAPI fs_Alloc\n\t\t(\n"
 							"\t\t\tCMemoryManagerCrossModule *_pModule\n\t\t\t, umint &_Size\n\t\t\t, ch8 const *_pFile\n\t\t\t, aint _Line\n"
 							"\t\t\t, EHeapDebugFlag _Flags\n\t\t\t, EAllocationFlag _AllocFlags\n\t\t\t, ENumaNode _NumaNode\n\t\t)\n\t;\n};\n\nvoid f()\n{\n"
 							"\tValue = Value * 8 + *pParse++ - '0';\n\tValue = (aint)-16324 + (smint)-1 + sizeof(void *) * 4;\n"

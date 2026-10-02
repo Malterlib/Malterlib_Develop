@@ -1484,6 +1484,41 @@ namespace
 		return iBehind >= 0 && _Tokens.f_IsText(Tokens[umint(iBehind)], "(");
 	}
 
+	// Whether the parenthesis is a pointer to function's declarator: a calling convention macro or
+	// none, declarators, and the name or none, with the parameter list or the bound behind it:
+	// '(DMibCrossmoduleAPI *m_fAlloc)(umint _Size)', '(*)(int)', '(&_Array)[4]'.
+	bool fg_IsFunctionPointerDeclarator(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup)
+	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto const &Group = Nodes[_iGroup];
+		if (Group.m_Kind != ECodeNodeKind::mc_Group || Group.m_Bracket != ECodeBracket::mc_Paren || !Group.m_SplitPoints.f_IsEmpty())
+			return false;
+
+		auto iBehind = fg_NextCode(_Tokens, Group.m_iLastToken);
+		if (iBehind < 0 || (!_Tokens.f_IsText(Tokens[umint(iBehind)], "(") && !_Tokens.f_IsText(Tokens[umint(iBehind)], "[")))
+			return false;
+
+		auto i = fg_NextCode(_Tokens, Group.m_iFirstToken);
+		while (i >= 0 && umint(i) < Group.m_iLastToken && Tokens[umint(i)].m_Kind == ECodeTokenKind::mc_Identifier && _Tokens.f_HasRole(Tokens[umint(i)], ECodeNameRole::mc_Macro))
+			i = fg_NextCode(_Tokens, umint(i));
+
+		bool bDeclarator = false;
+		while (i >= 0 && umint(i) < Group.m_iLastToken && fg_IsDeclaratorText(_Tokens, Tokens[umint(i)]))
+		{
+			bDeclarator = true;
+			i = fg_NextCode(_Tokens, umint(i));
+		}
+
+		if (!bDeclarator || i < 0)
+			return false;
+
+		if (umint(i) < Group.m_iLastToken && Tokens[umint(i)].m_Kind == ECodeTokenKind::mc_Identifier)
+			i = fg_NextCode(_Tokens, umint(i));
+
+		return i >= 0 && umint(i) == Group.m_iLastToken;
+	}
+
 	bool fg_IsParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup)
 	{
 		auto const &Nodes = _Structure.f_GetNodes();
@@ -1591,7 +1626,16 @@ namespace
 		// after it belong to a constructor's initializers or to expressions.
 		auto const &Parent = Nodes[Group.m_iParent];
 		if (Parent.m_Kind != ECodeNodeKind::mc_Statement)
-			return false;
+		{
+			// A pointer to function declared as a parameter has its own list behind its declarator:
+			// 'void f(bool (*_fCall)(void *_pContext))'.
+			if (!_Tokens.f_IsText(Tokens[umint(iName)], ")") || !fg_IsParameterList(_Tokens, _Structure, Group.m_iParent))
+				return false;
+
+			auto iDeclarator = _Structure.f_FindNodeClosingAt(umint(iName));
+
+			return iDeclarator < Nodes.f_GetLen() && Nodes[iDeclarator].m_iParent == Group.m_iParent && fg_IsFunctionPointerDeclarator(_Tokens, _Structure, iDeclarator);
+		}
 
 		for (auto iChild : Parent.m_Children)
 		{
@@ -1609,6 +1653,10 @@ namespace
 					|| _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "requires"))
 			;
 			if (iChild != _iGroup && bOperand)
+				continue;
+
+			// A pointer to function's declarator stands in front of the list: 'void (*pCall)(int _A)'.
+			if (iChild != _iGroup && fg_IsFunctionPointerDeclarator(_Tokens, _Structure, iChild))
 				continue;
 
 			if (iChild != _iGroup)
@@ -2524,6 +2572,14 @@ namespace NMib::NDevelop
 			}
 		}
 
+		// The first declarator of a pointer to function's declarator opens it: 'int (*g_fAccept)(int)'.
+		if (_Tokens.f_IsText(Previous, "("))
+		{
+			auto iDeclarator = _Structure.f_FindNodeOpeningAt(umint(iPrevious));
+
+			return iDeclarator < _Structure.f_GetNodes().f_GetLen() && fg_IsFunctionPointerDeclarator(_Tokens, _Structure, iDeclarator);
+		}
+
 		if (!bBehindTemplate && Previous.m_Kind != ECodeTokenKind::mc_Identifier)
 			return false;
 
@@ -2557,6 +2613,9 @@ namespace NMib::NDevelop
 			return fg_SpellsType(_Tokens, _Structure, iGroup, umint(iPrevious));
 
 		if (fg_DeclaresInClause(_Tokens, _Structure, iGroup, _iToken))
+			return true;
+
+		if (fg_IsFunctionPointerDeclarator(_Tokens, _Structure, iGroup))
 			return true;
 
 		if (!fg_IsParameterList(_Tokens, _Structure, iGroup))
@@ -2850,6 +2909,15 @@ namespace NMib::NDevelop
 					return ECodeSpacing::mc_Space;
 			}
 
+			// A pointer return type's declarator hugs the pointer to function's declarator behind it:
+			// 'void *(DMibCrossmoduleAPI *m_fAlloc)(umint _Size)'.
+			if (fg_IsDeclaratorText(_Tokens, Left) && fg_IsDeclaratorToken(_Tokens, _Structure, _iLeft))
+			{
+				auto iDeclarator = _Structure.f_FindNodeOpeningAt(_iRight);
+				if (iDeclarator < _Structure.f_GetNodes().f_GetLen() && fg_IsFunctionPointerDeclarator(_Tokens, _Structure, iDeclarator))
+					return ECodeSpacing::mc_None;
+			}
+
 			// A lambda's attribute behind its capture list stands apart from the parameter list
 			// behind it, as an attribute macro does: '[] [[nodiscard]] (int _Value)'.
 			if (fLeft("]") && fg_IsCaptureList(_Tokens, _Structure, _iLeft))
@@ -3137,6 +3205,14 @@ namespace NMib::NDevelop
 			// A structured binding's names hug the declarator the way a name does: 'auto &[A, B]'.
 			if (Right.m_Kind == ECodeTokenKind::mc_Identifier || fRight("["))
 				return ECodeSpacing::mc_None;
+
+			// So does a pointer to function's declarator behind a pointer return type: 'void *(*m_fAlloc)(umint _Size)'.
+			if (fRight("("))
+			{
+				auto iDeclarator = _Structure.f_FindNodeOpeningAt(_iRight);
+				if (iDeclarator < _Structure.f_GetNodes().f_GetLen() && fg_IsFunctionPointerDeclarator(_Tokens, _Structure, iDeclarator))
+					return ECodeSpacing::mc_None;
+			}
 		}
 
 		// Behind a template argument list a '&&' in front of a name is a declarator as
