@@ -1861,8 +1861,8 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
-					// A comment that makes the line it trails too long moves above it, a block comment as a line
-					// comment; one documenting what it trails stays, and so does one behind code too long by itself.
+					// A block comment ending its line is a line comment, and one that makes the line it trails too long moves
+					// above it; one documenting what it trails stays, and so does one behind code too long by itself.
 					CStr CommentWords;
 					for (umint i = 0; i < 36; ++i)
 						CommentWords += "Word ";
@@ -1871,8 +1871,10 @@ namespace
 					fg_ExpectFormat
 						(
 							"TrailingCommentMoves"
-							, "void f()\n{\n\tint a = g(1); // " + CommentWords + "\n\tint b = g(1); /* " + CommentWords + " */\n\tint c = g(1); ///< " + CommentWords + "\n}\n"
-							, "void f()\n{\n\t// " + CommentWords + "\n\tint a = g(1);\n\t// " + CommentWords + "\n\tint b = g(1);\n\tint c = g(1); ///< " + CommentWords + "\n}\n"
+							, "void f()\n{\n\tint a = g(1); // " + CommentWords + "\n\tint b = g(1); /* " + CommentWords + " */\n\tint c = g(1); ///< " + CommentWords + "\n"
+							"\tg(); /* Checker */\n\th(); /*a*/ k();\n}\n"
+							, "void f()\n{\n\t// " + CommentWords + "\n\tint a = g(1);\n\t// " + CommentWords + "\n\tint b = g(1);\n\tint c = g(1); ///< " + CommentWords + "\n"
+							"\tg(); // Checker\n\th(); /*a*/ k();\n}\n"
 							, false
 						)
 					;
@@ -2518,8 +2520,9 @@ namespace
 							"AlignedNames"
 							, "void f()\n{\n\tBOOL       bA;   /* 000 */\n\tDWORD      dwB = 0; // B\n\tg(/* a */ 1);\n"
 							"\t// malterlib-format off\n\tFCGI_PARAMS      x      x\n\t// malterlib-format on\n}\n"
-							, "void f()\n{\n\tBOOL bA; /* 000 */\n\tDWORD dwB = 0; // B\n\tg(/* a */ 1);\n"
+							, "void f()\n{\n\tBOOL bA; // 000\n\tDWORD dwB = 0; // B\n\tg(/* a */ 1);\n"
 							"\t// malterlib-format off\n\tFCGI_PARAMS      x      x\n\t// malterlib-format on\n}\n"
+							, false
 						)
 					;
 					// An operator's declaration too long for its line gives at the '::' behind its
