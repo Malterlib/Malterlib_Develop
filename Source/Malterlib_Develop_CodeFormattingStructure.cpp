@@ -1341,7 +1341,10 @@ namespace
 					auto iBeforeChild = fg_PreviousCode(_Tokens, Child.m_iFirstToken);
 					bool bParen = Child.m_Bracket == ECodeBracket::mc_Paren && iBeforeChild >= 0;
 					bool bRequires = bParen && _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "requires");
-					bool bDecltype = bParen && _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "decltype");
+					// A macro the naming lists expands to the type a declarator follows, as 'decltype' does.
+					bool bDecltype = bParen
+						&& (_Tokens.f_IsText(Tokens[umint(iBeforeChild)], "decltype") || _Tokens.f_HasRole(Tokens[umint(iBeforeChild)], ECodeNameRole::mc_Macro))
+					;
 					bool bTypePart = Child.m_Bracket == ECodeBracket::mc_Angle || Child.m_Bracket == ECodeBracket::mc_Square || bRequires || bDecltype;
 					if (Child.m_Kind != ECodeNodeKind::mc_Group || !bTypePart)
 						return false;

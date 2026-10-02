@@ -1866,8 +1866,10 @@ namespace
 					fg_ExpectFormat
 						(
 							"MacroTypeDeclarator"
-							, "struct C\n{\n\tC(DMacro(TCBlock<t_C>, m_Link) & _Blocks, umint _Size);\n\tvoid f()\n\t{\n\t\tauto a = DMacro(1) & b;\n\t}\n};\n"
-							, "struct C\n{\n\tC(DMacro(TCBlock<t_C>, m_Link) &_Blocks, umint _Size);\n\tvoid f()\n\t{\n\t\tauto a = DMacro(1) & b;\n\t}\n};\n"
+							, "struct C\n{\n\tC(DMacro(TCBlock<t_C>, m_Link) & _Blocks, umint _Size);\n\tvoid f()\n\t{\n\t\tDMacro(CChunk) * lLists[] = {&a};\n"
+							"\t\tauto a = DMacro(1) & b;\n\t}\n};\n"
+							, "struct C\n{\n\tC(DMacro(TCBlock<t_C>, m_Link) &_Blocks, umint _Size);\n\tvoid f()\n\t{\n\t\tDMacro(CChunk) *lLists[] = {&a};\n"
+							"\t\tauto a = DMacro(1) & b;\n\t}\n};\n"
 						)
 					;
 					// A placement new gives in front of the type it constructs where the type does not fit behind it,
