@@ -2572,6 +2572,37 @@ namespace NMib::NDevelop
 			}
 		}
 
+		// A trailing return type is a type, so a declarator in it declares: '-> void *'.
+		{
+			auto iBack = iPrevious;
+			while (iBack >= 0)
+			{
+				auto const &Back = Tokens[umint(iBack)];
+				if (_Structure.f_IsAngleBracket(umint(iBack)) && _Tokens.f_IsText(Back, ">"))
+				{
+					auto iArguments = fg_FindGroupClosingAt(_Structure, umint(iBack), ECodeBracket::mc_Angle);
+					if (iArguments < 0)
+						break;
+
+					iBack = fg_PreviousCode(_Tokens, _Structure.f_GetNodes()[umint(iArguments)].m_iFirstToken);
+
+					continue;
+				}
+
+				bool bTypePart = (Back.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Back, gc_pExpressionKeywords))
+					|| _Tokens.f_IsText(Back, "::")
+					|| fg_IsDeclaratorText(_Tokens, Back)
+				;
+				if (!bTypePart)
+					break;
+
+				iBack = fg_PreviousCode(_Tokens, umint(iBack));
+			}
+
+			if (iBack >= 0 && umint(iBack) != umint(iPrevious) && _Tokens.f_IsText(Tokens[umint(iBack)], "->") && fg_IsTrailingReturnArrow(_Tokens, _Structure, umint(iBack)))
+				return true;
+		}
+
 		// The first declarator of a pointer to function's declarator opens it: 'int (*g_fAccept)(int)'.
 		if (_Tokens.f_IsText(Previous, "("))
 		{
@@ -3202,6 +3233,11 @@ namespace NMib::NDevelop
 			if (fRight("..."))
 				return ECodeSpacing::mc_Space;
 
+			// A specifier behind a trailing return type declares nothing: '-> CFoo * override'.
+			constexpr ch8 const *c_pSpecifiers[] = {"override", "final", "noexcept", "requires", "mutable"};
+			if (fg_IsAnyText(_Tokens, Right, c_pSpecifiers))
+				return ECodeSpacing::mc_Space;
+
 			// A structured binding's names hug the declarator the way a name does: 'auto &[A, B]'.
 			if (Right.m_Kind == ECodeTokenKind::mc_Identifier || fRight("["))
 				return ECodeSpacing::mc_None;
@@ -3270,6 +3306,18 @@ namespace NMib::NDevelop
 				if (bApart && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))
 					return ECodeSpacing::mc_Space;
 			}
+
+			// An attribute macro behind a parameter list, in front of the trailing return type,
+			// stands apart from both: '(int _A) DMibSuppressUndefinedSanitizer -> void *'.
+			auto iArrow = fg_NextCode(_Tokens, _iRight);
+			bool bAttribute = Right.m_Kind == ECodeTokenKind::mc_Identifier
+				&& iArrow >= 0
+				&& _Tokens.f_IsText(Tokens[umint(iArrow)], "->")
+				&& fg_ClosesParameterList(_Tokens, _Structure, _iLeft)
+				&& fg_IsTrailingReturnArrow(_Tokens, _Structure, umint(iArrow))
+			;
+			if (bAttribute)
+				return ECodeSpacing::mc_Space;
 		}
 
 		// A parenthesis whose last word is a declarator or a qualifier spells a type and

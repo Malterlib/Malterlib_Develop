@@ -1861,6 +1861,17 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A trailing return type's declarator belongs to its type, behind an attribute macro as well, and
+					// a specifier behind it stays apart.
+					fg_ExpectFormat
+						(
+							"TrailingReturnDeclarator"
+							, "void f()\n{\n\tg = [](int _A)\n\t\tDMibSuppress -> void\n\t\t*\n\t\t{\n\t\t\treturn nullptr;\n\t\t}\n\t;\n}\n"
+							"struct C\n{\n\tauto f() -> CFoo * override;\n};\n"
+							, "void f()\n{\n\tg = [](int _A) DMibSuppress -> void *\n\t\t{\n\t\t\treturn nullptr;\n\t\t}\n\t;\n}\n\n"
+							"struct C\n{\n\tauto f() -> CFoo * override;\n};\n"
+						)
+					;
 					// A pointer to function's declarator hugs its name, behind a calling convention macro as well, a
 					// pointer return type's '*' hugs the declarator, and the lists behind it are parameter lists.
 					fg_ExpectFormat

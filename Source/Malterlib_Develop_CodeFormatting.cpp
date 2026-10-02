@@ -6867,6 +6867,10 @@ namespace
 				if (Tokens[i].m_Kind != ECodeTokenKind::mc_Punctuator || m_TokenDepth[i] != nLevel || m_Structure.f_IsAngleBracket(i))
 					continue;
 
+				// A trailing return type names a type, which no operation stands in: '-> void *'.
+				if (m_Tokens.f_IsText(Tokens[i], "->") && fp_IsTrailingReturnArrow(i))
+					break;
+
 				umint nPrecedence = 0;
 				for (auto const &Operator : c_Operators)
 				{
@@ -7707,7 +7711,21 @@ namespace
 
 			if (bArrow ? fp_IsTrailingReturnArrow(i) : bSpecification)
 			{
-				Breaks.f_Insert(i);
+				// An attribute macro behind the parameter list goes down with the return type:
+				// '(int _A)' over 'DMibSuppressUndefinedSanitizer -> void *'.
+				umint iBreak = i;
+				auto iList = iBefore >= 0 ? fp_PreviousCode(umint(iBefore)) : aint(-1);
+				bool bAttribute = bArrow
+					&& Tokens[umint(iBefore)].m_Kind == ECodeTokenKind::mc_Identifier
+					&& !fp_IsFunctionQualifier(umint(iBefore))
+					&& iList >= 0
+					&& umint(iList) >= _iFirst
+					&& fg_ClosesParameterList(m_Tokens, m_Structure, umint(iList))
+				;
+				if (bAttribute)
+					iBreak = umint(iBefore);
+
+				Breaks.f_Insert(iBreak);
 				Introducer.f_Insert(false);
 			}
 		}
