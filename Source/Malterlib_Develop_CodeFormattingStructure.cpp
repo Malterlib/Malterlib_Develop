@@ -2513,8 +2513,11 @@ namespace NMib::NDevelop
 			auto iNode = fg_FindGroupClosingAt(_Structure, umint(iPrevious), ECodeBracket::mc_None);
 			if (iNode >= 0)
 			{
+				// So does a macro the naming lists, whose expansion is a type where a declarator follows it.
 				auto iKeyword = fg_PreviousCode(_Tokens, _Structure.f_GetNodes()[umint(iNode)].m_iFirstToken);
-				bBehindTemplate = iKeyword >= 0 && _Tokens.f_IsText(Tokens[umint(iKeyword)], "decltype");
+				bBehindTemplate = iKeyword >= 0
+					&& (_Tokens.f_IsText(Tokens[umint(iKeyword)], "decltype") || _Tokens.f_HasRole(Tokens[umint(iKeyword)], ECodeNameRole::mc_Macro))
+				;
 			}
 		}
 

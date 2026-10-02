@@ -1861,6 +1861,15 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A macro spelling a parameter's type is followed by the parameter's declarator; in an expression
+					// the same spelling is an operator.
+					fg_ExpectFormat
+						(
+							"MacroTypeDeclarator"
+							, "struct C\n{\n\tC(DMacro(TCBlock<t_C>, m_Link) & _Blocks, umint _Size);\n\tvoid f()\n\t{\n\t\tauto a = DMacro(1) & b;\n\t}\n};\n"
+							, "struct C\n{\n\tC(DMacro(TCBlock<t_C>, m_Link) &_Blocks, umint _Size);\n\tvoid f()\n\t{\n\t\tauto a = DMacro(1) & b;\n\t}\n};\n"
+						)
+					;
 					// A placement new gives in front of the type it constructs where the type does not fit behind it,
 					// rather than opening the type's template arguments.
 					CStr PlacementArgument;
