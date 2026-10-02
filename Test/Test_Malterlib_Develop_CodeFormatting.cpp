@@ -1861,6 +1861,17 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// Behind a parenthesis grouping an expression, or in front of what only an operand starts with,
+					// '&' and '*' are binary; behind a parenthesis holding only a name they keep their spelling.
+					fg_ExpectFormat
+						(
+							"BinaryBehindGroup"
+							, "void f()\n{\n\tr = ((ptr + n + offset)&~align) - offset;\n\ts = (Len + 1)*2;\n\tg(a, (task_info_t)&Info);\n}\n"
+							"struct C\n{\n\tvoid f() &;\n};\n"
+							, "void f()\n{\n\tr = ((ptr + n + offset) & ~align) - offset;\n\ts = (Len + 1) * 2;\n\tg(a, (task_info_t)&Info);\n}\n\n"
+							"struct C\n{\n\tvoid f() &;\n};\n"
+						)
+					;
 					// Each of a conditional's heads over one body spells its own type.
 					fg_ExpectFormat
 						(

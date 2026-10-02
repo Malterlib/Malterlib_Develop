@@ -2161,6 +2161,15 @@ namespace
 		if (Before.m_Kind == ECodeTokenKind::mc_Number || Before.m_Kind == ECodeTokenKind::mc_StringLiteral || Before.m_Kind == ECodeTokenKind::mc_CharLiteral)
 			return true;
 
+		// Nor does a declaration stand in front of what only an operand starts with: 'Value & ~Mask'.
+		bool bOperandAfter = _Tokens.f_IsText(After, "~")
+			|| _Tokens.f_IsText(After, "!")
+			|| After.m_Kind == ECodeTokenKind::mc_Number
+			|| After.m_Kind == ECodeTokenKind::mc_CharLiteral
+		;
+		if (bOperandAfter)
+			return true;
+
 		auto const &Nodes = _Structure.f_GetNodes();
 
 		// A ')' closes a cast as well as a call, and '(CFoo)*pValue' spells the tokens of a
@@ -2185,6 +2194,29 @@ namespace
 			auto const &Name = Tokens[umint(iName)];
 			if (Name.m_Kind == ECodeTokenKind::mc_Identifier)
 				return !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords) || fg_IsAnyText(_Tokens, Name, c_pValueOperators);
+
+			// A parenthesis opening behind another, an '=' or an operator groups an expression, a cast
+			// having been told apart above: '((a + b) & ~Mask)'.
+			constexpr ch8 const *c_pExpressionLeads[] =
+				{
+					"(", "=", ",", "+", "-", "*", "/", "%", "|", "^", "&&", "||", "?", ":", "<<", ">>", "==", "!=", "<", ">", "<=", ">="
+				}
+			;
+			// One holding a name and nothing more converts as readily as it groups: '(task_info_t)&Info'.
+			if (_Tokens.f_IsText(Before, ")") && fg_IsAnyText(_Tokens, Name, c_pExpressionLeads) && !_Structure.f_IsAngleBracket(umint(iName)))
+			{
+				bool bExpression = false;
+				for (auto i = Nodes[umint(iGroup)].m_iFirstToken + 1; i < umint(iBefore) && !bExpression; ++i)
+				{
+					auto const &Inner = Tokens[i];
+					bExpression = Inner.m_Kind == ECodeTokenKind::mc_Number
+						|| (Inner.m_Kind == ECodeTokenKind::mc_Punctuator && !_Tokens.f_IsText(Inner, "::") && !_Structure.f_IsAngleBracket(i))
+					;
+				}
+
+				if (bExpression)
+					return true;
+			}
 
 			return _Tokens.f_IsText(Name, ")") || _Tokens.f_IsText(Name, "]");
 		}
