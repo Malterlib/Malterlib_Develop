@@ -1861,6 +1861,15 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// Behind a parameter list or a qualifier 'throw' is an exception specification, spelled like 'noexcept';
+					// a throw expression keeps its keyword apart from the parenthesis.
+					fg_ExpectFormat
+						(
+							"ThrowSpecification"
+							, "extern \"C\" void *f(size_t _Size) throw ();\nstruct C\n{\n\tvoid g() const throw ();\n};\n\nvoid h()\n{\n\tthrow (b);\n}\n"
+							, "extern \"C\" void *f(size_t _Size) throw();\nstruct C\n{\n\tvoid g() const throw();\n};\n\nvoid h()\n{\n\tthrow (b);\n}\n"
+						)
+					;
 					// A declaration's head cut by a comment keeps its name at the statement's level, the parameter list
 					// one level in; a cut in front of the list leaves the list where it is.
 					fg_ExpectFormat

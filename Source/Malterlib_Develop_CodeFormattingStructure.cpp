@@ -3033,6 +3033,21 @@ namespace NMib::NDevelop
 		// Operators spelled like a call, such as sizeof and decltype, stay tight.
 		if (fRight("("))
 		{
+			// Behind a parameter list or a function's qualifier 'throw' is an exception specification,
+			// spelled like 'noexcept': 'f(size_t _Size) throw()'.
+			if (fLeft("throw"))
+			{
+				auto iSpecified = fg_PreviousCode(_Tokens, _iLeft);
+				bool bQualifier = iSpecified >= 0
+					&& (_Tokens.f_IsText(Tokens[umint(iSpecified)], "const")
+						|| _Tokens.f_IsText(Tokens[umint(iSpecified)], "volatile")
+						|| _Tokens.f_IsText(Tokens[umint(iSpecified)], "&")
+						|| _Tokens.f_IsText(Tokens[umint(iSpecified)], "&&"))
+				;
+				if (bQualifier || (iSpecified >= 0 && fg_ClosesParameterList(_Tokens, _Structure, umint(iSpecified))))
+					return ECodeSpacing::mc_None;
+			}
+
 			constexpr ch8 const *c_pSpacedKeywords[] =
 				{
 					"if", "for", "while", "switch", "catch", "return", "co_return", "co_await", "co_yield"
