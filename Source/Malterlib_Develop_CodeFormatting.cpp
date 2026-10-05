@@ -8486,7 +8486,7 @@ namespace
 				// A declaration's head is no expression continued either: the words up to its name's parameter
 				// list stand at the statement's level, the list one level in from them.
 				// 'bool // Comment' over 'CFoo::f_Process' over '('.
-				bool bDeclarationHead = iCut && _bIndentContinuations && m_iSplitFirstParen && iStart < m_iSplitFirstParen && iEnd >= m_iSplitFirstParen;
+				bool bDeclarationHead = iCut && _bIndentContinuations && m_iSplitFirstParen && iStart < m_iSplitFirstParen;
 				if (bDeclarationHead)
 				{
 					auto iList = m_Structure.f_FindNodeOpeningAt(m_iSplitFirstParen);

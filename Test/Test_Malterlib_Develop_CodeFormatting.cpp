@@ -1870,13 +1870,13 @@ namespace
 							, "extern \"C\" void *f(size_t _Size) throw();\nstruct C\n{\n\tvoid g() const throw();\n};\n\nvoid h()\n{\n\tthrow (b);\n}\n"
 						)
 					;
-					// A declaration's head cut by a comment keeps its name at the statement's level, the parameter list
-					// one level in; a cut in front of the list leaves the list where it is.
+					// A declaration's head cut by a comment or a directive keeps its words at the statement's level, the
+					// parameter list one level in; a cut in front of the list leaves the list where it is.
 					fg_ExpectFormat
 						(
 							"DeclarationHeadCut"
-							, "bool // Comment\n\tCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n{\n}\n"
-							, "bool // Comment\nCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n{\n}\n"
+							, "bool // Comment\n\tCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n{\n}\n\nint\n#ifdef _MSC_VER\n\t__cdecl\n#endif\n\tmain()\n{\n}\n"
+							, "bool // Comment\nCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n{\n}\n\nint\n#ifdef _MSC_VER\n__cdecl\n#endif\nmain()\n{\n}\n"
 						)
 					;
 					// Behind an operator or a compound assignment no declaration starts, so '*' and '&' are binary there.
