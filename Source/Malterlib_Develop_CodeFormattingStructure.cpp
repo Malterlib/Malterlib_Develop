@@ -444,6 +444,12 @@ namespace NMib::NDevelop
 			&& mp_pTokens->f_IsText(Tokens[mp_Significant[_iToken - 2]], "(")
 			&& mp_pTokens->f_IsText(Tokens[mp_Significant[_iToken - 3]], "operator")
 		;
+		// So can only a template argument list follow another operator's name: 'operator = <EJsonType>(EJsonType &&)'.
+		bool bOperatorName = _iToken >= 2
+			&& Previous.m_Kind == ECodeTokenKind::mc_Punctuator
+			&& mp_pTokens->f_IsText(Tokens[mp_Significant[_iToken - 2]], "operator")
+		;
+		bCallOperator |= bOperatorName;
 		if (Previous.m_Kind != ECodeTokenKind::mc_Identifier && !mp_pTokens->f_IsText(Previous, "]") && !bCallOperator)
 			return 0;
 
@@ -2835,8 +2841,10 @@ namespace NMib::NDevelop
 		// declarator after it. An unresolved '<' or '>' is an ordinary binary operator.
 		if (_Structure.f_IsAngleBracket(_iRight))
 		{
-			// A template header is the exception: 'template <typename t_CType>'.
-			if (fLeft("template"))
+			// A template header is the exception: 'template <typename t_CType>'. So is an operator's
+			// name, which stands apart from its arguments as from anything: 'operator = <EJsonType>'.
+			auto iOperator = fg_PreviousCode(_Tokens, _iLeft);
+			if (fLeft("template") || (Left.m_Kind == ECodeTokenKind::mc_Punctuator && iOperator >= 0 && _Tokens.f_IsText(Tokens[umint(iOperator)], "operator")))
 				return ECodeSpacing::mc_Space;
 
 			return ECodeSpacing::mc_None;

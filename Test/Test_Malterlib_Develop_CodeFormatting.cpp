@@ -1861,6 +1861,16 @@ namespace
 							"\t(*fLocked)() > [&]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// An operator's explicit template arguments are a template argument list, apart from its name.
+					fg_ExpectFormat
+						(
+							"OperatorTemplateArguments"
+							, "template CFoo &CFoo::operator = < CStr const & > (CStr const &);\ntemplate void CFoo::operator ()<int>(int);\n"
+							"struct C\n{\n\tbool operator < (C const &) const;\n};\n"
+							, "template CFoo &CFoo::operator = <CStr const &>(CStr const &);\ntemplate void CFoo::operator ()<int>(int);\n"
+							"struct C\n{\n\tbool operator < (C const &) const;\n};\n"
+						)
+					;
 					// Behind a parameter list or a qualifier 'throw' is an exception specification, spelled like 'noexcept';
 					// a throw expression keeps its keyword apart from the parenthesis.
 					fg_ExpectFormat
