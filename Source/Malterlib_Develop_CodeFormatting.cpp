@@ -8699,9 +8699,40 @@ namespace
 			auto iHeadLast = fp_PreviousCode(iBrace);
 			if (iHeadLast >= 0 && umint(iHeadLast) >= _iFirst)
 			{
+				// A lambda body splits the expression it ends, so every operator binding loosest in the head
+				// starts a line of its own at the body's level: 'pState->m_Launch(...)' over
+				// '+ g_Dispatch(Actor) / [=]'. The operator that takes the lambda stays on its line.
+				TCVector<umint> Operators;
+				fp_FindLooseOperators(_iFirst, umint(iHeadLast), Operators);
+				bool bOperandTakesBody = false;
+				if (!Operators.f_IsEmpty() && !fp_IsLambdaIntroducer(Operators.f_GetLast()))
+				{
+					for (auto i = Operators.f_GetLast() + 1; i <= umint(iHeadLast) && !bOperandTakesBody; ++i)
+						bOperandTakesBody = fp_IsLambdaIntroducer(i);
+				}
+
+				umint iOperandFirst = _iFirst;
+				if (bOperandTakesBody)
+				{
+					for (auto iOperator : Operators)
+					{
+						auto iOperandLast = fp_PreviousCode(iOperator);
+						if (iOperandLast >= 0 && umint(iOperandLast) >= iOperandFirst)
+						{
+							if (fp_FitsInline(iOperandFirst, umint(iOperandLast), _iIndent))
+								fp_MarkInline(iOperandFirst, umint(iOperandLast));
+							else
+								fp_LayoutRange(_iNode, iOperandFirst, umint(iOperandLast), _iIndent, _bClause && iOperandFirst == _iFirst, false);
+						}
+
+						fp_BreakBefore(iOperator, _iIndent);
+						iOperandFirst = iOperator;
+					}
+				}
+
 				auto iPreviousBody = m_iRangeBody;
 				m_iRangeBody = iBrace;
-				fp_LayoutRange(_iNode, _iFirst, umint(iHeadLast), _iIndent, _bClause, _bIndentContinuations);
+				fp_LayoutRange(_iNode, iOperandFirst, umint(iHeadLast), _iIndent, _bClause && iOperandFirst == _iFirst, _bIndentContinuations && !bOperandTakesBody);
 				m_iRangeBody = iPreviousBody;
 			}
 
@@ -8711,6 +8742,27 @@ namespace
 				fp_PlaceBlock(iChild, _iIndent, nReference);
 
 			fp_LayoutNode(iChild, _iIndent);
+
+			// A binary operator behind the body goes on with the expression from a line of its own, at
+			// the body's level: '}' over '+ pState->m_Launch(...)'.
+			auto iTail = fp_NextCode(Child.m_iLastToken);
+			bool bTailOperator = false;
+			if (iTail >= 0 && umint(iTail) < _iLast && !m_Structure.f_IsAngleBracket(umint(iTail)))
+			{
+				constexpr ch8 const *c_pOperators[] =
+					{
+						"+", "-", "*", "/", "%", "<<", ">>", "<", ">", "<=", ">=", "==", "!=", "&", "^", "|", "&&", "||"
+					}
+				;
+				for (auto pOperator : c_pOperators)
+					bTailOperator |= m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], pOperator);
+			}
+
+			if (bTailOperator && fp_IsRangeJoinable(_iNode, umint(iTail), _iLast))
+			{
+				fp_BreakBefore(umint(iTail), _iIndent);
+				fp_LayoutRange(_iNode, umint(iTail), _iLast, _iIndent, false, false);
+			}
 
 			return true;
 		}

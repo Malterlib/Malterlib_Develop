@@ -1730,6 +1730,16 @@ namespace
 							)
 						;
 					}
+					// A lambda body splits the expression it ends: every loosest operator of the head, and one
+					// behind the body, starts a line of its own at the body's level.
+					fg_ExpectFormat
+						(
+							"OperatorsAroundLambdaBody"
+							, "void f()\n{\n\tco_await\n\t\t(\n\t\t\tfg_A(1) + g_Dispatch(Actor) / [=]() -> int\n\t\t\t{\n\t\t\t\treturn g();\n\t\t\t} + fg_B(2)\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tco_await\n\t\t(\n\t\t\tfg_A(1)\n\t\t\t+ g_Dispatch(Actor) / [=]() -> int\n\t\t\t{\n\t\t\t\treturn g();\n\t\t\t}\n"
+							"\t\t\t+ fg_B(2)\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// A lambda is a template argument like any other value, its body skipped with the
 					// groups inside the list: 'f_Test<[](umint _Len) { ... }>(...)' is no comparison.
 					fg_ExpectFormat

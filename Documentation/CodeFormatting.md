@@ -594,7 +594,13 @@ A parameter's default argument is given to it as a statement's value is: the
 `=` and the value take the line below, and the type stays whole with its name.
 A lambda standing in a construct whose own lines are kept, such as a braced
 initializer written across lines, still has a head of its own, split where it
-does not fit on its line, and its body opens as it does anywhere else. The
+does not fit on its line, and its body opens as it does anywhere else.
+
+A lambda body splits the expression it ends. Each operator binding loosest in
+front of the body starts a line of its own at the body's level, and so does a
+binary operator behind the body's closing brace: `pState->m_Launch(...)` over
+`+ g_Dispatch(Actor) / [=]`, the body, and `+ fg_Other()` under its brace. The
+operator that takes the lambda stays on the line, `g_Dispatch(Actor) / [=]`. The
 conversion is the one rule that changes tokens. It is decided on the original
 source, and the layout is then made on the converted source, so the lines the
 plan writes are the lines a later pass sees.
