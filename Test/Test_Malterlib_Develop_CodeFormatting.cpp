@@ -2757,6 +2757,18 @@ namespace
 							, "namespace NA\n{\n\ttemplate <typename t_C>\n\tauto " + OperatorClass + "\n\t\t::operator + (TCFloat const &_Value) const\n\t\t-> TCFloat\n\t{\n\t}\n}\n"
 						)
 					;
+					// A value assigned to what a member call yields goes behind its '=' whole, the call in front
+					// of it closed: only '0', 'default' and 'delete' behind a parameter list end a declaration.
+					{
+						CStr Value = "fp_ConvertValue(*pWildcard, InputMember.f_Value(), fg_Format(\"{}.{}\", _Identifier, InputMember.f_Name()), true, _AnsiFlags, _ExtraFlags, _MoreFlags)";
+						fg_ExpectFormat
+							(
+								"AssignToMemberCall"
+								, "void f()\n{\n\tOutputObject.f_CreateMember(InputMember.f_Name()) = " + Value + ";\n}\n"
+								, "void f()\n{\n\tOutputObject.f_CreateMember(InputMember.f_Name())\n\t\t= " + Value + "\n\t;\n}\n"
+							)
+						;
+					}
 					// With nothing behind its parameter list to give first, the list opens behind the whole name.
 					fg_ExpectFormat
 						(

@@ -695,6 +695,11 @@ above them. Only then is the type in front of the name opened. Everywhere
 else the `=` is never a place to break: a statement the source broke there is
 brought back onto its head.
 
+A call in front of the `=` is a declaration's parameter list only where `0`,
+`default` or `delete` follows the `=`; any other value is assigned to what the
+call yields. Assigned to a member call, `Object.f_CreateMember(Name)`, the value
+goes behind its `=` on a line of its own, the call in front of it closed.
+
 What an expression goes on with behind a lambda's body, an operator, a member
 access, or the arguments the lambda is called with at once, resumes under the
 body's closing brace, is broken there at its operators

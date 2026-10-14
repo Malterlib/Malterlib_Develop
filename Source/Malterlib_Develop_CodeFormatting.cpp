@@ -7715,9 +7715,14 @@ namespace
 		}
 
 		// Behind a declaration's parameter list the '=' makes it pure, defaulted or deleted,
-		// and gives nothing a value.
+		// and gives nothing a value. Any other value is assigned to what a call yields.
 		if (bStatement && m_iSplitFirstParen && iAssign > m_iSplitFirstParen)
-			iAssign = 0;
+		{
+			auto iValue = fp_NextCode(iAssign);
+			auto const &Value = iValue >= 0 ? m_Tokens.f_GetTokens()[umint(iValue)] : m_Tokens.f_GetTokens()[iAssign];
+			if (iValue < 0 || m_Tokens.f_IsText(Value, "0") || m_Tokens.f_IsText(Value, "default") || m_Tokens.f_IsText(Value, "delete"))
+				iAssign = 0;
+		}
 
 		TCVector<umint> Scopes;
 		TCVector<umint> Placements;
@@ -7963,7 +7968,31 @@ namespace
 				}
 			}
 
-			if (bHeadFits && (!bNamedScope || bElement || bScopeOutOfReach) && fp_FitsInline(iAssign, _iLast, nContinuation))
+			// And so does the value of an assignment to what a member call yields, which the call's
+			// arguments would otherwise be opened behind: 'Object.f_CreateMember(Name)' over '= fg_Value(...)'.
+			bool bTargetCall = false;
+			for (auto iChild : Node.m_Children)
+			{
+				auto const &Child = Nodes[iChild];
+				if (Child.m_iFirstToken >= iAssign)
+					break;
+
+				if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_Bracket != ECodeBracket::mc_Paren || Child.m_iFirstToken < _iFirst)
+					continue;
+
+				auto iCallee = fp_PreviousCode(Child.m_iFirstToken);
+				auto iMember = iCallee >= 0 ? fp_PreviousCode(umint(iCallee)) : aint(-1);
+				bTargetCall = iCallee >= 0
+					&& AllTokens[umint(iCallee)].m_Kind == ECodeTokenKind::mc_Identifier
+					&& iMember >= 0
+					&& umint(iMember) >= _iFirst
+					&& (m_Tokens.f_IsText(AllTokens[umint(iMember)], ".") || m_Tokens.f_IsText(AllTokens[umint(iMember)], "->"))
+				;
+				if (bTargetCall)
+					break;
+			}
+
+			if (bHeadFits && (!bNamedScope || bElement || bScopeOutOfReach || bTargetCall) && fp_FitsInline(iAssign, _iLast, nContinuation))
 			{
 				fp_MarkInline(_iFirst, umint(iHeadEnd));
 				fp_BreakBefore(iAssign, nContinuation);
