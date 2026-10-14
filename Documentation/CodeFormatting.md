@@ -746,7 +746,10 @@ A call or a subscript on what a call or a subscript yields is a postfix
 operation like a member access and binds the same way, so it is a link of the
 chain: `f_CallActor(&C::f_Fn)`, `[1]`, `(_Params)` and `.f_Timeout(10.0)` each
 take a line once the chain gives. A lambda's parameter list, a cast's operand
-and an empty list are not links. A subscript hugs what yields it,
+and an empty list are not links, so the access behind an empty call goes on
+with the head, `fg_CurrentActor().f_Bind<...>(...)`. A braced value constructs
+what the chain works on, and its first access starts the chain even when the
+braces are empty: `CFoo{}` over `.f_SetNotes(...)` over `.f_SetTags(...)`. A subscript hugs what yields it,
 `f_Get()[0]`, where an attribute's brackets stand apart, `if (bFlag)
 [[unlikely]]`.
 

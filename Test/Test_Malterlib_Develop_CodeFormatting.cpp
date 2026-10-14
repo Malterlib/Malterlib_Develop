@@ -1740,6 +1740,22 @@ namespace
 							"\t\t\t+ fg_B(2)\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A chain on a braced value gives at every member, its first included, wherever the value
+					// stands; behind an empty call the access goes on with the head.
+					{
+						CStr Chain = ".f_SetNotes(\"Testing12\")\n\t\t\t.f_SetSecret(fg_TempCopy(ByteVectorSecret))\n\t\t\t.f_SetTags({\"Shared1\", \"Shared2\", \"Unique2\"})\n"
+							"\t\t\t.f_SetSemanticID(\"Semantic2\")\n"
+						;
+						fg_ExpectFormat
+							(
+								"ChainOnBracedValue"
+								, "void f()\n{\n\tg\n\t\t(\n\t\t\tCSecretsManager::CSecretID{\"Folder1\", \"Name2\"}\n\t\t\t, CSecretsManager::CSecretProperties{}" + Chain
+								+ "\t\t)\n\t;\n}\n"
+								, "void f()\n{\n\tg\n\t\t(\n\t\t\tCSecretsManager::CSecretID{\"Folder1\", \"Name2\"}\n\t\t\t, CSecretsManager::CSecretProperties{}\n\t\t\t"
+								+ Chain + "\t\t)\n\t;\n}\n"
+							)
+						;
+					}
 					// A lambda is a template argument like any other value, its body skipped with the
 					// groups inside the list: 'f_Test<[](umint _Len) { ... }>(...)' is no comparison.
 					fg_ExpectFormat
