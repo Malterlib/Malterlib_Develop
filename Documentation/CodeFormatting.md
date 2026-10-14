@@ -591,7 +591,7 @@ A parameter's default argument is given to it as a statement's value is: the
 `=` and the value take the line below, and the type stays whole with its name.
 A lambda standing in a construct whose own lines are kept, such as a braced
 initializer written across lines, still has a head of its own, split where it
-does not fit on its line. The
+does not fit on its line, and its body opens as it does anywhere else. The
 conversion is the one rule that changes tokens. It is decided on the original
 source, and the layout is then made on the converted source, so the lines the
 plan writes are the lines a later pass sees.

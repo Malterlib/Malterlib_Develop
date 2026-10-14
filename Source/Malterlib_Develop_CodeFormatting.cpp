@@ -5075,8 +5075,26 @@ namespace
 
 				if (bElement && fp_IsLastOnLine(umint(iLast)))
 				{
+					// So is one holding a lambda's body, which takes lines of its own wherever it fits. The
+					// layout places the body, so only the head in front of it has to be joinable.
+					aint iHeadLast = -1;
+					for (auto iChild : Node.m_Children)
+					{
+						auto const &Child = Nodes[iChild];
+						if (Child.m_Kind == ECodeNodeKind::mc_Block && Child.m_iFirstToken > umint(iStart) && Child.m_iLastToken <= umint(iLast))
+						{
+							iHeadLast = fp_PreviousCode(Child.m_iFirstToken);
+
+							break;
+						}
+					}
+
 					auto nIndent = fp_GetStatementIndent(umint(iStart));
-					if (!fp_FitsInline(umint(iStart), umint(iLast), nIndent) && fp_IsRangeJoinable(_iNode, umint(iStart), umint(iLast)))
+					bool bLayout = iHeadLast >= 0
+						? umint(iHeadLast) >= umint(iStart) && fp_IsRangeJoinable(_iNode, umint(iStart), umint(iHeadLast))
+						: !fp_FitsInline(umint(iStart), umint(iLast), nIndent) && fp_IsRangeJoinable(_iNode, umint(iStart), umint(iLast))
+					;
+					if (bLayout)
 					{
 						fp_LayoutRange(_iNode, umint(iStart), umint(iLast), nIndent, false, false);
 						LaidOut.f_Insert(umint(iStart));

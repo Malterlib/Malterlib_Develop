@@ -1674,6 +1674,16 @@ namespace
 							)
 						;
 					}
+					// A list keeping its lines because of a braced element still opens a lambda body
+					// written on one line in another of its elements.
+					fg_ExpectFormat
+						(
+							"LambdaBodyInKeptList"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t{\n\t\t\t\ta\n\t\t\t\t, b\n\t\t\t}\n\t\t\t, [](CA const &) -> uint32 { return 0; }\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg\n\t\t(\n\t\t\t{\n\t\t\t\ta\n\t\t\t\t, b\n\t\t\t}\n\t\t\t, [](CA const &) -> uint32\n\t\t\t{\n\t\t\t\treturn 0;\n\t\t\t}\n"
+							"\t\t)\n\t;\n}\n"
+						)
+					;
 					// A lambda is a template argument like any other value, its body skipped with the
 					// groups inside the list: 'f_Test<[](umint _Len) { ... }>(...)' is no comparison.
 					fg_ExpectFormat
