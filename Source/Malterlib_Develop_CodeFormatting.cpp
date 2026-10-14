@@ -7885,6 +7885,26 @@ namespace
 			for (auto i = umint(iColons) + 1; bName && i < iParameters; ++i)
 				bName = m_TokenDepth[i] == m_TokenDepth[umint(iColons)] && !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "::");
 
+			// Without either behind the parameter list there is nothing to give first, and a list with
+			// parameters opens behind the whole name instead.
+			auto iInner = bName ? fp_NextCode(iParameters) : aint(-1);
+			bool bGivesBehind = iInner >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iInner)], ")");
+			// The range can end in front of a return type the statement was already cut at.
+			for (auto i = iParameters + 1; bName && !bGivesBehind && i <= Node.m_iLastToken; ++i)
+			{
+				if (m_TokenDepth[i] != m_TokenDepth[umint(iColons)])
+					continue;
+
+				auto const &Token = m_Tokens.f_GetTokens()[i];
+				if (m_Tokens.f_IsText(Token, "{") || m_Tokens.f_IsText(Token, ";"))
+					break;
+
+				bGivesBehind = m_Tokens.f_IsText(Token, "noexcept") || fp_IsTrailingReturnArrow(i);
+			}
+
+			if (bName && !bGivesBehind)
+				break;
+
 			if (bName)
 			{
 				iQualifiedBreak = umint(iColons);

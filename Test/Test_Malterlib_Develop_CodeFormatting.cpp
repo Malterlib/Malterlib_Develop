@@ -2757,6 +2757,25 @@ namespace
 							, "namespace NA\n{\n\ttemplate <typename t_C>\n\tauto " + OperatorClass + "\n\t\t::operator + (TCFloat const &_Value) const\n\t\t-> TCFloat\n\t{\n\t}\n}\n"
 						)
 					;
+					// With nothing behind its parameter list to give first, the list opens behind the whole name.
+					fg_ExpectFormat
+						(
+							"OperatorOpensBehindNameEmptyBody"
+							, "namespace NA\n{\n\tvoid " + OperatorClass + "::operator > (TCFutureMapBoundKey<tf_CKey, t_CReturn, tf_CForwardKey> &&_BoundKey) &&\n"
+							"\t{\n\t}\n}\n"
+							, "namespace NA\n{\n\tvoid " + OperatorClass + "::operator >\n\t\t(\n"
+							"\t\t\tTCFutureMapBoundKey<tf_CKey, t_CReturn, tf_CForwardKey> &&_BoundKey\n\t\t)\n\t\t&&\n\t{\n\t}\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"OperatorOpensBehindName"
+							, "namespace NA\n{\n\ttemplate <typename t_C>\n\tvoid " + OperatorClass + "::operator > (TCFutureMapBoundKey<tf_CKey, t_CReturn, tf_CForwardKey> &&_BoundKey)"
+							" &&\n\t{\n\t\tg();\n\t}\n}\n"
+							, "namespace NA\n{\n\ttemplate <typename t_C>\n\tvoid " + OperatorClass + "::operator >\n\t\t(\n"
+							"\t\t\tTCFutureMapBoundKey<tf_CKey, t_CReturn, tf_CForwardKey> &&_BoundKey\n\t\t)\n\t\t&&\n\t{\n\t\tg();\n\t}\n}\n"
+						)
+					;
 					// One that fits in front of its exception specification gives there instead.
 					fg_ExpectFormat
 						(

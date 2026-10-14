@@ -964,6 +964,8 @@ namespace NMib::NDevelop
 						|| mp_pTokens->f_IsText(Previous, "noexcept")
 						|| mp_pTokens->f_IsText(Previous, "override")
 						|| mp_pTokens->f_IsText(Previous, "final")
+						|| mp_pTokens->f_IsText(Previous, "&")
+						|| mp_pTokens->f_IsText(Previous, "&&")
 						|| fp_IsBlockBrace(i)
 					;
 				}
