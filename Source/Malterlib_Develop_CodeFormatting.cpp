@@ -6360,11 +6360,13 @@ namespace
 
 			// An enumerator list is no statement, but takes the line under the enum's brace as one
 			// does, where it is one line to move.
+			// One already on a line of its own has its first line at the body's level, where the commas
+			// in front of the others stand.
 			bool bEnumerators = false;
-			if (bEnumBody && !bFirstOnLine && iPrevious == TCLimitsInt<umint>::mc_Max)
+			if (bEnumBody && iPrevious == TCLimitsInt<umint>::mc_Max)
 			{
 				auto iChildLast = fp_PreviousCode(fg_Min(Child.m_iLastToken, Node.m_iLastToken - 1) + 1);
-				bEnumerators = iChildLast >= aint(iFirst) && !fp_SpansLines(iFirst, umint(iChildLast));
+				bEnumerators = bFirstOnLine || (iChildLast >= aint(iFirst) && !fp_SpansLines(iFirst, umint(iChildLast)));
 			}
 
 			// A case whose body is one statement, a 'break' behind it included, takes it onto

@@ -1138,6 +1138,14 @@ namespace
 							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\th();\n\n\t\tbreak;\n\t}\n}\n"
 						)
 					;
+					// An enumerator list's first line stands at the body's level with the commas, however it was aligned.
+					fg_ExpectFormat
+						(
+							"EnumFirstEnumerator"
+							, "enum EType\n{\n\t\tEType_A\n\t,\tEType_B\n\t, EType_C\n};\n"
+							, "enum EType\n{\n\tEType_A\n\t, EType_B\n\t, EType_C\n};\n"
+						)
+					;
 					// A comment opening a case's body stands where the body does, wherever it was written.
 					fg_ExpectFormat
 						(
