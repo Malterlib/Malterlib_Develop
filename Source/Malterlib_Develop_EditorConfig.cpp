@@ -94,20 +94,14 @@ namespace
 					bool bMatches = false;
 					switch (Node.m_Kind)
 					{
-						case EKind::mc_Literal:
-							bMatches = *pParse == Node.m_Character;
+					case EKind::mc_Literal: bMatches = *pParse == Node.m_Character; break;
+					case EKind::mc_Any:
+					case EKind::mc_Star:
+						bMatches = *pParse != '/';
 
-							break;
-						case EKind::mc_Any:
-						case EKind::mc_Star:
-							bMatches = *pParse != '/';
-
-							break;
-						case EKind::mc_RecursiveStar:
-							bMatches = true;
-
-							break;
-						case EKind::mc_Set:
+						break;
+					case EKind::mc_RecursiveStar: bMatches = true; break;
+					case EKind::mc_Set:
 						{
 							for (auto const &Range : Node.m_Ranges)
 								bMatches |= *pParse >= Range.m_First && *pParse <= Range.m_Last;
@@ -115,7 +109,7 @@ namespace
 
 							break;
 						}
-						default: break;
+					default: break;
 					}
 
 					if (bMatches)
@@ -375,8 +369,14 @@ namespace NMib::NDevelop::NPrivate
 				auto Value = Line.f_Extract(iEquals + 1).f_Trim();
 				if
 				(
-					Key == "root" || Key == "indent_style" || Key == "indent_size" || Key == "tab_width" || Key == "end_of_line"
-					|| Key == "charset" || Key == "trim_trailing_whitespace" || Key == "insert_final_newline"
+					Key == "root"
+					|| Key == "indent_style"
+					|| Key == "indent_size"
+					|| Key == "tab_width"
+					|| Key == "end_of_line"
+					|| Key == "charset"
+					|| Key == "trim_trailing_whitespace"
+					|| Key == "insert_final_newline"
 				)
 				{
 					Value = Value.f_LowerCase();
@@ -425,7 +425,6 @@ namespace NMib::NDevelop::NPrivate
 
 		TCMap<CStr, TCSharedPointer<CEntry>> m_Entries;
 	};
-
 }
 
 namespace NMib::NDevelop
@@ -490,8 +489,7 @@ namespace NMib::NDevelop
 		co_return CEditorConfig(*Contents);
 	}
 
-	auto CEditorConfigResolver::fp_GetConfiguration(TCSharedPointer<NPrivate::CEditorConfigCache> _pCache, CStr _Path)
-		-> TCFuture<TCOptional<CEditorConfig>>
+	auto CEditorConfigResolver::fp_GetConfiguration(TCSharedPointer<NPrivate::CEditorConfigCache> _pCache, CStr _Path) -> TCFuture<TCOptional<CEditorConfig>>
 	{
 		auto Capture = co_await (g_CaptureExceptions % "Reading cached EditorConfig");
 		if (auto pCached = _pCache->m_Entries.f_FindEqual(_Path))
@@ -526,14 +524,8 @@ namespace NMib::NDevelop
 		if (mp_Boundary)
 		{
 			auto Relative = CFile::fs_MakePathRelative(FilePath, mp_Boundary);
-			if
-			(
-				!Relative || Relative == "." || CFile::fs_IsPathAbsolute(Relative)
-				|| Relative == ".." || Relative.f_StartsWith("../") || Relative.f_StartsWith("..\\")
-			)
-			{
+			if (!Relative || Relative == "." || CFile::fs_IsPathAbsolute(Relative) || Relative == ".." || Relative.f_StartsWith("../") || Relative.f_StartsWith("..\\"))
 				co_return DMibErrorInstance("EditorConfig path '{}' is outside boundary '{}'"_f << FilePath << mp_Boundary);
-			}
 		}
 
 		struct CEntry
