@@ -1609,7 +1609,7 @@ namespace
 						(
 							"Guarded"
 							, "void f()\n{\n\tif (a)\n\t\t\tg();\n\telse\n\t{\n\t\t\th();\n\t}\n\n\tfor (auto &E : R)\n\t\tif (b)\n\t\t\t\ti();\n}\n"
-							, "void f()\n{\n\tif (a)\n\t\tg();\n\telse\n\t\th();\n\n\tfor (auto &E : R)\n\t\tif (b)\n\t\t\ti();\n}\n"
+							, "void f()\n{\n\tif (a)\n\t\tg();\n\telse\n\t\th();\n\n\tfor (auto &E : R)\n\t{\n\t\tif (b)\n\t\t\ti();\n\t}\n}\n"
 							, false
 						)
 					;
@@ -1659,6 +1659,17 @@ namespace
 							"Loop"
 							, "void f()\n{\n\twhile (a)\n\t{\n\t\tg();\n\t}\n\tfor (;;)\n\t{\n\t\th();\n\t}\n}\n"
 							, "void f()\n{\n\twhile (a)\n\t\tg();\n\tfor (;;)\n\t\th();\n}\n"
+							, false
+						)
+					;
+					// A guarded clause spanning lines with what it guards takes the braces around
+					// all of it: a block, a statement and an 'else' branch behind it.
+					fg_ExpectFormat
+						(
+							"GuardedClause"
+							, "void f()\n{\n\tfor (;;)\n\t\tif (a)\n\t\t{\n\t\t\tg();\n\t\t\th();\n\t\t}\n\twhile (b)\n\t\tif (c)\n\t\t\tg();\n\t\telse\n\t\t\th();\n}\n"
+							, "void f()\n{\n\tfor (;;)\n\t{\n\t\tif (a)\n\t\t{\n\t\t\tg();\n\t\t\th();\n\t\t}\n\t}\n\twhile (b)\n\t{\n\t\tif (c)\n\t\t\tg();\n"
+							"\t\telse\n\t\t\th();\n\t}\n}\n"
 							, false
 						)
 					;

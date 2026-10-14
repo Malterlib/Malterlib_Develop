@@ -274,8 +274,11 @@ is inside. A comment trailing the statement on its line follows it out of the
 block; any other comment inside keeps the braces. They are added only around a
 statement ending in `;` with nothing but whitespace between the guard and it,
 behind an attribute on the clause's line, and behind a comment trailing the
-statement's last line. A nested `if` is two statements to the structure
-builder, so a block that shields a dangling `else` keeps its braces, and so do
+statement's last line. A guarded clause, `if (a)` under a `for`, owns only its
+condition, so the braces go around it together with what it guards in turn and
+the `else` branches behind that, ending at their `;` or `}`. A nested `if` is
+two statements to the structure builder, so a block that shields a dangling
+`else` keeps its braces, and so do
 the bodies of `do`, `switch`, `try`, and `catch`. The decision reaches every
 guarded statement, a lambda's body included, whose block belongs to the group
 the lambda is written in rather than to the statement around it.

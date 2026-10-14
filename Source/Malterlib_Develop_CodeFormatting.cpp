@@ -6133,7 +6133,50 @@ namespace
 		if (Statement.m_Kind != ECodeNodeKind::mc_Statement || Statement.m_iFirstToken == Statement.m_iLastToken)
 			return false;
 
-		if (!m_Tokens.f_IsText(Tokens[Statement.m_iLastToken], ";") || m_Tokens.f_IsText(Tokens[Statement.m_iFirstToken], "{"))
+		// A guarded clause owns only its condition, and the braces go around all it starts: the statements it
+		// guards in turn and the 'else' branches behind them, 'for (...)' over 'if (...)' over '{ ... }'.
+		umint iLast = Statement.m_iLastToken;
+		bool bChain = fp_IsGuard(_iStatement);
+		if (bChain)
+		{
+			if (Statement.m_iParent >= Nodes.f_GetLen())
+				return false;
+
+			auto const &Siblings = Nodes[Statement.m_iParent].m_Children;
+			umint iIndex = 0;
+			while (iIndex < Siblings.f_GetLen() && Siblings[iIndex] != _iStatement)
+				++iIndex;
+
+			while (true)
+			{
+				if (iIndex >= Siblings.f_GetLen())
+					return false;
+
+				if (fp_IsGuard(Siblings[iIndex]))
+				{
+					++iIndex;
+
+					continue;
+				}
+
+				if (iIndex + 1 < Siblings.f_GetLen() && m_Tokens.f_IsText(Tokens[Nodes[Siblings[iIndex + 1]].m_iFirstToken], "else"))
+				{
+					++iIndex;
+
+					continue;
+				}
+
+				break;
+			}
+
+			iLast = Nodes[Siblings[iIndex]].m_iLastToken;
+			if (!m_Tokens.f_IsText(Tokens[iLast], ";") && !m_Tokens.f_IsText(Tokens[iLast], "}"))
+				return false;
+		}
+		else if (!m_Tokens.f_IsText(Tokens[Statement.m_iLastToken], ";"))
+			return false;
+
+		if (m_Tokens.f_IsText(Tokens[Statement.m_iFirstToken], "{"))
 			return false;
 
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
@@ -6154,7 +6197,7 @@ namespace
 
 				iOpenAfter = Nodes[iChild].m_iLastToken;
 				auto iNext = fp_NextCode(iOpenAfter);
-				if (iNext < 0 || umint(iNext) > Statement.m_iLastToken)
+				if (iNext < 0 || umint(iNext) > iLast)
 					return false;
 
 				iFirst = umint(iNext);
@@ -6173,13 +6216,13 @@ namespace
 		if (m_Tokens.f_IsText(Tokens[iFirst], "{"))
 			return false;
 
-		for (auto i = iFirst; i <= Statement.m_iLastToken; ++i)
+		for (auto i = iFirst; !bChain && i <= iLast; ++i)
 		{
 			if (m_TokenDepth[i] == m_TokenDepth[iFirst] && m_Tokens.f_IsText(Tokens[i], "else"))
 				return false;
 		}
 
-		if (bClauseFits && fp_IsRangeOneLine(_iStatement, iFirst, Statement.m_iLastToken, nGuardIndent + nTab))
+		if (bClauseFits && fp_IsRangeOneLine(_iStatement, iFirst, iLast, nGuardIndent + nTab))
 			return false;
 
 		for (auto i = iOpenAfter + 1; i < iFirst; ++i)
@@ -6189,8 +6232,8 @@ namespace
 				return false;
 		}
 
-		auto iCloseAt = Tokens[Statement.m_iLastToken].f_GetEnd();
-		for (auto i = Statement.m_iLastToken + 1; i < Tokens.f_GetLen(); ++i)
+		auto iCloseAt = Tokens[iLast].f_GetEnd();
+		for (auto i = iLast + 1; i < Tokens.f_GetLen(); ++i)
 		{
 			auto Kind = Tokens[i].m_Kind;
 			if (Kind == ECodeTokenKind::mc_Whitespace)
