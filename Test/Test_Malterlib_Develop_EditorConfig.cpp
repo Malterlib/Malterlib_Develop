@@ -394,7 +394,13 @@ namespace
 					auto First = Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "first.cpp").f_Call();
 					co_await fg_Move(Started.m_Future);
 					auto Second = Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "second.cpp").f_Call();
-					co_await (g_Dispatch(Resolver) / [] {});
+					co_await
+						(
+							g_Dispatch(Resolver) / []
+							{
+							}
+						)
+					;
 					Release.m_Promise.f_SetResult();
 
 					auto FirstResult = co_await fg_Move(First).f_Wrap();

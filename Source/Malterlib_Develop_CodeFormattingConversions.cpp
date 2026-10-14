@@ -1284,11 +1284,7 @@ namespace NMib::NDevelop::NPrivate
 			auto iUsing = iBeforeAlias >= 0 ? fp_PreviousCode(umint(iBeforeAlias)) : aint(-1);
 			bool bTypeOnly
 				= iBefore >= 0
-				&&
-				(
-					m_Tokens.f_IsText(Tokens[umint(iBefore)], "->")
-					|| (m_Tokens.f_IsText(Tokens[umint(iBefore)], "=") && iUsing >= 0 && m_Tokens.f_IsText(Tokens[umint(iUsing)], "using"))
-				)
+				&& (m_Tokens.f_IsText(Tokens[umint(iBefore)], "->") || (m_Tokens.f_IsText(Tokens[umint(iBefore)], "=") && iUsing >= 0 && m_Tokens.f_IsText(Tokens[umint(iUsing)], "using")))
 			;
 			constexpr ch8 const *c_pFundamentals[] = {"int", "char", "short", "long", "signed", "unsigned", "bool", "float", "double", "void", "auto"};
 			if (iType == aint(iEnd) && bEndsDeclaration && !bTypeOnly && !fIsAny(umint(iType), c_pFundamentals))

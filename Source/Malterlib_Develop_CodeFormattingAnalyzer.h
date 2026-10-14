@@ -90,14 +90,16 @@ namespace NMib::NDevelop::NPrivate
 				, NContainer::TCVector<CCodeFormattingDiagnostic> const &_Pass
 				, bool _bFixable
 				, NContainer::TCVector<CCodeFormattingDiagnostic> &o_Diagnostics
-			) const
+			)
+			const
 		;
 		void f_ReplaceResidualDiagnostics
 			(
 				NContainer::TCVector<CCodeFormattingEdit> const &_Plan
 				, NContainer::TCVector<CCodeFormattingDiagnostic> const &_Residual
 				, NContainer::TCVector<CCodeFormattingDiagnostic> &o_Diagnostics
-			) const
+			)
+			const
 		;
 
 	private:

@@ -561,9 +561,7 @@ namespace NMib::NDevelop
 				auto iStatement = fg_FindEnclosingNode(_Structure, _iLeft);
 				auto const &Nodes = _Structure.f_GetNodes();
 				bool bTypedef
-					= iStatement < Nodes.f_GetLen()
-					&& Nodes[iStatement].m_Kind == ECodeNodeKind::mc_Statement
-					&& _Tokens.f_IsText(Tokens[Nodes[iStatement].m_iFirstToken], "typedef")
+					= iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_Kind == ECodeNodeKind::mc_Statement && _Tokens.f_IsText(Tokens[Nodes[iStatement].m_iFirstToken], "typedef")
 				;
 				if (bTypedef && iDeclarator < Nodes.f_GetLen() && fg_IsFunctionPointerDeclarator(_Tokens, _Structure, iDeclarator))
 					return ECodeSpacing::mc_Space;

@@ -124,21 +124,21 @@ namespace NMib::NDevelop
 		void fp_Note(umint _iNode, umint _iSignificant);
 
 		CCodeTokenStream *mp_pTokens = nullptr;
-		NContainer::TCVector<umint> mp_Significant;         // Indices of significant tokens, in order.
-		mutable NContainer::TCVector<uint8> mp_CallRunEnds; // Indexed by significant token: how the run of calls standing at a call ends, plus one, or zero.
-		NContainer::TCVector<uint8> mp_GapFlags;            // What the trivia before each significant token contains.
-		NContainer::TCVector<uint8> mp_AngleBracket;        // Indexed by token, set for resolved template brackets.
+		NContainer::TCVector<umint> mp_Significant;           // Indices of significant tokens, in order.
+		mutable NContainer::TCVector<uint8> mp_CallRunEnds;   // Indexed by significant token: how the run of calls standing at a call ends, plus one, or zero.
+		NContainer::TCVector<uint8> mp_GapFlags;              // What the trivia before each significant token contains.
+		NContainer::TCVector<uint8> mp_AngleBracket;          // Indexed by token, set for resolved template brackets.
 		mutable NContainer::TCVector<uint8> mp_NoAngleCloser; // Indexed by significant token: set for a '<' a search already found no '>' for.
 		umint mp_iIncompleteOffset = 0;
 		NContainer::TCVector<CCodeNode> mp_Nodes;
-		NContainer::TCVector<umint> mp_OpeningAt;           // Indexed by token: the node opening there, or the node count.
-		NContainer::TCVector<umint> mp_ClosingAt;           // Indexed by token: the node closing there, or the node count.
-		NContainer::TCVector<umint> mp_Enclosing;           // Indexed by token: the innermost node around it, or the node count.
-		NContainer::TCVector<umint> mp_StatementEndingAt;   // Indexed by token: the innermost statement ending there, or the node count.
+		NContainer::TCVector<umint> mp_OpeningAt;             // Indexed by token: the node opening there, or the node count.
+		NContainer::TCVector<umint> mp_ClosingAt;             // Indexed by token: the node closing there, or the node count.
+		NContainer::TCVector<umint> mp_Enclosing;             // Indexed by token: the innermost node around it, or the node count.
+		NContainer::TCVector<umint> mp_StatementEndingAt;     // Indexed by token: the innermost statement ending there, or the node count.
 		bool mp_bComplete = true;
 		bool mp_bTooDeep = false;
-		umint mp_nGroupDepth = 0;                           // The groups being built around the one being built, which the angle brackets add to.
-		umint mp_nTabWidth = 4;                             // The columns a tab advances to the next multiple of.
+		umint mp_nGroupDepth = 0;                             // The groups being built around the one being built, which the angle brackets add to.
+		umint mp_nTabWidth = 4;                               // The columns a tab advances to the next multiple of.
 	};
 
 	// The canonical inline separator between two adjacent significant tokens.

@@ -861,12 +861,7 @@ namespace
 					for (umint i = 0; i < 200; ++i)
 						Name += "W";
 
-					auto Formatted = fg_FormatC
-						(
-							"#if __cplusplus && __has_include(\"foo//bar.h\") || defined(_WIN32)\nunsigned long long fg_" + Name + "(int a, int b);\n#endif\n"
-							, "Format"
-						)
-					;
+					auto Formatted = fg_FormatC("#if __cplusplus && __has_include(\"foo//bar.h\") || defined(_WIN32)\nunsigned long long fg_" + Name + "(int a, int b);\n#endif\n", "Format");
 					DMibExpect(Formatted.f_Find("->"), ==, -1);
 				}
 				// A directive spelled with a comment or a splice in front of its keyword still ends the C++ branch, so what follows
@@ -2690,14 +2685,7 @@ namespace
 					;
 					// A body behind a comment on its brace's line is placed from that line, and a statement behind a comment takes its
 					// continuation along, once.
-					fExpectStable
-						(
-							"CommentedLambdaBody"
-							, 190
-							, "auto foo = []() /* A */ { /* B */ return\n0; };\n"
-							, "auto foo = []()\n\t/* A */ {\n\t\t/* B */ return\n\t\t\t0;\n\t}\n;\n"
-						)
-					;
+					fExpectStable("CommentedLambdaBody", 190, "auto foo = []() /* A */ { /* B */ return\n0; };\n", "auto foo = []()\n\t/* A */ {\n\t\t/* B */ return\n\t\t\t0;\n\t}\n;\n");
 					// A comment ending the file in a backslash stays behind its code, which a move above would splice into it.
 					fExpectStable("BackslashEndingComment", 20, "int x; // directory C:\\", "int x; // directory C:\\");
 					// A macro naming the function can expand to the whole declarator, and one standing for a whole parameter to its
@@ -2748,11 +2736,7 @@ namespace
 						DMibTestPath("LaterPassDiagnostics");
 						auto Properties = fg_MalterlibProperties();
 						Properties["max_line_length"] = "80";
-						auto Request = fg_Request
-							(
-								"namespace N { void f() { if(a) fg_Process(FirstArgument, SecondArgument, ThirdArgument, FourthArg); // comment\nelse bar(); } }\n"
-							)
-						;
+						auto Request = fg_Request("namespace N { void f() { if(a) fg_Process(FirstArgument, SecondArgument, ThirdArgument, FourthArg); // comment\nelse bar(); } }\n");
 						Request.m_Settings = CCodeFormattingSettings(Properties);
 
 						auto Result = fg_AnalyzeCodeFormatting(Request);
@@ -2860,14 +2844,7 @@ namespace
 					// A pack expanded behind a name is a value as well, 'Ns...', which a name behind it would declare.
 					fExpectStable("PackExpansionArgument", 36, "CValues<Ns...> values_long_name(Ns...);\n", "CValues<Ns...> values_long_name\n\t(\n\t\tNs...\n\t)\n;\n");
 					// A body whose brace stands behind a comment over several lines keeps its place, and so do its lines.
-					fExpectStable
-						(
-							"BraceBehindCommentLines"
-							, 190
-							, "void f() /* a\n b */ { int x /* c\n d */ = 1; }\n"
-							, "void f() /* a\n b */ {\n\t\t  int x /* c\n d */ = 1;\n\t  }\n"
-						)
-					;
+					fExpectStable("BraceBehindCommentLines", 190, "void f() /* a\n b */ { int x /* c\n d */ = 1; }\n", "void f() /* a\n b */ {\n\t\t  int x /* c\n d */ = 1;\n\t  }\n");
 					// A template argument list cut off from its name leaves no return type to move.
 					fExpectStable
 						(
@@ -3397,13 +3374,7 @@ namespace
 
 						auto Result = fg_AnalyzeCodeFormatting(Request);
 						DMibExpectTrue(Result.m_Status == ECodeFormattingStatus::mc_Complete);
-						DMibExpect
-							(
-								fg_ApplyCodeFormattingEdits(Source, Result.m_Edits)
-								, ==
-								, "#if A\r\nint f()\r\n{\r\n#else\r\nint g()\r\n{\r\n#endif\r\n\treturn 1;\r\n}\r\n"
-							)
-						;
+						DMibExpect(fg_ApplyCodeFormattingEdits(Source, Result.m_Edits), ==, "#if A\r\nint f()\r\n{\r\n#else\r\nint g()\r\n{\r\n#endif\r\n\treturn 1;\r\n}\r\n");
 					}
 				};
 

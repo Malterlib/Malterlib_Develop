@@ -1499,12 +1499,7 @@ namespace NMib::NDevelop::NPrivate
 				fp_BreakBefore(umint(iTail), _iIndent);
 				fp_LayoutRange(_iNode, umint(iTail), _iLast, _iIndent, false, false);
 			}
-			else if
-			(
-				iTail >= 0
-				&& umint(iTail) < _iLast
-				&& (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], ".") || m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], "->"))
-			)
+			else if (iTail >= 0 && umint(iTail) < _iLast && (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], ".") || m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], "->")))
 			{
 				// A member called on the result goes on behind the body's line, its own brackets laid out from there:
 				// '}().f_Call' over '('.
@@ -2191,8 +2186,7 @@ namespace NMib::NDevelop::NPrivate
 				{
 					// A part led by an operator gives at the operators binding tighter than its own in turn, deeper
 					// conditionals as well: ': c' over '? d' over ': e ? f : g'.
-					auto fSplit = [&](auto &_fSplit, umint _iStart, umint _iEnd, TCVector<umint> const &_Inner, umint _nIndent, umint _nFirstIndent)
-						-> void
+					auto fSplit = [&](auto &_fSplit, umint _iStart, umint _iEnd, TCVector<umint> const &_Inner, umint _nIndent, umint _nFirstIndent) -> void
 						{
 							// A conditional that is a branch of another binds no tighter than it, and is set
 							// off one level deeper instead: ': b' with its '? c' and ': d' indented under it.

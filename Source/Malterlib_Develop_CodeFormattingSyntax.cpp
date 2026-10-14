@@ -146,12 +146,7 @@ namespace
 					// An attribute qualifies the type in front of it: 'umint __attribute__((address_space(256))) *pAddress'.
 					bool bAttribute
 						= pBeforeChild
-						&&
-						(
-							_Tokens.f_IsText(*pBeforeChild, "__attribute__")
-							|| _Tokens.f_IsText(*pBeforeChild, "__attribute")
-							|| _Tokens.f_IsText(*pBeforeChild, "__declspec")
-						)
+						&& (_Tokens.f_IsText(*pBeforeChild, "__attribute__") || _Tokens.f_IsText(*pBeforeChild, "__attribute") || _Tokens.f_IsText(*pBeforeChild, "__declspec"))
 					;
 					bool bTypePart = Child.m_Bracket == ECodeBracket::mc_Angle || Child.m_Bracket == ECodeBracket::mc_Square || bRequires || bDecltype || bAttribute;
 					if (Child.m_Kind != ECodeNodeKind::mc_Group || !bTypePart)

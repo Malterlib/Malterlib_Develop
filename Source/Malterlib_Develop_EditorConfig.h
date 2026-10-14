@@ -35,6 +35,7 @@ namespace NMib::NDevelop
 		NContainer::TCSet<NStr::CStr> m_Settled;
 		NContainer::TCSet<NStr::CStr> m_Uncertain;
 	};
+
 	using FEditorConfigLoader = NConcurrency::TCActorFunctorWeak<NConcurrency::TCFuture<NStorage::TCOptional<NStr::CStr>> (NStr::CStr _ConfigurationPath)>;
 
 	struct CEditorConfig
@@ -54,12 +55,7 @@ namespace NMib::NDevelop
 	{
 		// An empty boundary permits discovery up to the filesystem root. Loads run on the
 		// blocking actors given, which resolvers may share, or on one of the resolver's own.
-		explicit CEditorConfigResolver
-			(
-				NStr::CStr const &_Boundary = {}
-				, NStorage::TCSharedPointer<NConcurrency::CSharedRoundRobinBlockingActors> const &_pBlockingActors = {}
-			)
-		;
+		explicit CEditorConfigResolver(NStr::CStr const &_Boundary = {}, NStorage::TCSharedPointer<NConcurrency::CSharedRoundRobinBlockingActors> const &_pBlockingActors = {});
 		CEditorConfigResolver(FEditorConfigLoader &&_fLoader, NStr::CStr const &_Boundary = {});
 		~CEditorConfigResolver() override;
 
@@ -81,6 +77,6 @@ namespace NMib::NDevelop
 		FEditorConfigLoader mp_fLoader;
 		NStr::CStr mp_Boundary;
 		NStorage::TCSharedPointer<NPrivate::CEditorConfigCache> mp_pCache;
-		NStorage::TCSharedPointer<NConcurrency::CSharedRoundRobinBlockingActors> mp_pBlockingActors;	// Bounded; many resolves in flight must not each take a thread.
+		NStorage::TCSharedPointer<NConcurrency::CSharedRoundRobinBlockingActors> mp_pBlockingActors; // Bounded; many resolves in flight must not each take a thread.
 	};
 }

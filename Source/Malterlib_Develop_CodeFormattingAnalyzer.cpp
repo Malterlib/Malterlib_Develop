@@ -1982,7 +1982,8 @@ namespace NMib::NDevelop::NPrivate
 			, TCVector<CCodeFormattingDiagnostic> const &_Pass
 			, bool _bFixable
 			, TCVector<CCodeFormattingDiagnostic> &o_Diagnostics
-		) const
+		)
+		const
 	{
 		COffsetToOriginal ToOriginal{_Plan};
 		COffsetToOriginal EndToOriginal{_Plan};
@@ -2019,7 +2020,8 @@ namespace NMib::NDevelop::NPrivate
 			TCVector<CCodeFormattingEdit> const &_Plan
 			, TCVector<CCodeFormattingDiagnostic> const &_Residual
 			, TCVector<CCodeFormattingDiagnostic> &o_Diagnostics
-		) const
+		)
+		const
 	{
 		TCVector<CCodeFormattingDiagnostic> Diagnostics;
 		for (auto const &Diagnostic : o_Diagnostics)
