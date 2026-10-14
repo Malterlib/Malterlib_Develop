@@ -9107,10 +9107,14 @@ namespace
 			}
 
 			// An operand that holds a lambda is laid out by its scopes, which is where its body
-			// and the operator that takes it are placed: '> TestActor / [&]' stays whole.
+			// and the operator that takes it are placed: '> TestActor / [&]' stays whole, and so does a
+			// capture the range ends a capture list behind. A braced initializer is a value like any
+			// other: 'f_Report(TCVector<CReading>{Reading}) % "Error"'.
 			for (auto i = iStart; i <= iEnd && !Inner.f_IsEmpty(); ++i)
 			{
-				if (m_Tokens.f_IsText(Tokens[i], "{") || fp_IsLambdaIntroducer(i))
+				auto iBrace = m_Tokens.f_IsText(Tokens[i], "{") ? m_Structure.f_FindNodeOpeningAt(i) : Nodes.f_GetLen();
+				bool bBody = iBrace < Nodes.f_GetLen() && Nodes[iBrace].m_Kind != ECodeNodeKind::mc_Group;
+				if (bBody || fp_IsLambdaIntroducer(i) || (m_Tokens.f_IsText(Tokens[i], "]") && fp_ClosesLambdaIntroducer(i)))
 					Inner.f_Clear();
 			}
 

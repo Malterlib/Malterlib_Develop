@@ -1711,6 +1711,25 @@ namespace
 							)
 						;
 					}
+					// A capture holding a conditional stays whole in an opened capture list.
+					{
+						CStr Source = "void f()\n{\n\tg_Dispatch(BlockingActorCheckout) /\n\t\t[\n\t\t\tUserName = mp_MongoUser.m_UserName\n\t\t\t, MongoVersion = mp_MongoVersion\n"
+							"\t\t\t, MongoPort = mp_MongoConnectionSettings.f_GetSingleHost().m_Port\n\t\t\t, MongoReplicaName = fp_ShouldUseReplica() ? mp_MongoReplicaName : CStr{}\n"
+							"\t\t]\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
+						;
+						fg_ExpectFormat("ConditionalCapture", Source, Source);
+					}
+					// A braced initializer in an operand is a value, so the operand still gives at its operators.
+					{
+						CStr Call = "pMonitoredPath->m_FreePercentReporter->m_fReportReadings(TCVector<CDistributedAppSensorReporter::CSensorReading>{fg_Move(Reading)})";
+						fg_ExpectFormat
+							(
+								"BracedValueInOperand"
+								, "void f()\n{\n\t" + Call + " % (\"Failed to report readings (free %) for path {}\"_f << Path) > ReportResults;\n}\n"
+								, "void f()\n{\n\t" + Call + "\n\t\t% (\"Failed to report readings (free %) for path {}\"_f << Path)\n\t\t> ReportResults\n\t;\n}\n"
+							)
+						;
+					}
 					// A lambda is a template argument like any other value, its body skipped with the
 					// groups inside the list: 'f_Test<[](umint _Len) { ... }>(...)' is no comparison.
 					fg_ExpectFormat
