@@ -1134,8 +1134,17 @@ namespace
 					fg_ExpectFormat
 						(
 							"AfterCase"
-							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\n\t\tg();\n\n\t\tbreak;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\n\t\tg();\n\t\th();\n\n\t\tbreak;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\th();\n\n\t\tbreak;\n\t}\n}\n"
+						)
+					;
+					// The blank line in front of a case's 'break' is the one the case under its label has, and joins it
+					// onto the label's line all the same.
+					fg_ExpectFormat
+						(
+							"CaseBreakBlankLine"
 							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\n\t\tbreak;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1: g(); break;\n\t}\n}\n"
 						)
 					;
 					fg_ExpectFormat("AfterDefault", "void f()\n{\n\tswitch (a)\n\t{\n\tdefault:\n\n\t\tbreak;\n\t}\n}\n", "void f()\n{\n\tswitch (a)\n\t{\n\tdefault: break;\n\t}\n}\n");

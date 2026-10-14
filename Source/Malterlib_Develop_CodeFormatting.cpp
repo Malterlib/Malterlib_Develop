@@ -6396,11 +6396,16 @@ namespace
 
 				auto iLast = Nodes[Node.m_Children[iBodyLast]].m_iLastToken;
 				// A blank line between the body's statements is one its author put there; one
-				// behind the label goes anyway.
+				// behind the label goes anyway, and so does the one in front of the 'break', which
+				// the case written under its label has to have.
 				umint nNewlines = 0;
 				bool bBlank = false;
 				auto iBodyFirst = iBodyLast > iChildIndex ? Nodes[Node.m_Children[iChildIndex + 1]].m_iFirstToken : iLast;
-				for (auto i = iBodyFirst + 1; i < iLast && !bBlank; ++i)
+				auto iScanLast = iLast;
+				if (iBodyLast > iChildIndex + 1 && m_Tokens.f_IsText(Tokens[Nodes[Node.m_Children[iBodyLast]].m_iFirstToken], "break"))
+					iScanLast = Nodes[Node.m_Children[iBodyLast - 1]].m_iLastToken;
+
+				for (auto i = iBodyFirst + 1; i < iScanLast && !bBlank; ++i)
 				{
 					if (Tokens[i].m_Kind == ECodeTokenKind::mc_Newline)
 						bBlank = ++nNewlines > 1;
