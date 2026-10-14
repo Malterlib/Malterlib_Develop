@@ -1811,8 +1811,25 @@ namespace
 							(
 							"CaptureBelowOperatorInInitializer"
 								, "void f()\n{\n\tco_return CFoo\n\t\t{\n\t\t\tg_ActorSubscription(Actor) / [" + Captures + "]() mutable\n\t\t\t{\n\t\t\t}\n\t\t\t, 5\n\t\t}\n\t;\n}\n"
+								, "void f()\n{\n\tco_return CFoo\n\t\t{\n\t\t\tg_ActorSubscription(Actor)\n\t\t\t/ [" + Captures + "]() mutable\n"
+								"\t\t\t{\n\t\t\t}\n\t\t\t, 5\n\t\t}\n\t;\n}\n"
+							)
+						;
+						fg_ExpectFormat
+							(
+							"CaptureBelowTrailingOperatorRepaired"
 								, "void f()\n{\n\tco_return CFoo\n\t\t{\n\t\t\tg_ActorSubscription(Actor) /\n\t\t\t\t[" + Captures + "]() mutable\n"
 								"\t\t\t{\n\t\t\t}\n\t\t\t, 5\n\t\t}\n\t;\n}\n"
+								, "void f()\n{\n\tco_return CFoo\n\t\t{\n\t\t\tg_ActorSubscription(Actor)\n\t\t\t/ [" + Captures + "]() mutable\n"
+								"\t\t\t{\n\t\t\t}\n\t\t\t, 5\n\t\t}\n\t;\n}\n"
+							)
+						;
+						// In a statement the operator leads the continuation, and the '=' stays on the head.
+						fg_ExpectFormat
+							(
+							"CaptureBelowOperatorInStatement"
+								, "void f()\n{\n\tauto X = g_ActorSubscription(Actor) / [" + Captures + "]() mutable\n\t\t{\n\t\t}\n\t;\n}\n"
+								, "void f()\n{\n\tauto X = g_ActorSubscription(Actor)\n\t\t/ [" + Captures + "]() mutable\n\t\t{\n\t\t}\n\t;\n}\n"
 							)
 						;
 					}

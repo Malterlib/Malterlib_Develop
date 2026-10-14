@@ -507,8 +507,11 @@ further only while it is still too long:
    The first operator stays on the line before a lambda it takes, and
    so does the lambda's capture list where it fits there: `g_ActorFunctor /
    [this]` with the parameter list and the return type on the lines below,
-   the parameter list opened where it does not fit. Only a capture list too
-   long for that line goes below the operator, opened. A
+   the parameter list opened where it does not fit. A capture list too long
+   for that line takes the operator with it onto a line of its own, `/ [...]`
+   leading it where the lambda's body opens: at the element's level in a list,
+   at the continuation level in a statement, whose `=` stays on the head. Only a
+   capture list too long for that line too goes below the operator, opened. A
    conditional's `?` and `:` bind loosest of all, so a conditional gives at
    them before either of its operands is opened: the condition, `? a` and
    `: b` each take a line. A conditional groups to the right, so one in a

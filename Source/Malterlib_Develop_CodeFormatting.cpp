@@ -769,6 +769,7 @@ namespace
 		CStr m_Baseline;										// The source with every conversion made, which the result matches token for token.
 		bool m_bProbing = false;								// The statement walk only decides conversions, and lays nothing out.
 		bool m_bOperatorSplit = false;							// The statement broke at operators, so a block belongs to a continuation.
+		umint m_iRangeBody = TCLimitsInt<umint>::mc_Max;				// The brace of a body that opens at the level of the range in front of it.
 		umint m_iSplitFirstParen = 0;							// A declaration is never split before its name.
 		umint m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
 		NContainer::TCVector<umint> m_TokenDepth;				// Bracket nesting of each token, for finding a range's own level.
@@ -5134,9 +5135,43 @@ namespace
 			return;
 
 		// The expression the lambda is an operand of starts the line, as in
-		// 'g_ActorSubscription(Actor) / [...]', and is laid out with it.
+		// 'g_ActorSubscription(Actor) / [...]', and is laid out with it, an operator the
+		// source left trailing the line above the capture list included.
 		auto iLineFirst = iHeadFirst;
-		while (!fp_IsFirstOnLine(iLineFirst))
+		auto fTrailsOperator = [&]
+			{
+				auto iOperator = fp_PreviousCode(iHeadFirst);
+				if (iLineFirst != iHeadFirst || iOperator < 0 || umint(iOperator) <= Nodes[_iNode].m_iFirstToken)
+					return false;
+
+				// Only one that then leads the capture list's line takes it back; an opened list stays below.
+				auto iOperatorLineFirst = umint(iOperator);
+				while (!fp_IsFirstOnLine(iOperatorLineFirst) && fp_PreviousCode(iOperatorLineFirst) >= 0)
+					iOperatorLineFirst = umint(fp_PreviousCode(iOperatorLineFirst));
+
+				auto iCapture = m_Structure.f_FindNodeOpeningAt(iHeadFirst);
+				if (iCapture >= Nodes.f_GetLen() || !fp_FitsInline(iHeadFirst, Nodes[iCapture].m_iLastToken, fp_GetStatementIndent(iOperatorLineFirst) + 2))
+					return false;
+
+				auto const &Operator = m_Tokens.f_GetTokens()[umint(iOperator)];
+				if (Operator.m_Kind != ECodeTokenKind::mc_Punctuator || m_Structure.f_IsAngleBracket(umint(iOperator)))
+					return false;
+
+				constexpr ch8 const *c_pOperators[] =
+					{
+						"/", "%", ">", "<<", ">>", "|", "^", "+", "-"
+					}
+				;
+				for (auto pOperator : c_pOperators)
+				{
+					if (m_Tokens.f_IsText(Operator, pOperator))
+						return true;
+				}
+
+				return false;
+			}
+		;
+		while (!fp_IsFirstOnLine(iLineFirst) || fTrailsOperator())
 		{
 			auto iPrevious = fp_PreviousCode(iLineFirst);
 			if (iPrevious < 0 || umint(iPrevious) <= Nodes[_iNode].m_iFirstToken)
@@ -5162,7 +5197,10 @@ namespace
 		// as the statement's continuation.
 		umint iCaptureLast = Nodes[m_Structure.f_FindNodeOpeningAt(iHeadFirst)].m_iLastToken;
 		bool bCaptureBelow = iLineFirst != iHeadFirst && !fp_FitsInline(iLineFirst, iCaptureLast, nIndent);
+		auto iPreviousBody = m_iRangeBody;
+		m_iRangeBody = iBrace;
 		fp_LayoutRange(_iNode, iLineFirst, umint(iHeadLast), nIndent, false, bCaptureBelow);
+		m_iRangeBody = iPreviousBody;
 	}
 
 	// A member initializer list is its own line structure: one entry per line, each split
@@ -8560,7 +8598,12 @@ namespace
 
 			auto iHeadLast = fp_PreviousCode(iBrace);
 			if (iHeadLast >= 0 && umint(iHeadLast) >= _iFirst)
+			{
+				auto iPreviousBody = m_iRangeBody;
+				m_iRangeBody = iBrace;
 				fp_LayoutRange(_iNode, _iFirst, umint(iHeadLast), _iIndent, _bClause, _bIndentContinuations);
+				m_iRangeBody = iPreviousBody;
+			}
 
 			// A body already on a line of its own still moves with its element, so that
 			// its depth follows the element's new indentation.
@@ -8848,7 +8891,12 @@ namespace
 		// below it. Only a capture list too long for that line goes below the operator,
 		// 'g_Dispatch /' with the list opened under it. Only the first operator qualifies,
 		// and only while the line in front of it is whole.
+		// A capture list that fits on a line of its own takes the operator with it instead, '/ [this, ...]' leading
+		// the line where the body opens: at the range's level where the body follows the range, as it does in an element.
 		bool bOperatorTrails = fp_IsLambdaIntroducer(Operators[0]) && fp_FitsInline(_iFirst, Operators[0], _iIndent);
+		bool bOperatorLeads = false;
+		auto iAfterRange = fp_NextCode(_iLast);
+		auto nLambdaIndent = iAfterRange >= 0 && umint(iAfterRange) == m_iRangeBody ? _iIndent : nContinuation;
 		umint iHeadEnd = Operators[0];
 		if (bOperatorTrails)
 		{
@@ -8861,15 +8909,20 @@ namespace
 
 				if (Child.m_iLastToken <= _iLast && fp_FitsInline(_iFirst, Child.m_iLastToken, _iIndent))
 					iHeadEnd = Child.m_iLastToken;
+				else if (Child.m_iLastToken <= _iLast && fp_FitsInline(Operators[0], Child.m_iLastToken, nLambdaIndent))
+					bOperatorLeads = true;
 
 				break;
 			}
 
-			fp_BreakAfter(iHeadEnd, nContinuation);
+			if (bOperatorLeads)
+				bOperatorTrails = false;
+			else
+				fp_BreakAfter(iHeadEnd, nContinuation);
 		}
 
 		for (umint i = bOperatorTrails ? 1 : 0; i < Operators.f_GetLen(); ++i)
-			fp_BreakBefore(Operators[i], nContinuation);
+			fp_BreakBefore(Operators[i], i == 0 && bOperatorLeads ? nLambdaIndent : nContinuation);
 
 		// A statement's value broken at its operators starts a line of its own with the
 		// '=', so that every operand stands under the one in front of it:
@@ -8880,7 +8933,7 @@ namespace
 		// or has to be opened keeps the '=' on the head, 'auto Value = fg_Function' with its
 		// parenthesis below, and so does the key of a DSL spelling, which hugs its '='. A
 		// parameter's default is given the same way, its '=' at the element's level.
-		bool bAssignMoved = !bOperatorTrails && !bLeadsOpened && fp_BreakAtAssign(_iFirst, Operators[0], _iIndent, nContinuation);
+		bool bAssignMoved = !bOperatorTrails && !bOperatorLeads && !bLeadsOpened && fp_BreakAtAssign(_iFirst, Operators[0], _iIndent, nContinuation);
 
 		for (umint iSegment = 0; iSegment <= Operators.f_GetLen(); ++iSegment)
 		{
@@ -8906,7 +8959,7 @@ namespace
 			if (iEnd < iStart)
 				continue;
 
-			auto nSegmentIndent = iSegment ? nContinuation : _iIndent;
+			auto nSegmentIndent = !iSegment ? _iIndent : iSegment == 1 && bOperatorLeads ? nLambdaIndent : nContinuation;
 			if (fp_FitsInline(iStart, iEnd, nSegmentIndent))
 			{
 				fp_MarkInline(iStart, iEnd);
