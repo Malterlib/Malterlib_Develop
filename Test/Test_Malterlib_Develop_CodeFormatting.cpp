@@ -1138,6 +1138,18 @@ namespace
 							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\th();\n\n\t\tbreak;\n\t}\n}\n"
 						)
 					;
+					// A value whose call cannot be reached on the line goes behind its '=' rather than giving inside its
+					// own qualified name.
+					CStr PointerType = "NStorage::TCUniquePointer<CLinuxStackTraceInfo, NMemory::CAllocator_NonTrackedHeap>";
+					fg_ExpectFormat
+						(
+							"ValueOutOfReach"
+							, "struct C\n{\n\tvoid f()\n\t{\n\t\tif (a)\n\t\t{\n\t\t\tif (b)\n\t\t\t{\n\t\t\t\t" + PointerType + " pInfo = " + PointerType
+							+ "((CLinuxStackTraceInfo *)_pInfo);\n\t\t\t}\n\t\t}\n\t}\n};\n"
+							, "struct C\n{\n\tvoid f()\n\t{\n\t\tif (a)\n\t\t{\n\t\t\tif (b)\n\t\t\t{\n\t\t\t\t" + PointerType + " pInfo\n\t\t\t\t\t= " + PointerType
+							+ "((CLinuxStackTraceInfo *)_pInfo)\n\t\t\t\t;\n\t\t\t}\n\t\t}\n\t}\n};\n"
+						)
+					;
 					// An enumerator list's first line stands at the body's level with the commas, however it was aligned.
 					fg_ExpectFormat
 						(

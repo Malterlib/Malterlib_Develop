@@ -7750,7 +7750,31 @@ namespace
 				&& fp_GetCanonicalSpacing(umint(iHeadEnd), iAssign) == ECodeSpacing::mc_Space
 			;
 			bool bHeadFits = bSettled && fp_FitsInline(_iFirst, umint(iHeadEnd), _iIndent);
-			if (bHeadFits && (!bNamedScope || bElement) && fp_FitsInline(iAssign, _iLast, nContinuation))
+			// So does one whose first scope cannot be reached on the line, which would otherwise give
+			// inside the value's own name: 'TCFoo<...> pValue' over '= NStorage::TCFoo<...>(_pValue)'.
+			bool bScopeOutOfReach = false;
+			if (bNamedScope && !bElement)
+			{
+				for (auto iChild : Node.m_Children)
+				{
+					auto const &Child = Nodes[iChild];
+					if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_iFirstToken <= iAssign || Child.m_iLastToken > _iLast)
+						continue;
+
+					if (Child.m_Bracket == ECodeBracket::mc_Angle)
+						continue;
+
+					if (Child.m_Bracket != ECodeBracket::mc_Paren)
+						break;
+
+					auto iScopeHead = fp_PreviousCode(Child.m_iFirstToken);
+					bScopeOutOfReach = iScopeHead >= 0 && !fp_FitsInline(_iFirst, umint(iScopeHead), _iIndent);
+
+					break;
+				}
+			}
+
+			if (bHeadFits && (!bNamedScope || bElement || bScopeOutOfReach) && fp_FitsInline(iAssign, _iLast, nContinuation))
 			{
 				fp_MarkInline(_iFirst, umint(iHeadEnd));
 				fp_BreakBefore(iAssign, nContinuation);
