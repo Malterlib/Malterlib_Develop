@@ -1916,8 +1916,20 @@ namespace
 			if (bLabel)
 				continue;
 
-			// Only a comment written where its statement was follows it to where it goes.
-			if (fp_GetSourceLineIndent(i) != fp_GetSourceLineIndent(iCode))
+			// Only a comment written where its statement was follows it to where it goes, or one that opens
+			// a case's body behind its label, which stands where the body does wherever it was written.
+			bool bOpensCase = false;
+			if (auto iLabelEnd = fp_PreviousCode(i); iLabelEnd >= 0 && m_Tokens.f_IsText(Tokens[umint(iLabelEnd)], ":"))
+			{
+				auto iStatement = m_Structure.f_FindStatementEndingAt(umint(iLabelEnd));
+				if (iStatement < m_Structure.f_GetNodes().f_GetLen())
+				{
+					auto const &LabelFirst = Tokens[m_Structure.f_GetNodes()[iStatement].m_iFirstToken];
+					bOpensCase = m_Tokens.f_IsText(LabelFirst, "case") || m_Tokens.f_IsText(LabelFirst, "default");
+				}
+			}
+
+			if (!bOpensCase && fp_GetSourceLineIndent(i) != fp_GetSourceLineIndent(iCode))
 				continue;
 
 			umint nTarget = 0;

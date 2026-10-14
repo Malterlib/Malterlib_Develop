@@ -1138,6 +1138,14 @@ namespace
 							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\th();\n\n\t\tbreak;\n\t}\n}\n"
 						)
 					;
+					// A comment opening a case's body stands where the body does, wherever it was written.
+					fg_ExpectFormat
+						(
+							"CaseBodyComment"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tdefault:\n\t\t\t// Comment\n\t\th();\n\t\treturn;\n\t}\n}\n"
+							, "void f()\n{\n\tswitch (a)\n\t{\n\tdefault:\n\t\t// Comment\n\t\th();\n\t\treturn;\n\t}\n}\n"
+						)
+					;
 					// The blank line in front of a case's 'break' is the one the case under its label has, and joins it
 					// onto the label's line all the same.
 					fg_ExpectFormat
