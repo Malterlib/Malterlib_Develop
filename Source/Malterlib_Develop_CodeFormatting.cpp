@@ -9075,6 +9075,37 @@ namespace
 			if (iInnerFirst <= iEnd)
 				fp_FindLooseOperators(iInnerFirst, iEnd, Inner);
 
+			// The operator that takes a lambda gives first where its capture list does not fit behind it
+			// and what stands in front of it fits on the operand's line, the lambda taking a line of its
+			// own at that level: '> pState->m_Promise % fg_Format(...)' over '/ [this, ...]'.
+			if (!Inner.f_IsEmpty() && fp_IsLambdaIntroducer(Inner.f_GetLast()))
+			{
+				auto iOperator = Inner.f_GetLast();
+				auto iHeadLast = fp_PreviousCode(iOperator);
+				bool bBodyInHead = false;
+				for (auto i = iStart; iHeadLast >= 0 && i <= umint(iHeadLast) && !bBodyInHead; ++i)
+					bBodyInHead = m_Tokens.f_IsText(Tokens[i], "{") || fp_IsLambdaIntroducer(i);
+
+				auto iCapture = m_Structure.f_FindNodeOpeningAt(umint(fp_NextCode(iOperator)));
+				bool bCaptureBehind = iCapture < Nodes.f_GetLen() && fp_FitsInline(iStart, Nodes[iCapture].m_iLastToken, nSegmentIndent);
+				bool bCaptureLeads = iCapture < Nodes.f_GetLen() && fp_FitsInline(iOperator, Nodes[iCapture].m_iLastToken, nSegmentIndent);
+				bool bLead = iHeadLast >= 0
+					&& umint(iHeadLast) >= iStart
+					&& !bBodyInHead
+					&& !bCaptureBehind
+					&& bCaptureLeads
+					&& fp_FitsInline(iStart, umint(iHeadLast), nSegmentIndent)
+				;
+				if (bLead)
+				{
+					fp_MarkInline(iStart, umint(iHeadLast));
+					fp_BreakBefore(iOperator, nSegmentIndent);
+					fp_LayoutScopes(_iNode, iOperator, iEnd, nSegmentIndent, false, false);
+
+					continue;
+				}
+			}
+
 			// An operand that holds a lambda is laid out by its scopes, which is where its body
 			// and the operator that takes it are placed: '> TestActor / [&]' stays whole.
 			for (auto i = iStart; i <= iEnd && !Inner.f_IsEmpty(); ++i)

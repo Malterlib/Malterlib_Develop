@@ -1697,6 +1697,20 @@ namespace
 							)
 						;
 					}
+					// An operand taking a lambda whose capture list does not fit behind it gives at the
+					// lambda's operator before any of its own scopes opens.
+					{
+						CStr Captures = "this, FileName, _Description, _Environment, _fOnStdOutput, pState, _WarningErrorStatus, BlockingActorCheckout = fg_Move(BlockingActorCheckout)";
+						fg_ExpectFormat
+							(
+								"LambdaOperatorInOperand"
+								, "void f()\n{\n\tfg_Dispatch(Actor)\n\t\t> pState->m_Promise % fg_Format(\"[{}] Failed to save\", _Description) / [" + Captures + "]\n"
+								"\t\t{\n\t\t\th();\n\t\t}\n\t;\n}\n"
+								, "void f()\n{\n\tfg_Dispatch(Actor)\n\t\t> pState->m_Promise % fg_Format(\"[{}] Failed to save\", _Description)\n\t\t/ [" + Captures + "]\n"
+								"\t\t{\n\t\t\th();\n\t\t}\n\t;\n}\n"
+							)
+						;
+					}
 					// A lambda is a template argument like any other value, its body skipped with the
 					// groups inside the list: 'f_Test<[](umint _Len) { ... }>(...)' is no comparison.
 					fg_ExpectFormat

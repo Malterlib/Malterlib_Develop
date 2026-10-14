@@ -511,7 +511,10 @@ further only while it is still too long:
    for that line takes the operator with it onto a line of its own, `/ [...]`
    leading it where the lambda's body opens: at the element's level in a list,
    at the continuation level in a statement, whose `=` stays on the head. Only a
-   capture list too long for that line too goes below the operator, opened. A
+   capture list too long for that line too goes below the operator, opened.
+   The same holds for an operator taking a lambda inside an operand: where the
+   capture list does not fit behind it, the operand gives there before any of
+   its scopes opens, `> pState->m_Promise % fg_Format(...)` over `/ [...]`. A
    conditional's `?` and `:` bind loosest of all, so a conditional gives at
    them before either of its operands is opened: the condition, `? a` and
    `: b` each take a line. A conditional groups to the right, so one in a
