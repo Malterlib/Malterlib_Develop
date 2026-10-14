@@ -1740,8 +1740,8 @@ namespace
 							"\t\t\t+ fg_B(2)\n\t\t)\n\t;\n}\n"
 						)
 					;
-					// A chain on a braced value gives at every member, its first included, wherever the value
-					// stands; behind an empty call the access goes on with the head.
+					// A chain on a braced value or an empty call gives at every member, its first included,
+					// wherever the value stands.
 					{
 						CStr Chain = ".f_SetNotes(\"Testing12\")\n\t\t\t.f_SetSecret(fg_TempCopy(ByteVectorSecret))\n\t\t\t.f_SetTags({\"Shared1\", \"Shared2\", \"Unique2\"})\n"
 							"\t\t\t.f_SetSemanticID(\"Semantic2\")\n"
@@ -1753,6 +1753,14 @@ namespace
 								+ "\t\t)\n\t;\n}\n"
 								, "void f()\n{\n\tg\n\t\t(\n\t\t\tCSecretsManager::CSecretID{\"Folder1\", \"Name2\"}\n\t\t\t, CSecretsManager::CSecretProperties{}\n\t\t\t"
 								+ Chain + "\t\t)\n\t;\n}\n"
+							)
+						;
+						CStr Bind = ".f_Bind<fg_ImportUser<TCDistributedActorWrapper<CDistributedActorTrustManagerInterface>>>(ServerTrust, ExportedWithoutPrivate)";
+						fg_ExpectFormat
+							(
+								"ChainOnEmptyCall"
+								, "void f()\n{\n\tfg_CurrentActor()" + Bind + ".f_CallSync(RunLoopHelper.m_pRunLoop, g_Timeout);\n}\n"
+								, "void f()\n{\n\tfg_CurrentActor()\n\t\t" + Bind + "\n\t\t.f_CallSync(RunLoopHelper.m_pRunLoop, g_Timeout)\n\t;\n}\n"
 							)
 						;
 					}

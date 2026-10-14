@@ -8465,8 +8465,9 @@ namespace
 					}
 				}
 
-				// The chain starts at the first access on what a call, a subscript or a braced value yields,
-				// which takes its line with the rest: 'CFoo{}' over '.f_SetNotes(...)' over '.f_SetTags(...)'.
+				// The chain starts at the first access on what a call, a subscript or a braced value yields, an
+				// empty one included, which takes its line with the rest: 'CFoo{}' over '.f_SetNotes(...)' over
+				// '.f_SetTags(...)', and 'fg_CurrentActor()' over '.f_Bind<...>(...)'.
 				if (bMember)
 				{
 					for (auto i = iLineFirst + 1; i < Link.m_iFirstToken; ++i)
@@ -8477,12 +8478,6 @@ namespace
 						auto iOperand = fp_PreviousCode(i);
 						auto iYielded = iOperand >= 0 ? m_Structure.f_FindNodeClosingAt(umint(iOperand)) : Nodes.f_GetLen();
 						if (iYielded >= Nodes.f_GetLen() || Nodes[iYielded].m_Kind != ECodeNodeKind::mc_Group || Nodes[iYielded].m_Bracket == ECodeBracket::mc_Angle)
-							continue;
-
-						// An empty call is no link, so its access goes on with the head: 'fg_CurrentActor().f_Bind'.
-						// A braced value constructs what the chain works on, and even an empty one starts it.
-						bool bEmpty = fp_NextCode(Nodes[iYielded].m_iFirstToken) == aint(Nodes[iYielded].m_iLastToken);
-						if (bEmpty && Nodes[iYielded].m_Bracket != ECodeBracket::mc_Brace)
 							continue;
 
 						if (fp_FitsInline(iLineFirst, umint(iOperand), nLineIndent))
