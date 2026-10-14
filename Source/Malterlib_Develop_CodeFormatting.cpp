@@ -5064,6 +5064,7 @@ namespace
 		if (Node.m_Kind == ECodeNodeKind::mc_Group && (Node.m_Bracket == ECodeBracket::mc_Brace || Node.m_Bracket == ECodeBracket::mc_Paren))
 		{
 			umint iElement = Node.m_iFirstToken + 1;
+			umint iChildCursor = 0;
 			for (umint iSplit = 0; iElement <= Node.m_iLastToken; ++iSplit)
 			{
 				auto iEnd = iSplit < Node.m_SplitPoints.f_GetLen() ? Node.m_SplitPoints[iSplit] : Node.m_iLastToken;
@@ -5078,15 +5079,17 @@ namespace
 					// So is one holding a lambda's body, which takes lines of its own wherever it fits. The
 					// layout places the body, so only the head in front of it has to be joinable.
 					aint iHeadLast = -1;
-					for (auto iChild : Node.m_Children)
-					{
-						auto const &Child = Nodes[iChild];
-						if (Child.m_Kind == ECodeNodeKind::mc_Block && Child.m_iFirstToken > umint(iStart) && Child.m_iLastToken <= umint(iLast))
-						{
-							iHeadLast = fp_PreviousCode(Child.m_iFirstToken);
+					while (iChildCursor < Node.m_Children.f_GetLen() && Nodes[Node.m_Children[iChildCursor]].m_iFirstToken <= umint(iStart))
+						++iChildCursor;
 
+					for (auto iChild = iChildCursor; iChild < Node.m_Children.f_GetLen() && iHeadLast < 0; ++iChild)
+					{
+						auto const &Child = Nodes[Node.m_Children[iChild]];
+						if (Child.m_iLastToken > umint(iLast))
 							break;
-						}
+
+						if (Child.m_Kind == ECodeNodeKind::mc_Block)
+							iHeadLast = fp_PreviousCode(Child.m_iFirstToken);
 					}
 
 					auto nIndent = fp_GetStatementIndent(umint(iStart));
