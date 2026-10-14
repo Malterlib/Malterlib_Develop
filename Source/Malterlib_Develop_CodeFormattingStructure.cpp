@@ -493,10 +493,12 @@ namespace NMib::NDevelop
 			if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 				continue;
 
-			// A template argument can be a function type, an array bound or a braced value,
-			// so a balanced group inside the list is skipped rather than ending the search.
-			// A brace that opens a block belongs to whatever the '<' really was, and ends it.
-			if (mp_pTokens->f_IsText(Token, "(") || mp_pTokens->f_IsText(Token, "[") || (mp_pTokens->f_IsText(Token, "{") && !fp_IsBlockBrace(i)))
+			// A template argument can be a function type, an array bound, a braced value or a
+			// lambda, so a balanced group inside the list is skipped rather than ending the
+			// search. Any other brace that opens a block belongs to whatever the '<' really
+			// was, and ends it.
+			bool bSkippedBrace = mp_pTokens->f_IsText(Token, "{") && (nBrackets || !fp_IsBlockBrace(i) || fp_IsLambdaBody(i));
+			if (mp_pTokens->f_IsText(Token, "(") || mp_pTokens->f_IsText(Token, "[") || bSkippedBrace)
 			{
 				++nBrackets;
 
@@ -586,25 +588,13 @@ namespace NMib::NDevelop
 		return false;
 	}
 
-	// A brace that holds statements is a block, even inside an argument list, where it is a
-	// lambda body. A braced initializer holds expressions: it never has a statement
-	// terminator at its own level, and no element of one can start with a keyword only a
-	// statement begins with, which is what a body whose every statement is compound has
-	// instead of a terminator: 'mutable { for (auto &Entry : Entries) { ... } }'.
-	bool CCodeStructure::fp_IsBlockBrace(umint _iToken) const
+	// A brace behind a lambda's introducer is its body whatever it holds, and an empty
+	// one holds nothing to tell it by. The introducer is a capture list, or that and a
+	// parameter list with 'mutable' or 'noexcept' behind it; a capture list is told
+	// from a subscript by standing where no operand is in front of it.
+	bool CCodeStructure::fp_IsLambdaBody(umint _iToken) const
 	{
-		constexpr ch8 const *c_pStatementKeywords[] =
-			{
-				"if", "else", "for", "while", "do", "switch", "try", "catch"
-				, "return", "co_return", "break", "continue", "goto", "case", "default"
-			}
-		;
 		auto const &Tokens = mp_pTokens->f_GetTokens();
-
-		// A brace behind a lambda's introducer is its body whatever it holds, and an empty
-		// one holds nothing to tell it by. The introducer is a capture list, or that and a
-		// parameter list with 'mutable' or 'noexcept' behind it; a capture list is told
-		// from a subscript by standing where no operand is in front of it.
 		auto fOpens = [&](umint _iClose, ch8 const *_pOpen, ch8 const *_pClose) -> aint
 			{
 				umint nNested = 0;
@@ -644,6 +634,27 @@ namespace NMib::NDevelop
 					return true;
 			}
 		}
+
+		return false;
+	}
+
+	// A brace that holds statements is a block, even inside an argument list, where it is a
+	// lambda body. A braced initializer holds expressions: it never has a statement
+	// terminator at its own level, and no element of one can start with a keyword only a
+	// statement begins with, which is what a body whose every statement is compound has
+	// instead of a terminator: 'mutable { for (auto &Entry : Entries) { ... } }'.
+	bool CCodeStructure::fp_IsBlockBrace(umint _iToken) const
+	{
+		constexpr ch8 const *c_pStatementKeywords[] =
+			{
+				"if", "else", "for", "while", "do", "switch", "try", "catch"
+				, "return", "co_return", "break", "continue", "goto", "case", "default"
+			}
+		;
+		auto const &Tokens = mp_pTokens->f_GetTokens();
+
+		if (fp_IsLambdaBody(_iToken))
+			return true;
 
 		umint nDepth = 0;
 		for (auto i = _iToken; i < mp_Significant.f_GetLen(); ++i)

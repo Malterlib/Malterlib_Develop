@@ -1662,6 +1662,17 @@ namespace
 							, false
 						)
 					;
+					// A lambda is a template argument like any other value, its body skipped with the
+					// groups inside the list: 'f_Test<[](umint _Len) { ... }>(...)' is no comparison.
+					fg_ExpectFormat
+						(
+							"LambdaTemplateArgument"
+							, "void f()\n{\n\tf_Test < [](umint _Len)\n\t\t{\n\t\t\tif (_Len)\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t\t\treturn h(_Len);\n\t\t}\n\t\t> (\"A\", 5)\n\t;\n}\n"
+							, "void f()\n{\n\tf_Test\n\t\t<\n\t\t\t[](umint _Len)\n\t\t\t{\n\t\t\t\tif (_Len)\n\t\t\t\t\tg();\n\t\t\t\treturn h(_Len);\n\t\t\t}\n"
+							"\t\t>\n\t\t(\"A\", 5)\n\t;\n}\n"
+							, false
+						)
+					;
 					// A guarded clause spanning lines with what it guards takes the braces around
 					// all of it: a block, a statement and an 'else' branch behind it.
 					fg_ExpectFormat
