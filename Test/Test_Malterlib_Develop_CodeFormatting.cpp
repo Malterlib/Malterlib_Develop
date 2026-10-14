@@ -1662,6 +1662,18 @@ namespace
 							, false
 						)
 					;
+					// A parameter list whose line would give at its specification anyway stays behind
+					// the capture list, the specification and the return type taking lines below.
+					{
+						CStr Spec = "noexcept(noexcept(t_CKey(fg_Forward<decltype(_Key)>(_Key))) && noexcept(t_CValue(fg_Forward<decltype(_Value)>(_Value))) && !c_bCanThrowCheck)";
+						fg_ExpectFormat
+							(
+								"LambdaParametersBehindCapture"
+								, "void f()\n{\n\tauto fA = [&]\n\t\t(this auto &&_fThis, auto &&_Key, auto &&_Value)\n\t\t" + Spec + "\n\t\t-> void\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
+								, "void f()\n{\n\tauto fA = [&](this auto &&_fThis, auto &&_Key, auto &&_Value)\n\t\t" + Spec + "\n\t\t-> void\n\t\t{\n\t\t\tg();\n\t\t}\n\t;\n}\n"
+							)
+						;
+					}
 					// A lambda is a template argument like any other value, its body skipped with the
 					// groups inside the list: 'f_Test<[](umint _Len) { ... }>(...)' is no comparison.
 					fg_ExpectFormat

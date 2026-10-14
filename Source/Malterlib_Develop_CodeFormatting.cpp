@@ -8190,6 +8190,24 @@ namespace
 						continue;
 				}
 
+				// A parameter list moves below its capture list to stand with what follows it. Where
+				// that line gives at its specification or its return type anyway, the list stays
+				// behind the capture list: '[&](auto &&_Key)' over 'noexcept(...)' over '-> void'.
+				bool bParameters = Introducer[i] && m_Tokens.f_IsText(Tokens[Breaks[i]], "(") && i + 1 < Breaks.f_GetLen() && !Introducer[i + 1];
+				if (bParameters)
+				{
+					auto iParametersLast = fp_PreviousCode(Breaks[i + 1]);
+					if
+					(
+						iParametersLast >= 0
+						&& fp_FitsInline(iLineFirst, umint(iParametersLast), nLineIndent)
+						&& !fp_FitsInline(Breaks[i], _iLast, nContinuation)
+					)
+					{
+						continue;
+					}
+				}
+
 				iBreak = i;
 
 				break;

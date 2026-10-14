@@ -529,7 +529,11 @@ further only while it is still too long:
    parameter list behind its capture list, and a trailing return type behind a
    parameter list, each move down whole. A lambda's capture list, template
    parameter list and parameter list are one introducer: they stand together
-   on a line or each takes one of its own. A call on what another call yields
+   on a line or each takes one of its own. A parameter list moves below its
+   capture list to stand with what follows it, so where that line would give
+   at its exception specification or return type anyway, the list stays behind
+   the capture list: `[&](auto &&_Key)` over `noexcept(...)` over `-> void`.
+   A call on what another call yields
    spells one call expression with it, `f_CallActor(&C::f_Fn)(_Params)`, and
    moves down only where the line has nothing later to give: where a scope
    holding a lambda body stands behind it, that body opens below whatever else
