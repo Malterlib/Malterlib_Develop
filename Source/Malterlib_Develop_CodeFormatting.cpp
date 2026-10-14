@@ -8395,7 +8395,19 @@ namespace
 			{
 				auto const &Link = Nodes[Scopes[iScope]];
 				auto iInner = fp_NextCode(Link.m_iFirstToken);
-				auto iMember = fp_NextCode(Link.m_iLastToken);
+				// An empty call on what the scope yields is no link, and stays on its line: 'f_CallActor(&C::f_Fn)()'.
+				umint iLinkEnd = Link.m_iLastToken;
+				auto iMember = fp_NextCode(iLinkEnd);
+				while (iMember >= 0 && umint(iMember) < _iLast && m_Tokens.f_IsText(Tokens[umint(iMember)], "("))
+				{
+					auto iClose = fp_NextCode(umint(iMember));
+					if (iClose < 0 || !m_Tokens.f_IsText(Tokens[umint(iClose)], ")"))
+						break;
+
+					iLinkEnd = umint(iClose);
+					iMember = fp_NextCode(iLinkEnd);
+				}
+
 				bool bOpens = !Link.m_bHasBlock && iInner >= 0 && umint(iInner) != Link.m_iLastToken && Link.m_iFirstToken >= iLineFirst;
 				bool bMember = iMember >= 0
 					&& umint(iMember) <= _iLast
@@ -8453,9 +8465,9 @@ namespace
 					}
 				}
 
-				if (bOpens && (bMember || bDeclared) && fp_FitsInline(iLineFirst, Link.m_iLastToken, nLineIndent))
+				if (bOpens && (bMember || bDeclared) && fp_FitsInline(iLineFirst, iLinkEnd, nLineIndent))
 				{
-					fp_MarkInline(iLineFirst, Link.m_iLastToken);
+					fp_MarkInline(iLineFirst, iLinkEnd);
 					fp_BreakBefore(umint(iMember), nContinuation);
 					bSplit = true;
 					iLineFirst = umint(iMember);

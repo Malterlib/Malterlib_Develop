@@ -3287,6 +3287,14 @@ namespace NMib::NDevelop
 							return ECodeSpacing::mc_Space;
 					}
 
+					// A function's name, or a member's, is called with the address: 'Actor.f_CallActor(&CFoo::f_Get)()'.
+					auto iAccess = fg_PreviousCode(_Tokens, _iLeft);
+					bool bCalled = fg_NamesFunction(_Tokens, Left)
+						|| (iAccess >= 0 && (_Tokens.f_IsText(Tokens[umint(iAccess)], ".") || _Tokens.f_IsText(Tokens[umint(iAccess)], "->")))
+					;
+					if (bDeclarator && bCalled)
+						return ECodeSpacing::mc_None;
+
 					if (bDeclarator)
 						return fg_NamesType(_Tokens, Left) ? ECodeSpacing::mc_Space : ECodeSpacing::mc_Preserve;
 

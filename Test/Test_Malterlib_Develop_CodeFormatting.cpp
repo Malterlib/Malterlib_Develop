@@ -1684,6 +1684,19 @@ namespace
 							"\t\t)\n\t;\n}\n"
 						)
 					;
+					// An address passed to a member call is no declarator, so the call hugs its name and a chain
+					// behind an empty call on what it yields gives at its members, however the source opened it.
+					{
+						CStr Message = "\"Timed out waiting for application pre stop (1 hour) and then some more text to fill the line\"";
+						fg_ExpectFormat
+							(
+								"ChainBehindYieldedCall"
+								, "void f()\n{\n\tResult = co_await pApp->m_Interface.f_CallActor\n\t\t(\n\t\t\t&CInterface::f_PreStop\n\t\t)().f_Timeout(60.0, " + Message + ")"
+								".f_Wrap()\n\t;\n}\n"
+								, "void f()\n{\n\tResult = co_await pApp->m_Interface.f_CallActor(&CInterface::f_PreStop)()\n\t\t.f_Timeout(60.0, " + Message + ")\n\t\t.f_Wrap()\n\t;\n}\n"
+							)
+						;
+					}
 					// A lambda is a template argument like any other value, its body skipped with the
 					// groups inside the list: 'f_Test<[](umint _Len) { ... }>(...)' is no comparison.
 					fg_ExpectFormat
