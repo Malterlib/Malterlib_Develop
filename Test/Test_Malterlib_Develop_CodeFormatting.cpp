@@ -1138,6 +1138,16 @@ namespace
 							, "void f()\n{\n\tswitch (a)\n\t{\n\tcase 1:\n\t\tg();\n\t\th();\n\n\t\tbreak;\n\t}\n}\n"
 						)
 					;
+					// A block comment over several lines trailing code becomes one line comment per line of text, the marker
+					// kept and the continuation lines aligned under the first.
+					fg_ExpectFormat
+						(
+							"TrailingBlockCommentLines"
+							, "enum EFlag\n{\n\tEFlag_None = 0\n\t, EFlag_Reserve = 0x10000\t\t\t/**< Reserve. Return a\n\t\t\t\t\t\t\t\t\tpointer.\n\t\t\t\t\t\t\t\t\t*/\n};\n"
+							, "enum EFlag\n{\n\tEFlag_None = 0\n\t, EFlag_Reserve = 0x10000 ///< Reserve. Return a\n\t\t\t\t\t\t\t  ///< pointer.\n};\n"
+							, false
+						)
+					;
 					// A value whose call cannot be reached on the line goes behind its '=' rather than giving inside its
 					// own qualified name.
 					CStr PointerType = "NStorage::TCUniquePointer<CLinuxStackTraceInfo, NMemory::CAllocator_NonTrackedHeap>";

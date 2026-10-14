@@ -3833,6 +3833,94 @@ namespace
 		{
 			auto const &Comment = Tokens[i];
 			bool bBlock = Comment.m_Kind == ECodeTokenKind::mc_BlockComment;
+
+			// A block comment over several lines trailing code becomes one line comment per line of its text, the
+			// documenting marker kept: '/**< a' over 'b */' becomes '///< a' over '///< b', the continuation lines
+			// aligned under the first by the layout.
+			if (bBlock && Comment.m_bMultiLine && !fp_IsFirstOnLine(i))
+			{
+				auto iEnd = i + 1;
+				while (iEnd < Tokens.f_GetLen() && Tokens[iEnd].m_Kind == ECodeTokenKind::mc_Whitespace)
+					++iEnd;
+
+				auto iBefore = fp_PreviousSignificant(i);
+				auto Text = m_Tokens.f_GetText(Comment);
+				auto iCommentLine = m_Lines.f_FindLine(Comment.m_iOffset);
+				bool bSameLine = iBefore >= 0;
+				for (auto iGap = umint(iBefore) + 1; bSameLine && iGap < i; ++iGap)
+					bSameLine = Tokens[iGap].m_Kind != ECodeTokenKind::mc_Newline;
+
+				bool bConvertible = (iEnd >= Tokens.f_GetLen() || Tokens[iEnd].m_Kind == ECodeTokenKind::mc_Newline)
+					&& bSameLine
+					&& Tokens[umint(iBefore)].m_Kind != ECodeTokenKind::mc_Preprocessor
+					&& !m_bProtectedStart[iCommentLine]
+					&& Text.f_Find("malterlib-format") < 0
+					&& !fp_IsDisabled(Comment.m_iOffset, Comment.m_nLength)
+					&& fp_IsSelected(Comment.m_iOffset, Comment.m_nLength)
+				;
+				if (!bConvertible)
+					continue;
+
+				CStr Marker = "//";
+				umint nOpen = 2;
+				if (Text.f_StartsWith("/**<") || Text.f_StartsWith("/*!<"))
+				{
+					Marker = Text.f_StartsWith("/**<") ? "///<" : "//!<";
+					nOpen = 4;
+				}
+				else if (Text.f_StartsWith("/**") || Text.f_StartsWith("/*!"))
+				{
+					Marker = Text.f_StartsWith("/**") ? "///" : "//!";
+					nOpen = 3;
+				}
+
+				auto Inner = CStr(Text.f_GetStr() + nOpen, Text.f_GetLen() - nOpen - 2);
+				TCVector<CStr> Lines;
+				bool bSplice = false;
+				while (true)
+				{
+					auto iNewline = Inner.f_FindChar('\n');
+					auto Line = (iNewline >= 0 ? Inner.f_Left(iNewline) : Inner).f_Trim();
+					if (Line.f_StartsWith("*"))
+						Line = CStr(Line.f_GetStr() + 1, Line.f_GetLen() - 1).f_Trim();
+
+					bSplice |= Line.f_EndsWith("\\");
+					if (!Line.f_IsEmpty())
+						Lines.f_Insert(Line);
+
+					if (iNewline < 0)
+						break;
+
+					Inner = CStr(Inner.f_GetStr() + iNewline + 1, Inner.f_GetLen() - iNewline - 1);
+				}
+
+				if (Lines.f_IsEmpty() || bSplice)
+					continue;
+
+				// The first line has to fit behind its code, which a line comment cannot leave.
+				auto iLineStart = m_Lines.f_GetLineStart(iCommentLine);
+				umint nCodeColumns = 0;
+				if (!fg_MeasureTextColumns(Source.f_GetStr() + iLineStart, Tokens[umint(iBefore)].f_GetEnd() - iLineStart, nTab, nCodeColumns))
+					continue;
+
+				if (nMaxColumns && nCodeColumns + 1 + Marker.f_GetLen() + 1 + Lines[0].f_GetLen() > nMaxColumns)
+					continue;
+
+				auto Indent = CStr(Source.f_GetStr() + iLineStart, Tokens[m_Tokens.f_FindToken(iLineStart)].m_Kind == ECodeTokenKind::mc_Whitespace
+					? Tokens[m_Tokens.f_FindToken(iLineStart)].m_nLength : 0);
+				CStr Replacement = Marker + " " + Lines[0];
+				for (umint iText = 1; iText < Lines.f_GetLen(); ++iText)
+					Replacement += LineEnding + Indent + "\t" + Marker + " " + Lines[iText];
+
+				auto &Replace = m_Structural.f_Insert();
+				Replace.m_iOffset = Comment.m_iOffset;
+				Replace.m_nLength = Comment.m_nLength;
+				Replace.m_Replacement = Replacement;
+				Replace.m_Rule = "trailing-comment";
+
+				continue;
+			}
+
 			if ((Comment.m_Kind != ECodeTokenKind::mc_LineComment && !bBlock) || Comment.m_bMultiLine || fp_IsFirstOnLine(i))
 				continue;
 
