@@ -3919,6 +3919,16 @@ namespace
 							, false
 						)
 					;
+					// A calling convention only stands in a declarator, so a pointer to function's declarator
+					// holding one stands apart from the return type in front of it, whatever that names.
+					fExpect
+						(
+							"CallingConventionDeclarator"
+							, "struct C\n{\n\tNTSTATUS  (__stdcall *m_pLoad)(PWCHAR _pPath);\n\tNTSTATUS(__cdecl *m_pFree)(int _A);\n};\n"
+							, "struct C\n{\n\tNTSTATUS (__stdcall *m_pLoad)(PWCHAR _pPath);\n\tNTSTATUS (__cdecl *m_pFree)(int _A);\n};\n"
+							, false
+						)
+					;
 				};
 
 				DMibTestCategory("Body")

@@ -3214,9 +3214,17 @@ namespace NMib::NDevelop
 					// A calling convention macro may stand in front of the declarator:
 					// 'void (DMibCrossmoduleAPI *m_fFree)(CFoo *_pModule)'.
 					auto iInner = fg_NextCode(_Tokens, _iRight);
+					// A calling convention only stands in a declarator: 'NTSTATUS (__stdcall *m_pLoad)(PWCHAR _pPath)'.
+					bool bConvention = false;
 					if (iInner >= 0 && Tokens[umint(iInner)].m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Tokens[umint(iInner)], gc_pExpressionKeywords))
 					{
 						auto iStar = fg_NextCode(_Tokens, umint(iInner));
+						constexpr ch8 const *c_pConventions[] =
+							{
+								"__stdcall", "__cdecl", "__fastcall", "__thiscall", "__vectorcall"
+							}
+						;
+						bConvention = fg_IsAnyText(_Tokens, Tokens[umint(iInner)], c_pConventions);
 						if (iStar >= 0 && (_Tokens.f_IsText(Tokens[umint(iStar)], "*") || _Tokens.f_IsText(Tokens[umint(iStar)], "&")))
 							iInner = iStar;
 						else
@@ -3294,6 +3302,9 @@ namespace NMib::NDevelop
 					;
 					if (bDeclarator && bCalled)
 						return ECodeSpacing::mc_None;
+
+					if (bDeclarator && bConvention)
+						return ECodeSpacing::mc_Space;
 
 					if (bDeclarator)
 						return fg_NamesType(_Tokens, Left) ? ECodeSpacing::mc_Space : ECodeSpacing::mc_Preserve;
