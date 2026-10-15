@@ -690,6 +690,7 @@ namespace
 		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_FollowsScope(umint _iToken) const;
 		bool fp_IsFunctionQualifier(umint _iToken) const;
+		bool fp_IsAssignment(umint _iToken) const;
 		bool fp_IsTrailingReturnArrow(umint _iToken) const;
 		bool fp_ClosesLambdaIntroducer(umint _iToken) const;
 		umint fp_SkipTemplateHeader(umint _iToken) const;
@@ -7208,7 +7209,7 @@ namespace
 		// an expression: '&' and '*' spell a reference or a pointer there, never an operator.
 		for (umint i = _iLast; i > _iFirst; --i)
 		{
-			if (m_TokenDepth[i] == nLevel && m_Tokens.f_IsText(Tokens[i], "="))
+			if (m_TokenDepth[i] == nLevel && fp_IsAssignment(i))
 			{
 				_iFirst = i;
 
@@ -7430,6 +7431,27 @@ namespace
 	}
 
 	// The words that may stand between a parameter list and a trailing return type.
+	// A compound assignment gives its left hand side a value the way '=' does.
+	bool CFormattingAnalyzer::fp_IsAssignment(umint _iToken) const
+	{
+		constexpr ch8 const *c_pAssignments[] =
+			{
+				"=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
+			}
+		;
+		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
+			return false;
+
+		for (auto pAssignment : c_pAssignments)
+		{
+			if (m_Tokens.f_IsText(Token, pAssignment))
+				return true;
+		}
+
+		return false;
+	}
+
 	bool CFormattingAnalyzer::fp_IsFunctionQualifier(umint _iToken) const
 	{
 		constexpr ch8 const *c_pQualifiers[] =
@@ -7724,7 +7746,7 @@ namespace
 		umint iAssign = 0;
 		for (umint i = _iFirst; (bStatement || bElement) && i <= _iLast && !iAssign; ++i)
 		{
-			if (m_TokenDepth[i] != m_TokenDepth[_iFirst] || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], "="))
+			if (m_TokenDepth[i] != m_TokenDepth[_iFirst] || !fp_IsAssignment(i))
 				continue;
 
 			// The '=' of 'operator =' is the name of the function it declares.
@@ -8664,11 +8686,10 @@ namespace
 	// the operand then have their lines, and what is left is every operator behind them.
 	bool CFormattingAnalyzer::fp_BreakAtAssign(umint _iFirst, umint _iOperator, umint _iIndent, umint _nContinuation)
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
 		umint iAssign = TCLimitsInt<umint>::mc_Max;
 		for (umint i = _iOperator; i > _iFirst; --i)
 		{
-			if (m_TokenDepth[i] == m_TokenDepth[_iFirst] && m_Tokens.f_IsText(Tokens[i], "="))
+			if (m_TokenDepth[i] == m_TokenDepth[_iFirst] && fp_IsAssignment(i))
 			{
 				iAssign = i;
 

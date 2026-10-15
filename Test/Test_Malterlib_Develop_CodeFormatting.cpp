@@ -1565,7 +1565,7 @@ namespace
 							"AfterOperatorSplit"
 							, CStr("void f()\n{\n\tReturn += g(@) + h(@);\n\t[&]() inline_never\n\t\t{\n\t\t\tg();\n\t\t}\n\t();\n"
 							"\t[[maybe_unused]] auto fA = [&]()\n\t{\n\t\treturn;\n\t}\n\t;\n}\n").f_Replace("@", Wide)
-							, CStr("void f()\n{\n\tReturn += g(@)\n\t\t+ h(@)\n\t;\n\t[&]() inline_never\n\t{\n\t\tg();\n\t}\n\t();\n"
+							, CStr("void f()\n{\n\tReturn\n\t\t+= g(@)\n\t\t+ h(@)\n\t;\n\t[&]() inline_never\n\t{\n\t\tg();\n\t}\n\t();\n"
 							"\t[[maybe_unused]] auto fA = [&]()\n\t\t{\n\t\t\treturn;\n\t\t}\n\t;\n}\n").f_Replace("@", Wide)
 						)
 					;
@@ -2676,7 +2676,7 @@ namespace
 					;
 					// The outermost level is split first: an operator chain breaks at its
 					// loosest operators, and a call on a line that then fits is left alone.
-					fSplit("OperatorChain", "void f()\n{\n\to_Str += g(\"@\") << @ << @;\n}\n", "void f()\n{\n\to_Str += g(\"@\")\n\t\t<< @\n\t\t<< @\n\t;\n}\n");
+					fSplit("OperatorChain", "void f()\n{\n\to_Str += g(\"@\") << @ << @;\n}\n", "void f()\n{\n\to_Str\n\t\t+= g(\"@\")\n\t\t<< @\n\t\t<< @\n\t;\n}\n");
 					// A conditional's '?' and ':' bind loosest of all, so it gives at them before
 					// an operand of it is opened, as a statement's value and as an element.
 					fSplit

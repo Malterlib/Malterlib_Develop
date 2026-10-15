@@ -692,7 +692,9 @@ every operand stands under the one in front of it:
 That holds where the first operand is a plain line. One that has to be opened,
 `auto Value = fg_Function` with its parenthesis below, or that takes a lambda's
 body, `auto Cleanup = g_OnScopeExit / [&]`, keeps the `=` on the head, and so
-does a DSL key, which hugs its `=`.
+does a DSL key, which hugs its `=`. A compound assignment gives its left hand
+side a value the same way and is laid out as an `=` is: `_Output` over
+`+= CStr::CFormat(...)` over `<< ...`, and `*_pCommandLine` over `%= "..."_f`.
 
 What stands in front of a statement's `=` is the last thing to give. The value
 behind it is opened first, a call's arguments and then its name's template
