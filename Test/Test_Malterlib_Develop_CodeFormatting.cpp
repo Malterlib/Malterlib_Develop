@@ -1168,6 +1168,20 @@ namespace
 							, "enum EType\n{\n\tEType_A\n\t, EType_B\n\t, EType_C\n};\n"
 						)
 					;
+					// An enumerator too long for its line is laid out as a list's element, its '=' and operators at its level.
+					{
+						CStr Value = "EFileAttrib_UserExecute | EFileAttrib_UserRead | EFileAttrib_UserWrite | EFileAttrib_GroupExecute | EFileAttrib_GroupRead | EFileAttrib_GroupWrite"
+							" | EFileAttrib_EveryoneExecute | EFileAttrib_EveryoneRead"
+						;
+						CStr Split = CStr(Value).f_Replace(" | ", "\n\t| ");
+						fg_ExpectFormat
+							(
+								"EnumeratorValueSplit"
+								, "enum EFileAttrib\n{\n\tEFileAttrib_None = 0\n\t, EFileAttrib_All = " + Value + "\n};\n"
+								, "enum EFileAttrib\n{\n\tEFileAttrib_None = 0\n\t, EFileAttrib_All\n\t= " + Split + "\n};\n"
+							)
+						;
+					}
 					// A comment opening a case's body stands where the body does, wherever it was written.
 					fg_ExpectFormat
 						(

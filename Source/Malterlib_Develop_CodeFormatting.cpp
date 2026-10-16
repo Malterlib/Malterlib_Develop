@@ -6682,6 +6682,26 @@ namespace
 							m_bBlankBefore[i] = 1;
 					}
 				}
+
+				// An enumerator too long for its line is laid out as a list's element is, its value's '='
+				// starting the first operand's line at the enumerator's level.
+				if (!bEnumTrailingCommas)
+				{
+					auto iListLast = fg_Min(Child.m_iLastToken, Node.m_iLastToken - 1);
+					auto iStart = iFirst;
+					for (auto i = iFirst; i <= iListLast + 1; ++i)
+					{
+						bool bEnd = i > iListLast || (m_TokenDepth[i] == m_TokenDepth[iFirst] && m_Tokens.f_IsText(Tokens[i], ","));
+						if (!bEnd)
+							continue;
+
+						auto iLast = fp_PreviousCode(i);
+						if (iLast >= 0 && umint(iLast) >= iStart && !fp_FitsInline(iStart, umint(iLast), nPlace) && fp_IsRangeJoinable(iChild, iStart, umint(iLast)))
+							fp_LayoutRange(iChild, iStart, umint(iLast), nPlace, false, false);
+
+						iStart = i;
+					}
+				}
 			}
 
 			// Behind a closing brace only a keyword starts a statement of its own, since a

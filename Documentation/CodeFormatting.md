@@ -252,7 +252,9 @@ the enumerator behind it, and a blank line between the two stays in front of the
 comma. A comma a comment or a conditional's directive stands behind is moved by
 `enum-comma`, which leaves nothing but blanks between a comma and its enumerator.
 An enum that conversion keeps its commas in breaks behind a comma rather than in
-front of it.
+front of it. An enumerator too long for its line is laid out as a list's element
+is, at the body's level: its value broken at its operators starts with the `=`,
+`, EFileAttrib_All` over `= EFileAttrib_UserExecute` over `| EFileAttrib_UserRead`.
 
 `access-blank-line` leaves a specifier alone where a comment or a directive
 stands between it and what is in front of it, since the blank line then belongs
