@@ -175,7 +175,7 @@ formatter failure, not an edit.
 | `type-blank-line` | One blank line after a struct, class, union or enum definition, unless the scope it stands in ends there. A variable of a C struct type with a braced initializer, `struct timespec Time = {...};`, defines no type. |
 | `access-blank-line` | One blank line in front of `public:`, `private:`, or `protected:`, and none after it. The first specifier in a class stands directly under the opening brace, and two in a row stand together: `private:` directly above `public:` follows it the way a member does. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
-| `layout-directive` | A list a `columns` or `table` directive leads stands in aligned rows, and the lines an `align: =` directive leads have their `=` at one column (see Protected regions). Reports the directive where its list keeps its lines. |
+| `layout-directive` | A list a `columns`, `table` or `rows` directive leads stands in rows, and the lines an `align: =` directive leads have their `=` at one column (see Protected regions). Reports the directive where its list keeps its lines. |
 | `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |
 | `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source. |
 | `east-qualifier` | A `const` or `volatile` written in front of its type moves behind it: `const int &_Value` becomes `int const &_Value`. |
@@ -980,11 +980,16 @@ ch8 g_Table[] =
 - `columns: N` puts N elements in each row, `columns: auto` as many as fit
   within `max_line_length`.
 - `table` puts one braced record in each row, its fields the columns.
+- `rows` keeps the elements on the lines they were written on, without
+  aligning them, and a string continued on the next line stays continued at the
+  rows' level: data written as records of different lengths, such as a header
+  and the fields behind it.
 
-Rows after the first start with their comma, and the first is indented as far
-as the comma takes. A column is as wide as its widest cell, numbers aligned to
-the right and anything else to the left. A comment behind an element ends its
-row. A list holding
+Rows after the first start with their comma, and with columns the first is
+indented as far as the comma takes. A column is as wide as its widest cell,
+numbers aligned to the right and anything else to the left. A comment behind an
+element ends its row, and comment lines above an element start its row and stay
+above it. A list holding
 a comment elsewhere, or an element its row cannot spell on one line, keeps its
 lines and the directive is reported; so is a row longer than
 `max_line_length`.

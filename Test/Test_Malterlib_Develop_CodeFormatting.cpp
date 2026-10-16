@@ -1303,6 +1303,34 @@ namespace
 							"\t\t\t, {\"b\",            1}\n\t\t}\n\t;\n}\n"
 						)
 					;
+					// A 'rows' directive keeps the elements on the lines they were written on, the comma in front of each line
+					// after the first, and the comment lines between them.
+					fg_ExpectFormat
+						(
+							"RowsDirective"
+							, "void f()\n{\n\tuint8 Data[] =\n\t\t{\n\t\t\t// malterlib-format rows\n\t\t\t// Length\n\t\t\t0x02, 0x00,\n"
+							"\t\t\t0x00, 0x00, // Padding\n\t\t\t// Node\n\t\t\t0x01, 'A'\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\tuint8 Data[] =\n\t\t{\n\t\t\t// malterlib-format rows\n\t\t\t// Length\n\t\t\t0x02, 0x00\n"
+							"\t\t\t, 0x00, 0x00 // Padding\n\t\t\t// Node\n\t\t\t, 0x01, 'A'\n\t\t}\n\t;\n}\n"
+							, false
+						)
+					;
+					fg_ExpectFormat
+						(
+							"RowsDirectiveLeadingCommas"
+							, "void f()\n{\n\tuint8 Data[] =\n\t\t{\n\t\t\t// malterlib-format rows\n\t\t\t0x02, 0x00\n\t\t\t// Node\n\t\t\t, 0x01,   'A'  // Last\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\tuint8 Data[] =\n\t\t{\n\t\t\t// malterlib-format rows\n\t\t\t0x02, 0x00\n\t\t\t// Node\n\t\t\t, 0x01, 'A' // Last\n\t\t}\n\t;\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"RowsDirectiveContinuedString"
+							, "CError g_Errors[] =\n\t{\n\t\t// malterlib-format rows\n\t\t-1, \"One\", \"First\",\n\t\t-2, \"Two\", \"Long \"\n"
+							"\t\t\"rest\",\n\t\t-3, \"Three\", \"\"\n\t}\n;\n"
+							, "CError g_Errors[] =\n\t{\n\t\t// malterlib-format rows\n\t\t-1, \"One\", \"First\"\n\t\t, -2, \"Two\", \"Long \"\n"
+							"\t\t\"rest\"\n\t\t, -3, \"Three\", \"\"\n\t}\n;\n"
+						)
+					;
 					// An 'align: =' directive aligns the '=' of the run of lines below it, up to a blank line.
 					fg_ExpectFormat
 						(

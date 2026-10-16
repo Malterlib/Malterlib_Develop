@@ -656,7 +656,7 @@ namespace
 		bool fp_CollectListLayouts(CStr &o_Explanation);
 		void fp_RenderListLayouts();
 		void fp_RenderAlignments();
-		bool fp_RenderElement(umint _iFirst, umint _iLast, CStr &o_Text) const;
+		bool fp_RenderElement(umint _iFirst, umint _iLast, CStr &o_Text, CStr const *_pContinuation = nullptr) const;
 		void fp_AddOwnedEdit(umint _iOffset, umint _nLength, CStr const &_Replacement, CStr const &_Explanation);
 		bool fp_IsSelected(umint _iOffset, umint _nLength) const;
 		bool fp_IsLineSelected(umint _iLine) const;
@@ -803,6 +803,7 @@ namespace
 		{
 			mc_Columns
 			, mc_Table
+			, mc_Rows
 		};
 		struct CListLayout
 		{
@@ -908,6 +909,8 @@ namespace
 				auto iToken = umint(&Token - m_Tokens.f_GetTokens().f_GetArray());
 				if (Directive == "table")
 					m_ListLayouts.f_Insert(CListLayout{.m_iDirective = iToken, .m_Layout = EListLayout::mc_Table});
+				else if (Directive == "rows")
+					m_ListLayouts.f_Insert(CListLayout{.m_iDirective = iToken, .m_Layout = EListLayout::mc_Rows});
 				else if (Directive == "columns: auto")
 					m_ListLayouts.f_Insert(CListLayout{.m_iDirective = iToken, .m_Layout = EListLayout::mc_Columns});
 				else if (Directive == "align: =")
@@ -1194,6 +1197,8 @@ namespace
 		{
 			TCVector<CCell> m_Cells;
 			CStr m_Comment;
+			TCVector<CStr> m_Leading;						// The comment lines standing above the element.
+			bool m_bStartsLine = false;
 		};
 
 		auto fIsNumber = [&](umint _iFirst, umint _iLast)
@@ -1217,14 +1222,16 @@ namespace
 				return nNumbers == 1;
 			}
 		;
+		// A row written as the source wrote it keeps its strings continued on the lines below it.
+		CStr Continuation;
 		auto fCell = [&](umint _iFirst, umint _iLast, CCell &o_Cell)
 			{
-				if (!fp_RenderElement(_iFirst, _iLast, o_Cell.m_Text))
+				if (!fp_RenderElement(_iFirst, _iLast, o_Cell.m_Text, Continuation.f_IsEmpty() ? nullptr : &Continuation))
 					return false;
 
 				o_Cell.m_bNumber = fIsNumber(_iFirst, _iLast);
 
-				return fg_MeasureTextColumns(o_Cell.m_Text, nTab, o_Cell.m_nWidth);
+				return !Continuation.f_IsEmpty() || fg_MeasureTextColumns(o_Cell.m_Text, nTab, o_Cell.m_nWidth);
 			}
 		;
 		auto fSpaces = [](umint _nSpaces)
@@ -1245,8 +1252,15 @@ namespace
 			if (!fp_IsFirstOnLine(iOpen) || !fp_IsFirstOnLine(iClose))
 				continue;
 
-			// The elements between the list's commas, each with the comment behind it on its line.
+			auto nBraceIndent = fp_GetStatementIndent(iOpen);
+			auto nElementIndent = nBraceIndent + nTab;
+			Continuation = Layout.m_Layout == EListLayout::mc_Rows ? Ending + fp_MakeIndent(nElementIndent) : CStr();
+
+			// The elements between the list's commas, each with the comment behind it on its line and the comment
+			// lines above it. A comment line between a comma ending its line and the element behind it would have
+			// the comma move past it, and keeps the list's lines.
 			TCVector<CElement> Elements;
+			TCVector<CStr> Leading;
 			bool bValid = true;
 			bool bTrailingComma = false;
 			umint iElement = iOpen + 1;
@@ -1256,6 +1270,7 @@ namespace
 				aint iFirst = -1;
 				aint iLast = -1;
 				CStr Comment;
+				TCVector<CStr> NextLeading;
 				for (auto i = iElement; i < iEnd && bValid; ++i)
 				{
 					auto Kind = Tokens[i].m_Kind;
@@ -1267,21 +1282,31 @@ namespace
 						if (i == Layout.m_iDirective)
 							continue;
 
-						// A comment behind a comma on the element's line describes the element in front of it.
-						if (iLast < 0 && !Elements.f_IsEmpty() && Elements.f_GetLast().m_Comment.f_IsEmpty() && !Tokens[i].m_bMultiLine && !fp_SpansLines(iElement - 1, i))
+						auto Text = fg_TrimCommentTrailingSpace(m_Tokens.f_GetText(Tokens[i]));
+						bValid = !Tokens[i].m_bMultiLine;
+						if (iLast < 0)
 						{
-							Elements.f_GetLast().m_Comment = fg_TrimCommentTrailingSpace(m_Tokens.f_GetText(Tokens[i]));
-
-							continue;
+							// A comment behind a comma on the element's line describes the element in front of it.
+							if (!Elements.f_IsEmpty() && Elements.f_GetLast().m_Comment.f_IsEmpty() && !fp_SpansLines(iElement - 1, i))
+								Elements.f_GetLast().m_Comment = Text;
+							else
+							{
+								bValid = bValid && iSplit == 0 && fp_IsFirstOnLine(i);
+								Leading.f_Insert(Text);
+							}
 						}
-
-						bValid = iLast >= 0 && Comment.f_IsEmpty() && !Tokens[i].m_bMultiLine && !fp_SpansLines(umint(iLast), i);
-						Comment = fg_TrimCommentTrailingSpace(m_Tokens.f_GetText(Tokens[i]));
+						else if (fp_SpansLines(umint(iLast), i))
+							NextLeading.f_Insert(Text);
+						else
+						{
+							bValid = bValid && Comment.f_IsEmpty();
+							Comment = Text;
+						}
 
 						continue;
 					}
 
-					bValid = Comment.f_IsEmpty();
+					bValid = Comment.f_IsEmpty() && NextLeading.f_IsEmpty();
 					if (iFirst < 0)
 						iFirst = aint(i);
 
@@ -1294,13 +1319,17 @@ namespace
 				if (iFirst < 0)
 				{
 					// Nothing but the directive, or a comma ending the list, which stays behind the last element.
-					bTrailingComma = iSplit && iSplit >= List.m_SplitPoints.f_GetLen() && Comment.f_IsEmpty();
-					bValid = bTrailingComma || (iSplit == 0 && iSplit >= List.m_SplitPoints.f_GetLen());
+					bTrailingComma = iSplit && iSplit >= List.m_SplitPoints.f_GetLen() && Comment.f_IsEmpty() && Leading.f_IsEmpty();
+					bValid = bTrailingComma || (iSplit == 0 && iSplit >= List.m_SplitPoints.f_GetLen() && Leading.f_IsEmpty());
 					break;
 				}
 
 				auto &Element = Elements.f_Insert();
 				Element.m_Comment = Comment;
+				Element.m_Leading = fg_Move(Leading);
+				Element.m_bStartsLine = fp_IsFirstOnLine(umint(iFirst)) || (iSplit && fp_IsFirstOnLine(iElement - 1));
+				Leading = fg_Move(NextLeading);
+				bValid = bValid && (iSplit < List.m_SplitPoints.f_GetLen() || Leading.f_IsEmpty());
 				if (Layout.m_Layout == EListLayout::mc_Table)
 				{
 					// A record's fields are the cells of its row.
@@ -1352,16 +1381,20 @@ namespace
 				continue;
 			}
 
-			auto nBraceIndent = fp_GetStatementIndent(iOpen);
-			auto nElementIndent = nBraceIndent + nTab;
-
-			// The rows: a table's records one to each, and otherwise the given number of elements, or as many as fit.
+			// The rows: a table's records one to each, the lines the elements were written on, and otherwise the given
+			// number of elements, or as many as fit. Comment lines above an element start its row.
+			bool bRows = Layout.m_Layout == EListLayout::mc_Rows;
 			auto fRows = [&](umint _nColumns, TCVector<TCVector<umint>> &o_Rows)
 				{
 					o_Rows.f_Clear();
 					for (umint i = 0; i < Elements.f_GetLen(); ++i)
 					{
-						if (o_Rows.f_IsEmpty() || o_Rows.f_GetLast().f_GetLen() >= _nColumns || !Elements[o_Rows.f_GetLast().f_GetLast()].m_Comment.f_IsEmpty())
+						bool bNewRow = o_Rows.f_IsEmpty()
+							|| !Elements[o_Rows.f_GetLast().f_GetLast()].m_Comment.f_IsEmpty()
+							|| !Elements[i].m_Leading.f_IsEmpty()
+							|| (bRows ? Elements[i].m_bStartsLine : o_Rows.f_GetLast().f_GetLen() >= _nColumns)
+						;
+						if (bNewRow)
 							o_Rows.f_Insert();
 
 						o_Rows.f_GetLast().f_Insert(i);
@@ -1398,6 +1431,9 @@ namespace
 			;
 			auto fCellText = [&](CCell const &_Cell, CColumn const &_Column, bool _bLast)
 				{
+					if (bRows)
+						return _Cell.m_Text + (_bLast ? CStr() : CStr(", "));
+
 					auto Pad = fSpaces(_Column.m_nWidth - _Cell.m_nWidth);
 					if (_Column.m_bNumber)
 						return Pad + _Cell.m_Text + (_bLast ? CStr() : CStr(", "));
@@ -1407,7 +1443,8 @@ namespace
 			;
 			auto fRowText = [&](TCVector<umint> const &_Row, bool _bFirst)
 				{
-					CStr Text = _bFirst ? "  " : ", ";
+					// Rows aligned to columns have their first indented as far as the comma takes the others.
+					CStr Text = _bFirst ? (bRows ? "" : "  ") : ", ";
 					for (umint iCell = 0; iCell < _Row.f_GetLen(); ++iCell)
 					{
 						auto const &Element = Elements[_Row[iCell]];
@@ -1452,6 +1489,8 @@ namespace
 
 			if (Layout.m_Layout == EListLayout::mc_Table)
 				fRows(1, Rows);
+			else if (bRows)
+				fRows(0, Rows);
 			else if (Layout.m_nColumns)
 				fRows(Layout.m_nColumns, Rows);
 			else
@@ -1469,7 +1508,12 @@ namespace
 
 			CStr Interior = Ending + fp_MakeIndent(nElementIndent) + fg_TrimCommentTrailingSpace(m_Tokens.f_GetText(Tokens[Layout.m_iDirective]));
 			for (umint iRow = 0; iRow < Rows.f_GetLen(); ++iRow)
+			{
+				for (auto const &Comment : Elements[Rows[iRow][0]].m_Leading)
+					Interior += Ending + fp_MakeIndent(nElementIndent) + Comment;
+
 				Interior += Ending + fp_MakeIndent(nElementIndent) + fRowText(Rows[iRow], iRow == 0);
+			}
 
 			Interior += Ending + fp_MakeIndent(nBraceIndent);
 			auto iInterior = Tokens[iOpen].f_GetEnd();
@@ -1547,7 +1591,8 @@ namespace
 
 	// The tokens from _iFirst to _iLast written on one line at the spacing the rules give them, which fails for a range
 	// holding a comment, a directive, a token spanning lines or a gap whose spacing is not settled across a line break.
-	bool CFormattingAnalyzer::fp_RenderElement(umint _iFirst, umint _iLast, CStr &o_Text) const
+	// With _pContinuation, a string continued on the next line stays continued there, behind that line start.
+	bool CFormattingAnalyzer::fp_RenderElement(umint _iFirst, umint _iLast, CStr &o_Text, CStr const *_pContinuation) const
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		o_Text.f_Clear();
@@ -1571,7 +1616,9 @@ namespace
 					bNewline |= Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline;
 
 				auto Spacing = fp_GetInlineSpacing(umint(iPrevious), i);
-				if (Spacing == ECodeSpacing::mc_Space)
+				if (bNewline && _pContinuation && fp_ContinuesLiteral(i) == iPrevious)
+					o_Text += *_pContinuation;
+				else if (Spacing == ECodeSpacing::mc_Space)
 					o_Text += " ";
 				else if (Spacing == ECodeSpacing::mc_Preserve)
 				{
