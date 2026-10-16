@@ -5175,6 +5175,19 @@ namespace
 				}
 			}
 
+			// Rows are kept only in a list that is data throughout, so a list is never left half in rows.
+			bool bLiteralTable = false;
+			for (auto Row : LiteralRows)
+			{
+				bLiteralTable |= Row == 2;
+				if (Row == 3)
+				{
+					bLiteralTable = false;
+
+					break;
+				}
+			}
+
 			auto nOpenLevel = bLevelled ? fp_GetStatementIndent(Node.m_iFirstToken) : 0;
 			auto nElementLevel = nOpenLevel + m_Request.m_Settings.m_nTabWidth;
 			if (bLevelled && fp_GetStatementIndent(Node.m_iLastToken) != nOpenLevel)
@@ -5232,9 +5245,8 @@ namespace
 							bJoinable = false;
 					}
 
-					// A line holding nothing but single literals is data written in rows, '0x02, 0x00, 0x00, 0x00', and keeps
-					// it whole.
-					if (bJoinable && !LiteralRows.f_IsEmpty())
+					// A list holding nothing but single literals is data written in rows, '0x02, 0x00, 0x00, 0x00', and keeps them.
+					if (bJoinable && bLiteralTable)
 					{
 						auto iRowLine = m_Lines.f_FindLine(AllTokens[umint(iStart)].m_iOffset) - iFirstListLine;
 						if (iRowLine < LiteralRows.f_GetLen() && LiteralRows[iRowLine] == 2)

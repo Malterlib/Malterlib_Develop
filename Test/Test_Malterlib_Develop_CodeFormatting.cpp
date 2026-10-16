@@ -1180,7 +1180,8 @@ namespace
 						)
 					;
 					// A braced list written across lines with its commas in front is laid out as an opened list but never
-					// joined: each element on a line of its own, blank lines between them kept, rows of literals whole.
+					// joined: each element on a line of its own, blank lines between them kept, and a list of literals
+					// throughout keeps its rows. One that holds anything else gives each element a line.
 					fg_ExpectFormat
 						(
 							"KeptListElements"
@@ -1188,6 +1189,13 @@ namespace
 							"\tuint8 Data[] =\n\t\t{\n\t\t\t0x02, 0x00\n\t\t\t, 0x01, 0x00, 'A'\n\t\t}\n\t;\n}\n"
 							, "void f()\n{\n\tCSettings Settings\n\t\t{\n\t\t\t.m_A = 1\n\t\t\t, .m_B = 2\n\t\t\t, .m_C = 3\n\n\t\t\t, .m_D = 4\n\t\t}\n\t;\n"
 							"\tuint8 Data[] =\n\t\t{\n\t\t\t0x02, 0x00\n\t\t\t, 0x01, 0x00, 'A'\n\t\t}\n\t;\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"KeptListMixedRows"
+							, "void f()\n{\n\tTCVector<CStr> Params =\n\t\t{\n\t\t\t\"-c\", \"a\", \"-c\"\n\t\t\t, \"b=\" + Path, \"diff\"\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\tTCVector<CStr> Params =\n\t\t{\n\t\t\t\"-c\"\n\t\t\t, \"a\"\n\t\t\t, \"-c\"\n\t\t\t, \"b=\" + Path\n\t\t\t, \"diff\"\n\t\t}\n\t;\n}\n"
 						)
 					;
 					// An enumerator too long for its line is laid out as a list's element, its '=' and operators at its level.
