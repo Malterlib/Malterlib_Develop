@@ -4645,6 +4645,18 @@ namespace
 		if (iOpen == Node.m_iFirstToken)
 			return false;
 
+		// A typedef declares a type, and a parenthesis with another behind it is a pointer to function's
+		// declarator, which has no return type to move: 'typedef LONG (NTAPI *FHandler)(PVOID _pContext)'.
+		auto iBehindClose = fp_NextCode(iClose);
+		if (iBehindClose >= 0 && m_Tokens.f_IsText(Tokens[umint(iBehindClose)], "("))
+			return false;
+
+		for (auto i = _iDeclFirst; i < iOpen; ++i)
+		{
+			if (m_Tokens.f_IsText(Tokens[i], "typedef"))
+				return false;
+		}
+
 		// A variable constructed with arguments has the shape of a declaration too; what the
 		// parenthesis holds is what tells them apart.
 		if (fg_HoldsArguments(m_Tokens, m_Structure, iParen))
@@ -5401,8 +5413,9 @@ namespace
 		// a clause's line, has no indentation of its own to lay anything out against.
 		umint iFirstParenGroup = 0;
 		umint iFirstParenGroupStart = 0;
-		for (auto iChild : Node.m_Children)
+		for (umint iIndex = 0; iIndex < Node.m_Children.f_GetLen(); ++iIndex)
 		{
+			auto iChild = Node.m_Children[iIndex];
 			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Group && Nodes[iChild].m_Bracket == ECodeBracket::mc_Paren)
 			{
 				// An attribute's parenthesis stands among the specifiers: '__attribute__((weak)) f()'.
@@ -5413,6 +5426,20 @@ namespace
 
 				if (bAttribute)
 					continue;
+
+				// A pointer to function's declarator names what the parameter list behind it declares:
+				// 'NTSTATUS (NTAPI *m_fQuery)(IN HANDLE _Thread)'.
+				if (iIndex + 1 < Node.m_Children.f_GetLen())
+				{
+					auto const &Next = Nodes[Node.m_Children[iIndex + 1]];
+					bool bDeclaratorFirst = Next.m_Kind == ECodeNodeKind::mc_Group
+						&& Next.m_Bracket == ECodeBracket::mc_Paren
+						&& fp_NextCode(Nodes[iChild].m_iLastToken) == aint(Next.m_iFirstToken)
+						&& fg_ClosesParameterList(m_Tokens, m_Structure, Next.m_iLastToken)
+					;
+					if (bDeclaratorFirst)
+						iChild = Node.m_Children[iIndex + 1];
+				}
 
 				iFirstParenGroup = Nodes[iChild].m_iLastToken;
 				iFirstParenGroupStart = Nodes[iChild].m_iFirstToken;
@@ -8172,6 +8199,11 @@ namespace
 			// line of its own while holding nothing, and '(*pFunctor)()' stays whole.
 			auto iInner = fp_NextCode(Nodes[Scopes[i]].m_iFirstToken);
 			if (!bIntroducer && iInner >= 0 && umint(iInner) == Nodes[Scopes[i]].m_iLastToken)
+				continue;
+
+			// A parameter list behind a pointer to function's declarator opens as a function's does, rather than
+			// moving down whole: 'NTSTATUS (NTAPI *m_fQuery)' over '(' over 'IN HANDLE _Thread'.
+			if (!bIntroducer && fg_ClosesParameterList(m_Tokens, m_Structure, Nodes[Scopes[i]].m_iLastToken))
 				continue;
 
 			Breaks.f_Insert(Nodes[Scopes[i]].m_iFirstToken);

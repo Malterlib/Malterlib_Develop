@@ -574,7 +574,11 @@ converted signature fits on one line or the name would not fit otherwise and
 the type is wider than the `auto` that replaces it. The specifiers in front of
 the return type stay in front of `auto`, and are measured with it:
 `inline_small auto f_Get(...)`. An explicit instantiation
-is converted the same way. A statement in a function's body never is: a type
+is converted the same way. A typedef and a pointer to function's declaration never
+are, having no return type to move, and the parameter list behind a pointer to
+function's declarator opens as a function's does:
+`NTSTATUS (NTAPI *m_fQuery)` over `(` over `IN HANDLE _Thread`. A statement in a
+function's body never is converted either: a type
 in front of a name and a parenthesis defines a variable there,
 `TCUniquePointer<CFoo> pFoo(fg_Construct())`, and no function is declared inside
 another. A variable constructed with arguments elsewhere has the same

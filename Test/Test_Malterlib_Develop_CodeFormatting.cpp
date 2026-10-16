@@ -3966,6 +3966,28 @@ namespace
 					{
 						CStr Source = "void f()\n{\n\t__asm\n\t{\n\t\tmov eax, dword ptr fs:[0h]\n\t\tmov  [pRet],eax\n\t}\n}\n";
 						fExpect("MsvcAsmBlock", Source, Source, false);
+						// A pointer to function's parameter list opens as a function's does, and its declaration, a typedef
+						// above all, has no return type to move behind it.
+						{
+							CStr Params = "IN HANDLE _ThreadHandle, IN THREADINFOCLASS _ThreadInformationClass, OUT PVOID _ThreadInformation, IN ULONG _ThreadInformationLength";
+							CStr Opened = "\t\t(\n\t\t\t" + CStr(Params).f_Replace(", ", "\n\t\t\t, ") + "\n\t\t\t, OUT PULONG _ReturnLength\n\t\t)\n\t;\n";
+							fExpect
+								(
+									"FunctionPointerParameters"
+									, "struct C\n{\n\tNTSTATUS (__stdcall *m_fNtQueryInformationThread)(" + Params + ", OUT PULONG _ReturnLength);\n};\n"
+									, "struct C\n{\n\tNTSTATUS (__stdcall *m_fNtQueryInformationThread)\n" + Opened + "};\n"
+									, false
+								)
+							;
+							fExpect
+								(
+									"FunctionPointerTypedef"
+									, "typedef NTSTATUS (__stdcall *FNtQueryInformationThread)(" + Params + ", OUT PULONG _ReturnLength);\n"
+									, "typedef NTSTATUS (__stdcall *FNtQueryInformationThread)\n" + CStr(Opened).f_Replace("\n\t", "\n").f_Replace("\t\t(", "\t(") + ""
+									, false
+								)
+							;
+						}
 						// An attribute qualifies the type in front of it, so the declarator behind it hugs the name.
 						fExpect
 							(

@@ -1532,8 +1532,8 @@ namespace
 		return iBehind >= 0 && _Tokens.f_IsText(Tokens[umint(iBehind)], "(");
 	}
 
-	// Whether the parenthesis is a pointer to function's declarator: a calling convention macro or
-	// none, declarators, and the name or none, with the parameter list or the bound behind it:
+	// Whether the parenthesis is a pointer to function's declarator: a calling convention, keyword or
+	// macro, or none, declarators, and the name or none, with the parameter list or the bound behind it:
 	// '(DMibCrossmoduleAPI *m_fAlloc)(umint _Size)', '(*)(int)', '(&_Array)[4]'.
 	bool fg_IsFunctionPointerDeclarator(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup)
 	{
@@ -1547,9 +1547,22 @@ namespace
 		if (iBehind < 0 || (!_Tokens.f_IsText(Tokens[umint(iBehind)], "(") && !_Tokens.f_IsText(Tokens[umint(iBehind)], "[")))
 			return false;
 
+		constexpr ch8 const *c_pConventions[] =
+			{
+				"__stdcall", "__cdecl", "__fastcall", "__thiscall", "__vectorcall"
+			}
+		;
 		auto i = fg_NextCode(_Tokens, Group.m_iFirstToken);
-		while (i >= 0 && umint(i) < Group.m_iLastToken && Tokens[umint(i)].m_Kind == ECodeTokenKind::mc_Identifier && _Tokens.f_HasRole(Tokens[umint(i)], ECodeNameRole::mc_Macro))
+		while
+		(
+			i >= 0
+			&& umint(i) < Group.m_iLastToken
+			&& Tokens[umint(i)].m_Kind == ECodeTokenKind::mc_Identifier
+			&& (_Tokens.f_HasRole(Tokens[umint(i)], ECodeNameRole::mc_Macro) || fg_IsAnyText(_Tokens, Tokens[umint(i)], c_pConventions))
+		)
+		{
 			i = fg_NextCode(_Tokens, umint(i));
+		}
 
 		// A block pointer, Clang's extension, is declared with '^' where a pointer to function has '*':
 		// 'void (^fReport)(void *_pMemory)'.
