@@ -2300,6 +2300,15 @@ namespace
 							"\toperator ch8 const * () const;\n\tvoid f()\n\t{\n\t\ta = b * (c + d);\n\t\te = (int)*(pF);\n\t}\n};\n"
 						)
 					;
+					// A pointer to function returned behind a trailing return type's arrow is declared as anywhere
+					// else, where a member behind a member access arrow is called.
+					fg_ExpectFormat
+						(
+							"TrailingReturnFunctionPointer"
+							, "auto fg_A(int _Signal, void (*_fHandler)(int)) -> void(*)(int);\nvoid f()\n{\n\tpObject->m_fCall (&CFoo::f_Get);\n}\n"
+							, "auto fg_A(int _Signal, void (*_fHandler)(int)) -> void (*)(int);\nvoid f()\n{\n\tpObject->m_fCall(&CFoo::f_Get);\n}\n"
+						)
+					;
 					// A destructor behind another function's body is a declaration of its own.
 					fg_ExpectFormat
 						(
