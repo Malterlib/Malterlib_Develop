@@ -618,7 +618,14 @@ or a braced initializer written across lines keeps its lines; only its inner
 constructs are brought back to one line where they fit. Where its braces stand on
 lines of their own, each element starting a line stands one level in from the
 opening brace, the first among them, and the closing brace under the opening
-one; an element holding a multiline token stays where it is. A line comment only
+one; an element holding a multiline token stays where it is. A braced list
+written with its commas in front of its elements is not brought back onto one
+line, but is otherwise laid out as an opened list: each element written on one
+line takes a line of its own with its comma in front, a blank line between two
+staying, and is laid out as an element. A line holding nothing but single
+literals is data written in rows, `0x02, 0x00, 0x00, 0x00`, and stays whole, and
+so does a list with its commas behind its elements, a table such as
+`-1, 0, 1, 1,`. A line comment only
 ends its line: a construct holding one never fits on a line and is split, and
 the lines around the comment are laid out and indented as usual, the comment
 staying at the end of its own.

@@ -3476,10 +3476,27 @@ namespace
 		// propagated from descendants, so the direct children answer for all. A block is
 		// the exception: a lambda body inside a group opens on a line of its own, and the
 		// construct around it is laid out as a split one.
-		for (auto iChild : m_Structure.f_GetNodes()[_iNode].m_Children)
+		// The children stand in order, so the first one that can lie in the range is searched for.
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Children = Nodes[_iNode].m_Children;
+		umint iLow = 0;
+		umint iHigh = Children.f_GetLen();
+		while (iLow < iHigh)
 		{
-			auto const &Child = m_Structure.f_GetNodes()[iChild];
-			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken > _iLast)
+			auto iMiddle = (iLow + iHigh) / 2;
+			if (Nodes[Children[iMiddle]].m_iFirstToken < _iFirst)
+				iLow = iMiddle + 1;
+			else
+				iHigh = iMiddle;
+		}
+
+		for (auto iIndex = iLow; iIndex < Children.f_GetLen(); ++iIndex)
+		{
+			auto const &Child = Nodes[Children[iIndex]];
+			if (Child.m_iFirstToken > _iLast)
+				break;
+
+			if (Child.m_iLastToken > _iLast)
 				continue;
 
 			bool bFixed = Child.m_Kind == ECodeNodeKind::mc_Block
@@ -5115,6 +5132,49 @@ namespace
 				&& !fp_HasOpaqueDirective(Node.m_iFirstToken, Node.m_iLastToken)
 				&& !Node.m_bHasMultiLineToken
 			;
+			// Only a list written with its commas in front of its elements is laid out element by element: one with
+			// its commas behind them is a table written in rows, 'gc_Table[] {' over '-1, 0, 1, 1,'.
+			bool bLeadingCommas = false;
+			for (auto iSplit : Node.m_SplitPoints)
+				bLeadingCommas |= fp_IsFirstOnLine(iSplit) && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[iSplit], ",");
+
+			auto const &ListTokens = m_Tokens.f_GetTokens();
+			// Per line of the list: 0 holds no element, 1 a single literal, 2 several, all of them single literals,
+			// and 3 anything else.
+			TCVector<uint8> LiteralRows;
+			umint iFirstListLine = m_Lines.f_FindLine(ListTokens[Node.m_iFirstToken].m_iOffset);
+			if (bLevelled && bLeadingCommas && Node.m_Bracket == ECodeBracket::mc_Brace)
+			{
+				LiteralRows.f_SetLen(m_Lines.f_FindLine(ListTokens[Node.m_iLastToken].m_iOffset) - iFirstListLine + 1);
+				for (auto &Row : LiteralRows)
+					Row = 0;
+
+				umint iRowElement = Node.m_iFirstToken + 1;
+				for (umint iRow = 0; iRowElement <= Node.m_iLastToken; ++iRow)
+				{
+					auto iRowEnd = iRow < Node.m_SplitPoints.f_GetLen() ? Node.m_SplitPoints[iRow] : Node.m_iLastToken;
+					auto iRowFirst = fp_NextCode(iRowElement - 1);
+					if (iRow && iRowFirst >= 0 && m_Tokens.f_IsText(ListTokens[umint(iRowFirst)], ","))
+						iRowFirst = fp_NextCode(umint(iRowFirst));
+
+					auto iRowLast = fp_PreviousCode(iRowEnd);
+					if (iRowFirst >= 0 && iRowLast >= 0 && umint(iRowFirst) <= umint(iRowLast))
+					{
+						auto Kind = ListTokens[umint(iRowFirst)].m_Kind;
+						bool bLiteral = iRowFirst == iRowLast
+							&& (Kind == ECodeTokenKind::mc_Number || Kind == ECodeTokenKind::mc_CharLiteral || Kind == ECodeTokenKind::mc_StringLiteral)
+						;
+						auto &Row = LiteralRows[m_Lines.f_FindLine(ListTokens[umint(iRowFirst)].m_iOffset) - iFirstListLine];
+						Row = !bLiteral ? 3 : Row == 0 ? 1 : Row == 3 ? 3 : 2;
+					}
+
+					if (iRow >= Node.m_SplitPoints.f_GetLen())
+						break;
+
+					iRowElement = Node.m_SplitPoints[iRow];
+				}
+			}
+
 			auto nOpenLevel = bLevelled ? fp_GetStatementIndent(Node.m_iFirstToken) : 0;
 			auto nElementLevel = nOpenLevel + m_Request.m_Settings.m_nTabWidth;
 			if (bLevelled && fp_GetStatementIndent(Node.m_iLastToken) != nOpenLevel)
@@ -5130,6 +5190,80 @@ namespace
 				bool bElement = iEnd > iElement && iStart >= 0 && iLast >= 0 && umint(iStart) <= umint(iLast) && fp_IsFirstOnLine(umint(iStart));
 				for (auto i = bElement ? umint(iStart) + 1 : umint(0); bElement && i < umint(iLast); ++i)
 					bElement = m_Tokens.f_GetTokens()[i].m_Kind != ECodeTokenKind::mc_Newline;
+
+				// A braced list written across lines is not brought back onto one, but is laid out as an opened list
+				// otherwise: each element takes a line of its own with its comma in front, and is laid out as an element.
+				bool bOneLine = iStart >= 0 && iLast >= 0 && umint(iStart) <= umint(iLast) && !fp_SpansLines(umint(iStart), umint(iLast));
+				if (bLevelled && bLeadingCommas && bOneLine && Node.m_Bracket == ECodeBracket::mc_Brace && iEnd > iElement)
+				{
+					auto const &AllTokens = m_Tokens.f_GetTokens();
+					bool bTrivia = false;
+					for (auto i = iElement; i < umint(iStart) && !bTrivia; ++i)
+					{
+						auto Kind = AllTokens[i].m_Kind;
+						bTrivia = Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor;
+					}
+
+					umint iContent = umint(iStart);
+					bool bComma = iSplit && m_Tokens.f_IsText(AllTokens[umint(iStart)], ",");
+					if (bComma)
+					{
+						auto iBehind = fp_NextCode(umint(iStart));
+						for (auto i = umint(iStart) + 1; iBehind >= 0 && i < umint(iBehind) && !bTrivia; ++i)
+						{
+							auto Kind = AllTokens[i].m_Kind;
+							bTrivia = Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor;
+						}
+
+						iContent = iBehind >= 0 ? umint(iBehind) : umint(iStart);
+					}
+
+					bool bJoinable = !bTrivia && iContent <= umint(iLast) && fp_IsRangeJoinable(_iNode, umint(iStart), umint(iLast));
+					while (iChildCursor < Node.m_Children.f_GetLen() && Nodes[Node.m_Children[iChildCursor]].m_iFirstToken < umint(iStart))
+						++iChildCursor;
+
+					for (auto iChild = iChildCursor; iChild < Node.m_Children.f_GetLen() && bJoinable; ++iChild)
+					{
+						auto const &Child = Nodes[Node.m_Children[iChild]];
+						if (Child.m_iFirstToken > umint(iLast))
+							break;
+
+						if (Child.m_iLastToken <= umint(iLast) && (Child.m_Kind == ECodeNodeKind::mc_Block || Child.m_bHasMultiLineBrace))
+							bJoinable = false;
+					}
+
+					// A line holding nothing but single literals is data written in rows, '0x02, 0x00, 0x00, 0x00', and keeps
+					// it whole.
+					if (bJoinable && !LiteralRows.f_IsEmpty())
+					{
+						auto iRowLine = m_Lines.f_FindLine(AllTokens[umint(iStart)].m_iOffset) - iFirstListLine;
+						if (iRowLine < LiteralRows.f_GetLen() && LiteralRows[iRowLine] == 2)
+							bJoinable = false;
+					}
+
+					if (bJoinable)
+					{
+						if (!fp_IsFirstOnLine(umint(iStart)))
+							fp_OwnLineBefore(umint(iStart), nElementLevel);
+						else if (fp_GetStatementIndent(umint(iStart)) != nElementLevel)
+							fp_IndentBefore(umint(iStart), nElementLevel);
+
+						if (fp_FitsInline(umint(iStart), umint(iLast), nElementLevel))
+							fp_MarkInline(umint(iStart), umint(iLast));
+						else
+							fp_LayoutRange(_iNode, umint(iStart), umint(iLast), nElementLevel, false, false);
+
+						LaidOut.f_Insert(umint(iStart));
+						LaidOut.f_Insert(umint(iLast));
+
+						if (iSplit >= Node.m_SplitPoints.f_GetLen())
+							break;
+
+						iElement = Node.m_SplitPoints[iSplit];
+
+						continue;
+					}
+				}
 
 				if (bElement && bLevelled && fp_IsLastOnLine(umint(iLast)) && fp_GetStatementIndent(umint(iStart)) != nElementLevel)
 					fp_IndentBefore(umint(iStart), nElementLevel);
@@ -5172,11 +5306,17 @@ namespace
 			}
 		}
 
+		// The ranges laid out and the children both stand in order, so each range is passed once.
+		umint iRange = 0;
 		for (auto iChild : Node.m_Children)
 		{
-			bool bLaidOut = false;
-			for (umint iRange = 0; iRange + 1 < LaidOut.f_GetLen() && !bLaidOut; iRange += 2)
-				bLaidOut = Nodes[iChild].m_iFirstToken >= LaidOut[iRange] && Nodes[iChild].m_iLastToken <= LaidOut[iRange + 1];
+			while (iRange + 1 < LaidOut.f_GetLen() && LaidOut[iRange + 1] < Nodes[iChild].m_iFirstToken)
+				iRange += 2;
+
+			bool bLaidOut = iRange + 1 < LaidOut.f_GetLen()
+				&& Nodes[iChild].m_iFirstToken >= LaidOut[iRange]
+				&& Nodes[iChild].m_iLastToken <= LaidOut[iRange + 1]
+			;
 
 			if (bLaidOut)
 				continue;
@@ -6116,10 +6256,27 @@ namespace
 		// A block takes lines of its own wherever the source wrote it, so a range that
 		// holds one, a lambda's body above all, is laid out across lines whether or not
 		// the source has it on one.
-		for (auto iChild : m_Structure.f_GetNodes()[_iNode].m_Children)
+		// The children stand in order, so the first one that can lie in the range is searched for.
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Children = Nodes[_iNode].m_Children;
+		umint iLow = 0;
+		umint iHigh = Children.f_GetLen();
+		while (iLow < iHigh)
 		{
-			auto const &Child = m_Structure.f_GetNodes()[iChild];
-			if (Child.m_iFirstToken < _iFirst || Child.m_iLastToken > _iLast)
+			auto iMiddle = (iLow + iHigh) / 2;
+			if (Nodes[Children[iMiddle]].m_iFirstToken < _iFirst)
+				iLow = iMiddle + 1;
+			else
+				iHigh = iMiddle;
+		}
+
+		for (auto iIndex = iLow; iIndex < Children.f_GetLen(); ++iIndex)
+		{
+			auto const &Child = Nodes[Children[iIndex]];
+			if (Child.m_iFirstToken > _iLast)
+				break;
+
+			if (Child.m_iLastToken > _iLast)
 				continue;
 
 			if (Child.m_Kind == ECodeNodeKind::mc_Block || Child.m_bHasBlock)
