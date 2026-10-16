@@ -4148,6 +4148,22 @@ namespace
 		if (!fp_MeasureJoinedWidth(_iFirst, _iLast, nColumns) || nColumns >= gc_nBlockWidth)
 			return false;
 
+		// A line comment behind the last token of a range written across lines ends the line the range is joined
+		// onto. Behind a range already on one line, its width is the trailing comment rule's to settle.
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto iComment = _iLast + 1;
+		while (iComment < Tokens.f_GetLen() && Tokens[iComment].m_Kind == ECodeTokenKind::mc_Whitespace)
+			++iComment;
+
+		if (iComment < Tokens.f_GetLen() && Tokens[iComment].m_Kind == ECodeTokenKind::mc_LineComment && fp_SpansLines(_iFirst, _iLast))
+		{
+			umint nComment = 0;
+			if (!fg_MeasureTextColumns(fg_TrimCommentTrailingSpace(m_Tokens.f_GetText(Tokens[iComment])), m_Request.m_Settings.m_nTabWidth, nComment))
+				return false;
+
+			nColumns += 1 + nComment;
+		}
+
 		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
 
 		return !nMaxColumns || _iIndent + nColumns <= nMaxColumns;

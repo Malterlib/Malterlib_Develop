@@ -2392,6 +2392,19 @@ namespace
 							, false
 						)
 					;
+					// A range written across lines is not joined onto the line of a comment behind it that would then be too long.
+					CStr MediumWords;
+					for (umint i = 0; i < 31; ++i)
+						MediumWords += "Word ";
+
+					MediumWords = MediumWords.f_Trim();
+					fg_ExpectFormat
+						(
+							"TrailingCommentKeepsSplit"
+							, "void f()\n{\n\tfg_Error\n\t\t(\n\t\t\t\"Message {}\"_f\n\t\t\t<< _Value // " + MediumWords + "\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tfg_Error\n\t\t(\n\t\t\t\"Message {}\"_f\n\t\t\t<< _Value // " + MediumWords + "\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// An attribute's parenthesis stands among the specifiers, and the parameter list behind the
 					// name opens instead.
 					CStr AttributeParameters;
