@@ -2401,6 +2401,18 @@ namespace
 							, false
 						)
 					;
+					// A NOLINT comment suppresses the diagnostics of its own line, so it stays there, and the code on that line, or
+					// on the line below a NOLINTNEXTLINE, is neither split nor joined with another line's.
+					{
+						CStr Arguments;
+						for (umint i = 0; i < 30; ++i)
+							Arguments += "{}Argument{}"_f << (i ? ", " : "") << i;
+
+						CStr Source = "void f()\n{\n\tint a = g(1); // NOLINT(bugprone-xyz) " + CommentWords + "\n\tfg_Call(" + Arguments + "); // NOLINT\n"
+							"\t// NOLINTNEXTLINE\n\tfg_Call(" + Arguments + ");\n}\n"
+						;
+						fg_ExpectFormat("NoLintStaysOnItsLine", Source, Source);
+					}
 					// A range written across lines is not joined onto the line of a comment behind it that would then be too long.
 					CStr MediumWords;
 					for (umint i = 0; i < 31; ++i)

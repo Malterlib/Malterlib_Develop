@@ -183,7 +183,7 @@ formatter failure, not an edit.
 | `empty-statement` | A statement terminator that ends nothing is taken out: `f_Call();;` becomes `f_Call();`. Only an empty statement standing directly behind another terminator goes, with nothing but spaces and line breaks between them; a comment between the two keeps both. |
 | `enum-comma` | An enumerator's comma stands in front of it, and the last one has none. A comma that a comment or a conditional's directive separates from the enumerator behind it moves in front of that enumerator, into every branch it is compiled in, and the one behind the last enumerator is taken out; the layout moves the rest. An enum holding another directive, or an enumerator that is the first in some configurations only, keeps its commas. |
 | `list-comma` | A comment behind a comma in a bracketed list describes the element in front of it, so the comma moves in front of the element behind it, as the layout writes it: `a, // A` over `b` becomes `a // A` over `, b`. A comma ending a braced list written across lines is taken out. In a braced list holding a conditional's directive, the commas move as `enum-comma` moves an enumerator's, the list keeping its commas where an element is the first in some configurations only. Only a line comment on the comma's line, with the next element on a later line and nothing but blanks and comments between, moves it. |
-| `trailing-comment` | A block comment ending its line behind code is written as a line comment: `f_Call(); /* Text */` becomes `f_Call(); // Text`, and one over several lines becomes one line comment per line of its text, its documenting marker kept (`/**<` as `///<`) and the continuation lines aligned under the first. A comment the line would be longer than `max_line_length` with, behind code that fits by itself, moves to a line of its own above that line, at its indentation, as a line comment. A documenting comment such as `///<`, a `malterlib-format` marker, a comment behind a directive, and a block comment whose text ends in a line splice stay as they are. |
+| `trailing-comment` | A block comment ending its line behind code is written as a line comment: `f_Call(); /* Text */` becomes `f_Call(); // Text`, and one over several lines becomes one line comment per line of its text, its documenting marker kept (`/**<` as `///<`) and the continuation lines aligned under the first. A comment the line would be longer than `max_line_length` with, behind code that fits by itself, moves to a line of its own above that line, at its indentation, as a line comment. A documenting comment such as `///<`, a `malterlib-format` marker, a clang-tidy `NOLINT` comment, a comment behind a directive, and a block comment whose text ends in a line splice stay as they are. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
@@ -949,6 +949,11 @@ Layout inside multiline tokens is never touched: block comments, string and
 character literals including raw strings, preprocessor directives with their
 continuations, and the line a backslash splice ends on. A leading UTF-8
 signature is its own token and is preserved.
+
+clang-tidy's `NOLINT` suppresses the diagnostics of the line it stands on, and
+`NOLINTNEXTLINE` those of the line below it, so the code on such a line is
+neither split nor joined with another line's, and the comment never moves off
+it.
 
 A paired directive disables the engine for a region:
 

@@ -747,6 +747,7 @@ namespace
 		umint fp_GetSourceLineIndent(umint _iToken) const;
 		void fp_MarkInline(umint _iFirst, umint _iLast);
 		void fp_EmitLayout();
+		void fp_KeepSuppressedLines();
 		bool fp_IsRangeJoinable(umint _iNode, umint _iFirst, umint _iLast) const;
 		bool fp_FitsInline(umint _iFirst, umint _iLast, umint _iIndent) const;
 		umint fp_GetStatementIndent(umint _iToken) const;
@@ -3386,6 +3387,7 @@ namespace
 				fp_RenderListLayouts();
 				fp_RenderAlignments();
 				fp_RuleTokenSpacing();
+				fp_KeepSuppressedLines();
 				fp_EmitLayout();
 				// The layout writes the indentation of every line it places, so what this rule
 				// is left to spell is only the lines it did not.
@@ -4213,6 +4215,54 @@ namespace
 			m_GapState[i] = uint8(EGap::mc_Inline);
 	}
 
+	// clang-tidy's NOLINT suppresses the diagnostics of the line it stands on, and NOLINTNEXTLINE those of the line
+	// below it, so the code on such a line is neither split nor joined with another line's.
+	void CFormattingAnalyzer::fp_KeepSuppressedLines()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		TCVector<uint8> bSuppressed;
+		for (auto const &Token : Tokens)
+		{
+			if (Token.m_Kind != ECodeTokenKind::mc_LineComment && Token.m_Kind != ECodeTokenKind::mc_BlockComment)
+				continue;
+
+			auto Text = m_Tokens.f_GetText(Token);
+			if (Text.f_Find("NOLINT") < 0 || Text.f_Find("NOLINTBEGIN") >= 0 || Text.f_Find("NOLINTEND") >= 0)
+				continue;
+
+			if (bSuppressed.f_IsEmpty())
+			{
+				bSuppressed.f_SetLen(m_Lines.f_GetLineCount() + 1);
+				for (auto &bLine : bSuppressed)
+					bLine = 0;
+			}
+
+			auto iLine = m_Lines.f_FindLine(Token.f_GetEnd() ? Token.f_GetEnd() - 1 : 0);
+			bSuppressed[Text.f_Find("NOLINTNEXTLINE") >= 0 ? iLine + 1 : iLine] = 1;
+		}
+
+		if (bSuppressed.f_IsEmpty())
+			return;
+
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			auto State = EGap(m_GapState[i]);
+			if (State == EGap::mc_Keep || State == EGap::mc_Indent || !fg_IsCodeToken(Tokens[i]))
+				continue;
+
+			auto iPrevious = fp_PreviousCode(i);
+			if (iPrevious < 0)
+				continue;
+
+			auto iPreviousLine = m_Lines.f_FindLine(Tokens[umint(iPrevious)].m_iOffset);
+			auto iLine = m_Lines.f_FindLine(Tokens[i].m_iOffset);
+			bool bJoins = State == EGap::mc_Inline && iLine != iPreviousLine && (bSuppressed[iLine] || bSuppressed[iPreviousLine]);
+			bool bSplits = State != EGap::mc_Inline && iLine == iPreviousLine && bSuppressed[iLine];
+			if (bJoins || bSplits)
+				m_GapState[i] = uint8(EGap::mc_Keep);
+		}
+	}
+
 	// Writes the layout decisions out as edits. A gap that keeps what the source has, one an
 	// opaque directive stands in, and an inline gap the source already writes on one line
 	// are left to the other rules. A gap holding a comment or a transparent directive keeps
@@ -4683,7 +4733,15 @@ namespace
 				continue;
 
 			auto Text = m_Tokens.f_GetText(Comment);
-			if (Text.f_StartsWith("///<") || Text.f_StartsWith("//!<") || Text.f_StartsWith("/**<") || Text.f_StartsWith("/*!<") || Text.f_Find("malterlib-format") >= 0)
+			// A NOLINT comment suppresses diagnostics on its own line only.
+			bool bAnchored = Text.f_StartsWith("///<")
+				|| Text.f_StartsWith("//!<")
+				|| Text.f_StartsWith("/**<")
+				|| Text.f_StartsWith("/*!<")
+				|| Text.f_Find("malterlib-format") >= 0
+				|| Text.f_Find("NOLINT") >= 0
+			;
+			if (bAnchored)
 				continue;
 
 			auto iLine = m_Lines.f_FindLine(Comment.m_iOffset);
