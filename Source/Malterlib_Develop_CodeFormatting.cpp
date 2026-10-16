@@ -719,7 +719,7 @@ namespace
 		void fp_ConvertEmptyStatements();
 		void fp_ConvertEnumCommas();
 		void fp_ConvertTrailingComments();
-		void fp_ConvertEnumBodyCommas(CCodeNode const &_Body);
+		void fp_ConvertSeparatedCommas(CCodeNode const &_Body, bool _bEnum);
 		bool fp_DropBraces(umint _iStatement, umint _iGuard);
 		bool fp_AddBraces(umint _iStatement, umint _iGuard);
 		bool fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const;
@@ -4650,14 +4650,14 @@ namespace
 				continue;
 
 			if (m_Tokens.f_IsText(Tokens[fp_SkipTemplateHeader(Nodes[Node.m_iParent].m_iFirstToken)], "enum"))
-				fp_ConvertEnumBodyCommas(Node);
+				fp_ConvertSeparatedCommas(Node, true);
 		}
 
 		// A comment behind a list's comma describes the element in front of it, so the comma
 		// moves in front of the element behind it instead, as the layout puts it: 'a, // A'
 		// over 'b' is 'a // A' over ', b'.
-		// A braced list holding a directive keeps its commas where they are. A list its layout directive owns has
-		// its commas moved all the same, since its rows are written with them in front.
+		// A braced list holding a directive has its commas moved across the directives as an enum's are. A list
+		// its layout directive owns has its commas moved all the same, since its rows are written with them in front.
 		auto fKeepsCommas = [&](CCodeNode const &_List)
 			{
 				if (_List.m_Bracket != ECodeBracket::mc_Brace)
@@ -4674,8 +4674,16 @@ namespace
 		;
 		for (auto const &Node : Nodes)
 		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Group || fKeepsCommas(Node))
+			if (Node.m_Kind != ECodeNodeKind::mc_Group)
 				continue;
+
+			if (fKeepsCommas(Node))
+			{
+				if (fp_SpansLines(Node.m_iFirstToken, Node.m_iLastToken))
+					fp_ConvertSeparatedCommas(Node, false);
+
+				continue;
+			}
 
 			// A comma ending a braced list written across lines separates nothing, and goes.
 			if (Node.m_Bracket == ECodeBracket::mc_Brace && !Node.m_SplitPoints.f_IsEmpty() && fp_SpansLines(Node.m_iFirstToken, Node.m_iLastToken))
@@ -4757,13 +4765,13 @@ namespace
 		}
 	}
 
-	// A comma separated from the enumerator behind it by a comment or a conditional's directive,
-	// and the one behind the last enumerator, goes, and one is put in front of each enumerator
-	// that has another in front of it in every configuration it is compiled in. Every
-	// configuration then spells the enumerators it did, and the layout moves the commas that
-	// only blanks separate from their enumerators. An enum holding another directive, or an
-	// enumerator that is the first in some configurations only, keeps its commas where they are.
-	void CFormattingAnalyzer::fp_ConvertEnumBodyCommas(CCodeNode const &_Body)
+	// A comma separated from the enumerator or element behind it by a comment or a conditional's
+	// directive, and the one behind the last, goes, and one is put in front of each that has
+	// another in front of it in every configuration it is compiled in. Every configuration then
+	// spells the elements it did, and the layout moves the commas that only blanks separate from
+	// their elements. A body holding another directive, or an element that is the first in some
+	// configurations only, keeps its commas where they are.
+	void CFormattingAnalyzer::fp_ConvertSeparatedCommas(CCodeNode const &_Body, bool _bEnum)
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		struct CBranch
@@ -4853,7 +4861,7 @@ namespace
 			if (bOpen)
 				continue;
 
-			if (m_TokenDepth[i] != nLevel || Token.m_Kind != ECodeTokenKind::mc_Identifier)
+			if (m_TokenDepth[i] != nLevel || (_bEnum && Token.m_Kind != ECodeTokenKind::mc_Identifier))
 				return;
 
 			// An enumerator a directive ended without a comma is complete only where it is the
@@ -4911,7 +4919,7 @@ namespace
 				Insert.m_iOffset = Tokens[Enumerator.m_iFirst].m_iOffset;
 				Insert.m_nLength = 0;
 				Insert.m_Replacement = ", ";
-				Insert.m_Rule = "enum-comma";
+				Insert.m_Rule = _bEnum ? "enum-comma" : "list-comma";
 			}
 		}
 
@@ -4937,7 +4945,7 @@ namespace
 			auto &Remove = Edits.f_Insert();
 			Remove.m_iOffset = iRemove;
 			Remove.m_nLength = Tokens[iComma].f_GetEnd() - iRemove;
-			Remove.m_Rule = "enum-comma";
+			Remove.m_Rule = _bEnum ? "enum-comma" : "list-comma";
 		}
 
 		for (auto const &Edit : Edits)
@@ -5813,10 +5821,18 @@ namespace
 			if (bLevelled && fp_GetStatementIndent(Node.m_iLastToken) != nOpenLevel)
 				fp_IndentBefore(Node.m_iLastToken, nOpenLevel);
 
-			// A braced list holding a directive keeps its commas where they are, since none can move across one.
+			// A comma a directive stands behind is one the conversion could not move in front of the element after
+			// it, and the list keeps all of its commas behind its elements.
 			bool bMovesCommas = Node.m_Bracket == ECodeBracket::mc_Brace;
 			for (auto i = Node.m_iFirstToken + 1; bMovesCommas && i < Node.m_iLastToken; ++i)
-				bMovesCommas = m_Tokens.f_GetTokens()[i].m_Kind != ECodeTokenKind::mc_Preprocessor;
+			{
+				if (!m_Tokens.f_IsText(m_Tokens.f_GetTokens()[i], ","))
+					continue;
+
+				auto iNext = fp_NextCode(i);
+				for (auto iGap = i + 1; iNext >= 0 && iGap < umint(iNext) && bMovesCommas; ++iGap)
+					bMovesCommas = m_Tokens.f_GetTokens()[iGap].m_Kind != ECodeTokenKind::mc_Preprocessor;
+			}
 
 			umint iElement = Node.m_iFirstToken + 1;
 			umint iChildCursor = 0;

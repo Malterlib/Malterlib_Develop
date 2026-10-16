@@ -1210,12 +1210,22 @@ namespace
 							, false
 						)
 					;
-					// A list holding a directive keeps its commas, which none could move across.
+					// A comma a directive separates from the element behind it moves in front of that element in every branch
+					// it is compiled in, as an enumerator's does.
+					fg_ExpectFormat
+						(
+							"ListDirectiveCommas"
+							, "char const *g_Names[] =\n\t{\n\t\t\"a\",\n#ifdef DFirst\n\t\t\"b\",\n#else\n\t\t\"c\",\n#endif\n\t\t\"d\"\n\t}\n;\n"
+							, "char const *g_Names[] =\n\t{\n\t\t\"a\"\n#ifdef DFirst\n\t\t, \"b\"\n#else\n\t\t, \"c\"\n#endif\n\t\t, \"d\"\n\t}\n;\n"
+							, false
+						)
+					;
+					// A list with an element that is the first in some configurations only keeps its commas behind its elements.
 					fg_ExpectFormat
 						(
 							"KeptListDirectiveCommas"
-							, "char const *g_Names[] =\n\t{\n#ifdef DFirst\n\t\t\"a\",\n\t\t\"b\",\n#else\n\t\t\"c\",\n#endif\n\t\t\"d\",\n\t\t\"e\"\n\t}\n;\n"
-							, "char const *g_Names[] =\n\t{\n#ifdef DFirst\n\t\t\"a\",\n\t\t\"b\",\n#else\n\t\t\"c\",\n#endif\n\t\t\"d\",\n\t\t\"e\"\n\t}\n;\n"
+							, "char const *g_Names[] =\n\t{\n#ifdef DFirst\n\t\t\"a\",\n\t\t\"b\",\n#endif\n#ifdef DSecond\n\t\t\"c\",\n#endif\n\t\t\"d\",\n\t\t\"e\"\n\t}\n;\n"
+							, "char const *g_Names[] =\n\t{\n#ifdef DFirst\n\t\t\"a\",\n\t\t\"b\",\n#endif\n#ifdef DSecond\n\t\t\"c\",\n#endif\n\t\t\"d\",\n\t\t\"e\"\n\t}\n;\n"
 						)
 					;
 					// An element a string continues over lines takes a line of its own, the continuation at its level.
