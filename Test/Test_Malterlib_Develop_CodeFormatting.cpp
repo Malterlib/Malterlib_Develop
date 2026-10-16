@@ -1228,7 +1228,7 @@ namespace
 							, "char const *g_Names[] =\n\t{\n#ifdef DFirst\n\t\t\"a\",\n\t\t\"b\",\n#endif\n#ifdef DSecond\n\t\t\"c\",\n#endif\n\t\t\"d\",\n\t\t\"e\"\n\t}\n;\n"
 						)
 					;
-					// An opening brace written behind the '=' takes a line of its own, and the list's lines move with it.
+					// No blank line cuts a construct continued on the next line: an operator, an opening bracket, or a closing one.
 					fg_ExpectFormat
 						(
 							"KeptListBlankBeforeOpen"
@@ -1236,6 +1236,14 @@ namespace
 							, "namespace N\n{\n\tch8 const *g_pTests[] =\n\t\t{\n\t\t\t\"abc\"\n\t\t\t, \"abcd\"\n\t\t}\n\t;\n}\n"
 						)
 					;
+					fg_ExpectFormat
+						(
+							"BlankLineInSplitCall"
+							, "void fg_Test()\n{\n\tfg_Call\n\t\t(\n\n\t\t\t[]\n\t\t\t{\n\t\t\t\tfg_Work();\n\t\t\t}\n\n\t\t)\n\t;\n}\n"
+							, "void fg_Test()\n{\n\tfg_Call\n\t\t(\n\t\t\t[]\n\t\t\t{\n\t\t\t\tfg_Work();\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// An opening brace written behind the '=' takes a line of its own, and the list's lines move with it.
 					fg_ExpectFormat
 						(
 							"KeptListTrailingOpen"

@@ -4158,7 +4158,44 @@ namespace
 	void CFormattingAnalyzer::fp_EmitLayout()
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Nodes = m_Structure.f_GetNodes();
 		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
+		auto fIsBlockBrace = [&](umint _iToken, bool _bOpening)
+			{
+				auto iNode = _bOpening ? m_Structure.f_FindNodeOpeningAt(_iToken) : m_Structure.f_FindNodeClosingAt(_iToken);
+
+				return iNode >= Nodes.f_GetLen() || Nodes[iNode].m_Kind != ECodeNodeKind::mc_Group;
+			}
+		;
+		// A blank line cuts what continues across it: a line ending in an opening bracket or an operator, or one
+		// followed by the closing bracket of what it stands in. Between a list's elements, statements, and a
+		// block's braces it separates, and stays.
+		auto fContinues = [&](umint _iPrevious, umint _iNext)
+			{
+				auto const &Previous = Tokens[_iPrevious];
+				auto const &Next = Tokens[_iNext];
+				bool bCloses = Next.m_Kind == ECodeTokenKind::mc_Punctuator
+					&& (m_Tokens.f_IsText(Next, ")") || m_Tokens.f_IsText(Next, "]") || (m_Tokens.f_IsText(Next, "}") && !fIsBlockBrace(_iNext, false)))
+				;
+				if (bCloses)
+					return !m_Tokens.f_IsText(Previous, ",") && !m_Tokens.f_IsText(Previous, ";");
+
+				if (Previous.m_Kind != ECodeTokenKind::mc_Punctuator)
+					return false;
+
+				if (m_Tokens.f_IsText(Previous, "{"))
+					return !fIsBlockBrace(_iPrevious, true);
+
+				return !m_Tokens.f_IsText(Previous, ")")
+					&& !m_Tokens.f_IsText(Previous, "]")
+					&& !m_Tokens.f_IsText(Previous, "}")
+					&& !m_Tokens.f_IsText(Previous, ";")
+					&& !m_Tokens.f_IsText(Previous, ",")
+					&& !m_Tokens.f_IsText(Previous, ":")
+					&& !m_Tokens.f_IsText(Previous, ">")
+				;
+			}
+		;
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 		{
 			// Only a code token owns the gap in front of it; a range's marks also land on
@@ -4177,7 +4214,7 @@ namespace
 			}
 
 			auto State = EGap(m_GapState[i]);
-			if (State == EGap::mc_Keep)
+			if (State == EGap::mc_Keep && !fp_IsFirstOnLine(i))
 				continue;
 
 			auto iPrevious = fp_PreviousCode(i);
@@ -4185,13 +4222,17 @@ namespace
 				continue;
 
 			bool bNewline = false;
+			umint nNewlines = 0;
 			bool bKeepLines = false;
 			bool bOwned = false;
 			for (umint iGap = umint(iPrevious) + 1; iGap < i; ++iGap)
 			{
 				auto Kind = Tokens[iGap].m_Kind;
 				if (Kind == ECodeTokenKind::mc_Newline)
+				{
 					bNewline = true;
+					++nNewlines;
+				}
 				else if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment)
 					bKeepLines = true;
 				else if (Kind == ECodeTokenKind::mc_Preprocessor)
@@ -4207,6 +4248,19 @@ namespace
 
 			if (bOwned)
 				continue;
+
+			bool bBlankInStatement = nNewlines > 1 && !bKeepLines && fContinues(umint(iPrevious), i);
+			if (State == EGap::mc_Keep)
+			{
+				if (bBlankInStatement)
+				{
+					auto iBlank = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[umint(iPrevious)].m_iOffset) + 1);
+					auto iTokenLine = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[i].m_iOffset));
+					fp_AddEdit("blank-line", iBlank, iTokenLine - iBlank, {}, "no blank line cuts a construct continued on the next line");
+				}
+
+				continue;
+			}
 
 			auto iStart = Tokens[umint(iPrevious)].f_GetEnd();
 			auto nLength = Tokens[i].m_iOffset - iStart;
@@ -4239,7 +4293,7 @@ namespace
 				if (bKeepLines && !bNewline)
 					continue;
 
-				Replacement = bKeepLines ? fKeepLines() : (m_bBlankBefore[i] ? Ending + Ending : Ending) + fp_MakeIndent(m_GapIndent[i]);
+				Replacement = bKeepLines ? fKeepLines() : (m_bBlankBefore[i] && !bBlankInStatement ? Ending + Ending : Ending) + fp_MakeIndent(m_GapIndent[i]);
 				Explanation = State == EGap::mc_Break ? "a split construct puts this on its own line" : "a block's braces and each of its statements take a line of their own";
 			}
 			else if (State == EGap::mc_Indent)
@@ -4247,9 +4301,10 @@ namespace
 				if (!bNewline)
 					continue;
 
-				Replacement = fKeepLines();
+				Replacement = bBlankInStatement ? Ending + fp_MakeIndent(m_GapIndent[i]) : fKeepLines();
 				Explanation = "the body's lines move with its brace";
 			}
+
 			else
 			{
 				if (!bNewline || bKeepLines)
@@ -5729,14 +5784,13 @@ namespace
 		{
 			// A statement a braced initializer written across lines ends is a split one: the braces stand one level
 			// in from it, and its terminator on a line of its own: 'CFoo Value =' over '{' over '}' over ';'. An opening
-			// brace written behind the '=' takes that line, and the list's lines move with it. No blank line stands
-			// between the '=' and the brace.
+			// brace written behind the '=' takes that line, and the list's lines move with it.
 			auto iAssign = fp_PreviousCode(Node.m_iFirstToken);
-			bool bAfterAssign = Node.m_Bracket == ECodeBracket::mc_Brace && iAssign >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAssign)], "=");
-			bool bTrailingOpen = bAfterAssign && !fp_IsFirstOnLine(Node.m_iFirstToken);
-			umint nAssignNewlines = 0;
-			for (auto i = bAfterAssign ? umint(iAssign) + 1 : Node.m_iFirstToken; i < Node.m_iFirstToken; ++i)
-				nAssignNewlines += m_Tokens.f_GetTokens()[i].m_Kind == ECodeTokenKind::mc_Newline;
+			bool bTrailingOpen = Node.m_Bracket == ECodeBracket::mc_Brace
+				&& !fp_IsFirstOnLine(Node.m_iFirstToken)
+				&& iAssign >= 0
+				&& m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAssign)], "=")
+			;
 
 			bool bOpened = Node.m_bHasMultiLineBrace && (bTrailingOpen || fp_IsFirstOnLine(Node.m_iFirstToken)) && fp_IsFirstOnLine(Node.m_iLastToken);
 			if (Node.m_Bracket == ECodeBracket::mc_Brace && Node.m_iParent < Nodes.f_GetLen() && bOpened)
@@ -5760,10 +5814,10 @@ namespace
 					auto nStatementIndent = fp_GetStatementIndent(Statement.m_iFirstToken);
 					auto nBraceIndent = nStatementIndent + m_Request.m_Settings.m_nTabWidth;
 					auto nBraceWritten = fp_GetStatementIndent(bTrailingOpen ? Node.m_iLastToken : Node.m_iFirstToken);
-					if ((bTrailingOpen || nAssignNewlines > 1 || nBraceWritten != nBraceIndent) && fp_CanPlaceBlock(_iNode))
+					if ((bTrailingOpen || nBraceWritten != nBraceIndent) && fp_CanPlaceBlock(_iNode))
 					{
 						auto nDelta = aint(nBraceIndent) - aint(nBraceWritten);
-						if (bAfterAssign)
+						if (bTrailingOpen)
 							fp_OwnLineBefore(Node.m_iFirstToken, nBraceIndent);
 						else
 							fp_IndentBefore(Node.m_iFirstToken, nBraceIndent);
