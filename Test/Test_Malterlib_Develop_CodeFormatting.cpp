@@ -1231,6 +1231,13 @@ namespace
 					// An opening brace written behind the '=' takes a line of its own, and the list's lines move with it.
 					fg_ExpectFormat
 						(
+							"KeptListBlankBeforeOpen"
+							, "namespace N\n{\n\tch8 const *g_pTests[] =\n\n\t\t{\n\t\t\t\"abc\"\n\t\t\t, \"abcd\"\n\t\t}\n\t;\n}\n"
+							, "namespace N\n{\n\tch8 const *g_pTests[] =\n\t\t{\n\t\t\t\"abc\"\n\t\t\t, \"abcd\"\n\t\t}\n\t;\n}\n"
+						)
+					;
+					fg_ExpectFormat
+						(
 							"KeptListTrailingOpen"
 							, "namespace N\n{\n\tch8 const *g_pTests[] = {\n\t\t\"abc\",\n\t\t\"abcd\"\n\t};\n}\n"
 							, "namespace N\n{\n\tch8 const *g_pTests[] =\n\t\t{\n\t\t\t\"abc\"\n\t\t\t, \"abcd\"\n\t\t}\n\t;\n}\n"

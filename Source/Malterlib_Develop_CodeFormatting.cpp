@@ -5729,13 +5729,15 @@ namespace
 		{
 			// A statement a braced initializer written across lines ends is a split one: the braces stand one level
 			// in from it, and its terminator on a line of its own: 'CFoo Value =' over '{' over '}' over ';'. An opening
-			// brace written behind the '=' takes that line, and the list's lines move with it.
+			// brace written behind the '=' takes that line, and the list's lines move with it. No blank line stands
+			// between the '=' and the brace.
 			auto iAssign = fp_PreviousCode(Node.m_iFirstToken);
-			bool bTrailingOpen = Node.m_Bracket == ECodeBracket::mc_Brace
-				&& !fp_IsFirstOnLine(Node.m_iFirstToken)
-				&& iAssign >= 0
-				&& m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAssign)], "=")
-			;
+			bool bAfterAssign = Node.m_Bracket == ECodeBracket::mc_Brace && iAssign >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAssign)], "=");
+			bool bTrailingOpen = bAfterAssign && !fp_IsFirstOnLine(Node.m_iFirstToken);
+			umint nAssignNewlines = 0;
+			for (auto i = bAfterAssign ? umint(iAssign) + 1 : Node.m_iFirstToken; i < Node.m_iFirstToken; ++i)
+				nAssignNewlines += m_Tokens.f_GetTokens()[i].m_Kind == ECodeTokenKind::mc_Newline;
+
 			bool bOpened = Node.m_bHasMultiLineBrace && (bTrailingOpen || fp_IsFirstOnLine(Node.m_iFirstToken)) && fp_IsFirstOnLine(Node.m_iLastToken);
 			if (Node.m_Bracket == ECodeBracket::mc_Brace && Node.m_iParent < Nodes.f_GetLen() && bOpened)
 			{
@@ -5758,10 +5760,10 @@ namespace
 					auto nStatementIndent = fp_GetStatementIndent(Statement.m_iFirstToken);
 					auto nBraceIndent = nStatementIndent + m_Request.m_Settings.m_nTabWidth;
 					auto nBraceWritten = fp_GetStatementIndent(bTrailingOpen ? Node.m_iLastToken : Node.m_iFirstToken);
-					if ((bTrailingOpen || nBraceWritten != nBraceIndent) && fp_CanPlaceBlock(_iNode))
+					if ((bTrailingOpen || nAssignNewlines > 1 || nBraceWritten != nBraceIndent) && fp_CanPlaceBlock(_iNode))
 					{
 						auto nDelta = aint(nBraceIndent) - aint(nBraceWritten);
-						if (bTrailingOpen)
+						if (bAfterAssign)
 							fp_OwnLineBefore(Node.m_iFirstToken, nBraceIndent);
 						else
 							fp_IndentBefore(Node.m_iFirstToken, nBraceIndent);
