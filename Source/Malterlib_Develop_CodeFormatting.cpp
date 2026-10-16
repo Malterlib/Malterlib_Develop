@@ -5095,6 +5095,19 @@ namespace
 		TCVector<umint> LaidOut;
 		if (Node.m_Kind == ECodeNodeKind::mc_Group && (Node.m_Bracket == ECodeBracket::mc_Brace || Node.m_Bracket == ECodeBracket::mc_Paren))
 		{
+			// Each element on a line of its own stands one level in from a list's opening marker on a line of its own,
+			// with the commas in front of the others, however the first was aligned: '{1, 2}' over ', {3, 4}'. The
+			// closing marker stands under the opening one.
+			bool bLevelled = fp_IsFirstOnLine(Node.m_iFirstToken)
+				&& fp_IsFirstOnLine(Node.m_iLastToken)
+				&& !fp_HasOpaqueDirective(Node.m_iFirstToken, Node.m_iLastToken)
+				&& !Node.m_bHasMultiLineToken
+			;
+			auto nOpenLevel = bLevelled ? fp_GetStatementIndent(Node.m_iFirstToken) : 0;
+			auto nElementLevel = nOpenLevel + m_Request.m_Settings.m_nTabWidth;
+			if (bLevelled && fp_GetStatementIndent(Node.m_iLastToken) != nOpenLevel)
+				fp_IndentBefore(Node.m_iLastToken, nOpenLevel);
+
 			umint iElement = Node.m_iFirstToken + 1;
 			umint iChildCursor = 0;
 			for (umint iSplit = 0; iElement <= Node.m_iLastToken; ++iSplit)
@@ -5105,6 +5118,9 @@ namespace
 				bool bElement = iEnd > iElement && iStart >= 0 && iLast >= 0 && umint(iStart) <= umint(iLast) && fp_IsFirstOnLine(umint(iStart));
 				for (auto i = bElement ? umint(iStart) + 1 : umint(0); bElement && i < umint(iLast); ++i)
 					bElement = m_Tokens.f_GetTokens()[i].m_Kind != ECodeTokenKind::mc_Newline;
+
+				if (bElement && bLevelled && fp_IsLastOnLine(umint(iLast)) && fp_GetStatementIndent(umint(iStart)) != nElementLevel)
+					fp_IndentBefore(umint(iStart), nElementLevel);
 
 				if (bElement && fp_IsLastOnLine(umint(iLast)))
 				{

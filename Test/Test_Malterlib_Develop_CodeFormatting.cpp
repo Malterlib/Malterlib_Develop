@@ -1168,6 +1168,17 @@ namespace
 							, "enum EType\n{\n\tEType_A\n\t, EType_B\n\t, EType_C\n};\n"
 						)
 					;
+					// A braced list keeping its lines stands its elements one level in from its opening brace, however the
+					// first was aligned, and its closing brace under the opening one.
+					fg_ExpectFormat
+						(
+							"KeptListElementLevel"
+							, "static CMap const gc_Map[] =\n{\n\t\t{0x0000, SCHED_OTHER}\n\t, {0x4000, SCHED_RR}\n};\n\nvoid f()\n{\n\tCFoo Values =\n\t\t{\n\t\t\t Get()\n"
+							"\t\t\t, a\n\t}\n\t;\n}\n"
+							, "static CMap const gc_Map[] =\n{\n\t{0x0000, SCHED_OTHER}\n\t, {0x4000, SCHED_RR}\n};\n\nvoid f()\n{\n\tCFoo Values =\n\t\t{\n\t\t\tGet()\n"
+							"\t\t\t, a\n\t\t}\n\t;\n}\n"
+						)
+					;
 					// An enumerator too long for its line is laid out as a list's element, its '=' and operators at its level.
 					{
 						CStr Value = "EFileAttrib_UserExecute | EFileAttrib_UserRead | EFileAttrib_UserWrite | EFileAttrib_GroupExecute | EFileAttrib_GroupRead | EFileAttrib_GroupWrite"

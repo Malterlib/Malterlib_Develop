@@ -611,7 +611,10 @@ The decisions are kept per gap between tokens and written out once, so no
 decision depends on an edit already made, or on where the source happened to
 break its lines. A construct that contains a block comment, a multiline token,
 or a braced initializer written across lines keeps its lines; only its inner
-constructs are brought back to one line where they fit. A line comment only
+constructs are brought back to one line where they fit. Where its braces stand on
+lines of their own, each element starting a line stands one level in from the
+opening brace, the first among them, and the closing brace under the opening
+one; an element holding a multiline token stays where it is. A line comment only
 ends its line: a construct holding one never fits on a line and is split, and
 the lines around the comment are laid out and indented as usual, the comment
 staying at the end of its own.
