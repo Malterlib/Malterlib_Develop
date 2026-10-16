@@ -1179,16 +1179,15 @@ namespace
 							"\t\t\t, a\n\t\t}\n\t;\n}\n"
 						)
 					;
-					// A braced list written across lines with its commas in front is laid out as an opened list but never
-					// joined: each element on a line of its own, blank lines between them kept, and a list of literals
-					// throughout keeps its rows. One that holds anything else gives each element a line.
+					// A braced list written across lines is laid out as an opened list but never joined: each element on a
+					// line of its own with its comma in front, blank lines between them kept. Only a directive keeps rows.
 					fg_ExpectFormat
 						(
 							"KeptListElements"
 							, "void f()\n{\n\tCSettings Settings\n\t\t{\n\t\t\t.m_A = 1\n\t\t\t, .m_B = 2, .m_C = 3\n\n\t\t\t, .m_D = 4\n\t\t}\n\t;\n"
 							"\tuint8 Data[] =\n\t\t{\n\t\t\t0x02, 0x00\n\t\t\t, 0x01, 0x00, 'A'\n\t\t}\n\t;\n}\n"
 							, "void f()\n{\n\tCSettings Settings\n\t\t{\n\t\t\t.m_A = 1\n\t\t\t, .m_B = 2\n\t\t\t, .m_C = 3\n\n\t\t\t, .m_D = 4\n\t\t}\n\t;\n"
-							"\tuint8 Data[] =\n\t\t{\n\t\t\t0x02, 0x00\n\t\t\t, 0x01, 0x00, 'A'\n\t\t}\n\t;\n}\n"
+							"\tuint8 Data[] =\n\t\t{\n\t\t\t0x02\n\t\t\t, 0x00\n\t\t\t, 0x01\n\t\t\t, 0x00\n\t\t\t, 'A'\n\t\t}\n\t;\n}\n"
 						)
 					;
 					fg_ExpectFormat
@@ -1196,6 +1195,72 @@ namespace
 							"KeptListMixedRows"
 							, "void f()\n{\n\tTCVector<CStr> Params =\n\t\t{\n\t\t\t\"-c\", \"a\", \"-c\"\n\t\t\t, \"b=\" + Path, \"diff\"\n\t\t}\n\t;\n}\n"
 							, "void f()\n{\n\tTCVector<CStr> Params =\n\t\t{\n\t\t\t\"-c\"\n\t\t\t, \"a\"\n\t\t\t, \"-c\"\n\t\t\t, \"b=\" + Path\n\t\t\t, \"diff\"\n\t\t}\n\t;\n}\n"
+						)
+					;
+					// A 'columns' directive lays its list out in rows of that many elements, a comma in front of each row
+					// after the first, which is indented as far as the comma takes, and its columns aligned: numbers to the
+					// right, the rest to the left. A comment behind an element ends its row. 'auto' fits as many as it can.
+					fg_ExpectFormat
+						(
+							"ColumnsDirective"
+							, "ch8 g_Table[] =\n{\n\t// malterlib-format columns: 3\n\t'A', 'B', 'C', 'D',\n\t'E', // Last\n\t'F'\n};\n\n"
+							"int8 gc_Bits[]\n\t{\n\t\t// malterlib-format columns: 4\n\t\t-1, 0, 1, 10, 200, 3\n\t}\n;\n"
+							, "ch8 g_Table[] =\n\t{\n\t\t// malterlib-format columns: 3\n\t\t  'A', 'B', 'C'\n\t\t, 'D', 'E' // Last\n\t\t, 'F'\n\t}\n;\n\n"
+							"int8 gc_Bits[]\n\t{\n\t\t// malterlib-format columns: 4\n\t\t   -1, 0, 1, 10\n\t\t, 200, 3\n\t}\n;\n"
+							, false
+						)
+					;
+					// An element a string continues over lines takes a line of its own, the continuation at its level.
+					fg_ExpectFormat
+						(
+							"KeptListContinuedString"
+							, "int g_A[] =\n\t{\n\t\t-1, \"x\",\n\t\t2, \"Name\", \"Long\"\n\t\t\"Rest\",\n\t\t-904, \"c\",\n\t}\n;\n"
+							, "int g_A[] =\n\t{\n\t\t-1\n\t\t, \"x\"\n\t\t, 2\n\t\t, \"Name\"\n\t\t, \"Long\"\n\t\t\"Rest\"\n\t\t, -904\n\t\t, \"c\",\n\t}\n;\n"
+						)
+					;
+					// A comma ending the list stays behind its last element.
+					fg_ExpectFormat
+						(
+							"ColumnsTrailingComma"
+							, "CError g_Errors[] =\n\t{\n\t\t// malterlib-format columns: 2\n\t\t-5, \"Five\",\n\t\t-100, \"Hundred\",\n\t}\n;\n"
+							, "CError g_Errors[] =\n\t{\n\t\t// malterlib-format columns: 2\n\t\t    -5, \"Five\"\n\t\t, -100, \"Hundred\",\n\t}\n;\n"
+						)
+					;
+					{
+						CStr Words;
+						for (umint i = 0; i < 40; ++i)
+							Words += "{}\"Word{}\""_f << (i ? ", " : "") << i;
+
+						CStr Expected = "TCVector<CStr> gc_Words =\n\t{\n\t\t// malterlib-format columns: auto\n";
+						for (umint iRow = 0; iRow < 3; ++iRow)
+						{
+							Expected += iRow ? "\t\t, " : "\t\t  ";
+							for (umint i = iRow * 18; i < fg_Min(umint(40), iRow * 18 + 18); ++i)
+								Expected += "\"Word{}\"{}"_f << i << (i + 1 < fg_Min(umint(40), iRow * 18 + 18) ? (i < 10 ? ",  " : ", ") : "");
+
+							Expected += "\n";
+						}
+
+						Expected += "\t}\n;\n";
+						fg_ExpectFormat("ColumnsAuto", "TCVector<CStr> gc_Words =\n\t{\n\t\t// malterlib-format columns: auto\n\t\t" + Words + "\n\t}\n;\n", Expected);
+					}
+					// A 'table' directive lays its records out one to a row, their fields aligned as columns.
+					fg_ExpectFormat
+						(
+							"TableDirective"
+							, "void f()\n{\n\tCUnit Units[] =\n\t\t{\n\t\t\t// malterlib-format table\n\t\t\t{\"gib\", 1073741824}, {\"mib\", 1048576}\n\t\t\t, {\"b\", 1}\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\tCUnit Units[] =\n\t\t{\n\t\t\t// malterlib-format table\n\t\t\t  {\"gib\", 1073741824}\n\t\t\t, {\"mib\",    1048576}\n"
+							"\t\t\t, {\"b\",            1}\n\t\t}\n\t;\n}\n"
+						)
+					;
+					// An 'align: =' directive aligns the '=' of the run of lines below it, up to a blank line.
+					fg_ExpectFormat
+						(
+							"AlignDirective"
+							, "void f()\n{\n\t// malterlib-format align: =\n\tint a = 1;\n\tint Longer = 2;\n\n\tint b = 3;\n}\n\nenum EFoo\n{\n\t// malterlib-format align: =\n"
+							"\tEFoo_A = 1\n\t, EFoo_Longer = 2\n};\n"
+							, "void f()\n{\n\t// malterlib-format align: =\n\tint a      = 1;\n\tint Longer = 2;\n\n\tint b = 3;\n}\n\nenum EFoo\n{\n\t// malterlib-format align: =\n"
+							"\tEFoo_A        = 1\n\t, EFoo_Longer = 2\n};\n"
 						)
 					;
 					// An enumerator too long for its line is laid out as a list's element, its '=' and operators at its level.
@@ -2807,7 +2872,7 @@ namespace
 						(
 							"StrayClosingBrace"
 							, "void f()\n{\n\tstruct timespec Times[2] =\n\t{\n\t\t{1000000000, 0\n\t\t}, {1000000000, 0}\n\t};\n}\n"
-							, "void f()\n{\n\tstruct timespec Times[2] =\n\t\t{\n\t\t\t{1000000000, 0}, {1000000000, 0}\n\t\t}\n\t;\n}\n"
+							, "void f()\n{\n\tstruct timespec Times[2] =\n\t\t{\n\t\t\t{1000000000, 0}\n\t\t\t, {1000000000, 0}\n\t\t}\n\t;\n}\n"
 						)
 					;
 					// A pack expansion stays behind the closing marker of an opened scope, and an empty
@@ -4082,6 +4147,9 @@ namespace
 					fExpectFailed("MissingOn", "// malterlib-format off\nint a;\n");
 					fExpectFailed("MissingOff", "// malterlib-format on\nint a;\n");
 					fExpectFailed("Nested", "// malterlib-format off\n// malterlib-format off\nint a;\n");
+					fExpectFailed("UnknownDirective", "// malterlib-format sideways\nint a;\n");
+					fExpectFailed("ColumnsOutsideList", "// malterlib-format columns: 4\nint a;\n");
+					fExpectFailed("ColumnsWithoutCount", "int a[] =\n\t{\n\t\t// malterlib-format columns: x\n\t\t1\n\t}\n;\n");
 				};
 			};
 

@@ -175,6 +175,7 @@ formatter failure, not an edit.
 | `type-blank-line` | One blank line after a struct, class, union or enum definition, unless the scope it stands in ends there. A variable of a C struct type with a braced initializer, `struct timespec Time = {...};`, defines no type. |
 | `access-blank-line` | One blank line in front of `public:`, `private:`, or `protected:`, and none after it. The first specifier in a class stands directly under the opening brace, and two in a row stand together: `private:` directly above `public:` follows it the way a member does. |
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, and gives a block's braces and statements lines of their own. |
+| `layout-directive` | A list a `columns` or `table` directive leads stands in aligned rows, and the lines an `align: =` directive leads have their `=` at one column (see Protected regions). Reports the directive where its list keeps its lines. |
 | `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |
 | `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source. |
 | `east-qualifier` | A `const` or `volatile` written in front of its type moves behind it: `const int &_Value` becomes `int const &_Value`. |
@@ -621,13 +622,14 @@ level in from the statement and its terminator on a line of its own,
 `CFoo Value =` over `{` over `}` over `;`. Each element starting a line stands
 one level in from the opening brace, the first among them, and the closing brace under the opening
 one; an element holding a multiline token stays where it is. A braced list
-written with its commas in front of its elements is not brought back onto one
-line, but is otherwise laid out as an opened list: each element written on one
-line takes a line of its own with its comma in front, a blank line between two
-staying, and is laid out as an element. A list holding nothing but single
-literals is data written in rows, `0x02, 0x00, 0x00, 0x00`, and keeps them, and
-so does a list with its commas behind its elements, a table such as
-`-1, 0, 1, 1,`; a list holding anything else gives every element a line. A line comment only
+written across lines is not brought back onto one line, but is otherwise laid
+out as an opened list: each element written on one line takes a line of its own
+with its comma in front, a comma written behind the element in front of it
+included, and is laid out as an element. So does an element only a continued
+string takes across lines, its continuation at the element's level. A comma
+ending the list stays behind its last element. Data meant to stand in rows,
+such as a table of bytes, says so with a layout directive (see Protected
+regions). A line comment only
 ends its line: a construct holding one never fits on a line and is split, and
 the lines around the comment are laid out and indented as usual, the comment
 staying at the end of its own.
@@ -957,6 +959,39 @@ Both lines are excluded along with everything between them, and none of them is
 reported for its length: data written to a width of its own, such as a raw
 string's test input, is what the region is for. An unmatched or nested
 directive is a failure, not a silently ignored comment.
+
+A layout directive on the first line inside a braced list lays the list out in
+aligned rows, and the `layout-directive` rule writes it:
+
+```cpp
+ch8 g_Table[] =
+	{
+		// malterlib-format columns: 4
+		  'A', 'B', 'C', 'D'
+		, 'E', 'F' // Last
+		, 'G'
+	}
+;
+```
+
+- `columns: N` puts N elements in each row, `columns: auto` as many as fit
+  within `max_line_length`.
+- `table` puts one braced record in each row, its fields the columns.
+
+Rows after the first start with their comma, and the first is indented as far
+as the comma takes. A column is as wide as its widest cell, numbers aligned to
+the right and anything else to the left. A comment behind an element ends its
+row, and a comma ending the list stays behind its last element. A list holding
+a comment elsewhere, or an element its row cannot spell on one line, keeps its
+lines and the directive is reported; so is a row longer than
+`max_line_length`.
+
+`// malterlib-format align: =` aligns the `=` of each line in the run of lines
+directly below it, one space behind the longest left-hand side; a blank line,
+a comment line, or a line holding no `=` ends the run.
+
+Any other `malterlib-format` directive, and a layout directive anywhere but the
+first line inside a braced list, is a failure.
 
 A source that ends inside a comment or literal, contains a byte that cannot
 start a token, or is not valid UTF-8 is reported as unsupported and left

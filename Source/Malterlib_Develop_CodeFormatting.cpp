@@ -652,6 +652,12 @@ namespace
 		void fp_AddDiagnostic(CStr const &_Rule, umint _iOffset, umint _nLength, CStr const &_Explanation, bool _bHasAutomaticFix);
 
 		bool fp_IsDisabled(umint _iOffset, umint _nLength) const;
+		bool fp_IsFormatOff(umint _iOffset, umint _nLength) const;
+		bool fp_CollectListLayouts(CStr &o_Explanation);
+		void fp_RenderListLayouts();
+		void fp_RenderAlignments();
+		bool fp_RenderElement(umint _iFirst, umint _iLast, CStr &o_Text) const;
+		void fp_AddOwnedEdit(umint _iOffset, umint _nLength, CStr const &_Replacement, CStr const &_Explanation);
 		bool fp_IsSelected(umint _iOffset, umint _nLength) const;
 		bool fp_IsLineSelected(umint _iLine) const;
 		umint fp_GetColumn(umint _iOffset) const;
@@ -791,7 +797,23 @@ namespace
 		NContainer::TCVector<uint8> m_bProtectedStart;
 		NContainer::TCVector<uint8> m_bProtectedEnd;
 		NContainer::TCVector<CCodeFormattingRange> m_Disabled;
+		NContainer::TCVector<CCodeFormattingRange> m_Owned;				// Text a directive lays out itself, which no other rule edits.
 		NContainer::TCVector<CCodeFormattingRange> m_Effective;
+		enum class EListLayout : uint8
+		{
+			mc_Columns
+			, mc_Table
+		};
+		struct CListLayout
+		{
+			umint m_iList = 0;									// The braced list's node.
+			umint m_iDirective = 0;								// The directive's comment token.
+			EListLayout m_Layout = EListLayout::mc_Columns;
+			umint m_nColumns = 0;								// Elements per row, zero for as many as fit.
+		};
+		NContainer::TCVector<CListLayout> m_ListLayouts;
+		NContainer::TCVector<umint> m_iListLayoutOfNode;		// Indexed by node: its layout plus one, or zero.
+		NContainer::TCVector<umint> m_AlignDirectives;			// The comment tokens of 'align: =' directives.
 		struct CJoinCandidate
 		{
 			umint m_iOffset = 0;								// Where the joined construct starts in the source.
@@ -876,7 +898,50 @@ namespace
 			}
 
 			if (Text != gc_FormatOnDirective)
+			{
+				// The layout directives are read by the rules that act on them; any other is a mistake.
+				CStr const c_Prefix = "// malterlib-format ";
+				if (!Text.f_StartsWith(c_Prefix))
+					continue;
+
+				auto Directive = Text.f_Extract(c_Prefix.f_GetLen());
+				auto iToken = umint(&Token - m_Tokens.f_GetTokens().f_GetArray());
+				if (Directive == "table")
+					m_ListLayouts.f_Insert(CListLayout{.m_iDirective = iToken, .m_Layout = EListLayout::mc_Table});
+				else if (Directive == "columns: auto")
+					m_ListLayouts.f_Insert(CListLayout{.m_iDirective = iToken, .m_Layout = EListLayout::mc_Columns});
+				else if (Directive == "align: =")
+					m_AlignDirectives.f_Insert(iToken);
+				else if (Directive.f_StartsWith("columns: "))
+				{
+					auto Count = Directive.f_Extract(9);
+					umint nColumns = 0;
+					bool bNumber = !Count.f_IsEmpty();
+					for (umint iCharacter = 0; iCharacter < Count.f_GetLen() && bNumber; ++iCharacter)
+					{
+						auto Character = Count.f_GetStr()[iCharacter];
+						bNumber = Character >= '0' && Character <= '9' && iCharacter < 5;
+						nColumns = nColumns * 10 + umint(Character - '0');
+					}
+
+					if (!bNumber || !nColumns || nColumns > 1024)
+					{
+						o_Explanation = "'{}' at line {} needs a column count from 1 to 1024 or 'auto'"_f << Text << m_Lines.f_FindLine(Token.m_iOffset) + 1;
+
+						return false;
+					}
+
+					m_ListLayouts.f_Insert(CListLayout{.m_iDirective = iToken, .m_Layout = EListLayout::mc_Columns, .m_nColumns = nColumns});
+				}
+				else
+				{
+					o_Explanation = "Unknown directive '{}' at line {}"_f << Text << m_Lines.f_FindLine(Token.m_iOffset) + 1;
+
+					return false;
+				}
+
 				continue;
+			}
 
 			if (!bDisabled)
 			{
@@ -1019,7 +1084,22 @@ namespace
 		return true;
 	}
 
+	// Whether an edit there is forbidden: the formatter is turned off for the text, or a directive lays it out itself.
 	bool CFormattingAnalyzer::fp_IsDisabled(umint _iOffset, umint _nLength) const
+	{
+		if (fp_IsFormatOff(_iOffset, _nLength))
+			return true;
+
+		for (auto const &Range : m_Owned)
+		{
+			if (_iOffset < Range.f_GetEnd() && Range.m_iOffset < _iOffset + fg_Max(_nLength, umint(1)))
+				return true;
+		}
+
+		return false;
+	}
+
+	bool CFormattingAnalyzer::fp_IsFormatOff(umint _iOffset, umint _nLength) const
 	{
 		for (auto const &Range : m_Disabled)
 		{
@@ -1028,6 +1108,485 @@ namespace
 		}
 
 		return false;
+	}
+
+	// A 'columns' or 'table' directive stands on the first line inside the braced list it lays out, which no other
+	// rule then edits inside.
+	bool CFormattingAnalyzer::fp_CollectListLayouts(CStr &o_Explanation)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		m_iListLayoutOfNode.f_SetLen(Nodes.f_GetLen());
+		for (auto &iLayout : m_iListLayoutOfNode)
+			iLayout = 0;
+
+		for (umint iLayout = 0; iLayout < m_ListLayouts.f_GetLen(); ++iLayout)
+		{
+			auto &Layout = m_ListLayouts[iLayout];
+			auto iOpen = aint(Layout.m_iDirective) - 1;
+			while (iOpen >= 0 && (Tokens[umint(iOpen)].m_Kind == ECodeTokenKind::mc_Whitespace || Tokens[umint(iOpen)].m_Kind == ECodeTokenKind::mc_Newline))
+				--iOpen;
+
+			auto iList = iOpen >= 0 && m_Tokens.f_IsText(Tokens[umint(iOpen)], "{") ? m_Structure.f_FindNodeOpeningAt(umint(iOpen)) : Nodes.f_GetLen();
+			bool bList = iList < Nodes.f_GetLen()
+				&& Nodes[iList].m_Kind == ECodeNodeKind::mc_Group
+				&& Nodes[iList].m_Bracket == ECodeBracket::mc_Brace
+				&& fp_SpansLines(umint(iOpen), Layout.m_iDirective)
+			;
+			if (!bList)
+			{
+				o_Explanation = "'{}' at line {} has to stand on the first line inside a braced list"_f
+					<< fg_TrimCommentTrailingSpace(m_Tokens.f_GetText(Tokens[Layout.m_iDirective]))
+					<< m_Lines.f_FindLine(Tokens[Layout.m_iDirective].m_iOffset) + 1
+				;
+
+				return false;
+			}
+
+			Layout.m_iList = iList;
+			m_iListLayoutOfNode[iList] = iLayout + 1;
+			auto &Owned = m_Owned.f_Insert();
+			Owned.m_iOffset = Tokens[umint(iOpen)].f_GetEnd();
+			// The closing brace's indentation is inserted at its own offset, which is part of what the list owns.
+			Owned.m_nLength = Tokens[Nodes[iList].m_iLastToken].m_iOffset - Owned.m_iOffset + 1;
+		}
+
+		return true;
+	}
+
+	// An edit a directive makes in the text it owns.
+	void CFormattingAnalyzer::fp_AddOwnedEdit(umint _iOffset, umint _nLength, CStr const &_Replacement, CStr const &_Explanation)
+	{
+		if (fp_IsFormatOff(_iOffset, _nLength) || !fp_IsSelected(_iOffset, _nLength))
+			return;
+
+		if (_Replacement == CStr(m_Request.m_Source.f_GetStr() + _iOffset, _nLength))
+			return;
+
+		auto &Edit = m_Edits.f_Insert();
+		Edit.m_iOffset = _iOffset;
+		Edit.m_nLength = _nLength;
+		Edit.m_Replacement = _Replacement;
+		Edit.m_Rule = "layout-directive";
+		m_EditExplanations.f_Insert(_Explanation);
+		m_bEditDropped.f_Insert(uint8(0));
+	}
+
+	// Lays out each list a 'columns' or 'table' directive owns, now that the layout has placed its braces: its rows
+	// start with their comma one level in from the opening brace, the first indented as far as the comma takes,
+	// and its columns are as wide as their widest cell, numbers aligned to the right and the rest to the left. A
+	// comment behind an element ends its row. A list holding what such a row cannot spell keeps its lines.
+	void CFormattingAnalyzer::fp_RenderListLayouts()
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
+
+		struct CCell
+		{
+			CStr m_Text;
+			umint m_nWidth = 0;
+			bool m_bNumber = false;
+		};
+		struct CElement
+		{
+			TCVector<CCell> m_Cells;
+			CStr m_Comment;
+		};
+
+		auto fIsNumber = [&](umint _iFirst, umint _iLast)
+			{
+				umint nNumbers = 0;
+				bool bSign = false;
+				for (auto i = _iFirst; i <= _iLast; ++i)
+				{
+					auto const &Token = Tokens[i];
+					if (Token.m_Kind == ECodeTokenKind::mc_Whitespace || Token.m_Kind == ECodeTokenKind::mc_Newline)
+						continue;
+
+					if (Token.m_Kind == ECodeTokenKind::mc_Number)
+						++nNumbers;
+					else if (!nNumbers && !bSign && (m_Tokens.f_IsText(Token, "-") || m_Tokens.f_IsText(Token, "+") || m_Tokens.f_IsText(Token, "~")))
+						bSign = true;
+					else
+						return false;
+				}
+
+				return nNumbers == 1;
+			}
+		;
+		auto fCell = [&](umint _iFirst, umint _iLast, CCell &o_Cell)
+			{
+				if (!fp_RenderElement(_iFirst, _iLast, o_Cell.m_Text))
+					return false;
+
+				o_Cell.m_bNumber = fIsNumber(_iFirst, _iLast);
+
+				return fg_MeasureTextColumns(o_Cell.m_Text, nTab, o_Cell.m_nWidth);
+			}
+		;
+		auto fSpaces = [](umint _nSpaces)
+			{
+				CStr Spaces;
+				for (umint i = 0; i < _nSpaces; ++i)
+					Spaces += " ";
+
+				return Spaces;
+			}
+		;
+
+		for (auto const &Layout : m_ListLayouts)
+		{
+			auto const &List = Nodes[Layout.m_iList];
+			auto iOpen = List.m_iFirstToken;
+			auto iClose = List.m_iLastToken;
+			if (!fp_IsFirstOnLine(iOpen) || !fp_IsFirstOnLine(iClose))
+				continue;
+
+			// The elements between the list's commas, each with the comment behind it on its line.
+			TCVector<CElement> Elements;
+			bool bValid = true;
+			bool bTrailingComma = false;
+			umint iElement = iOpen + 1;
+			for (umint iSplit = 0; bValid; ++iSplit)
+			{
+				auto iEnd = iSplit < List.m_SplitPoints.f_GetLen() ? List.m_SplitPoints[iSplit] : iClose;
+				aint iFirst = -1;
+				aint iLast = -1;
+				CStr Comment;
+				for (auto i = iElement; i < iEnd && bValid; ++i)
+				{
+					auto Kind = Tokens[i].m_Kind;
+					if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline)
+						continue;
+
+					if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment)
+					{
+						if (i == Layout.m_iDirective)
+							continue;
+
+						// A comment behind a comma on the element's line describes the element in front of it.
+						if (iLast < 0 && !Elements.f_IsEmpty() && Elements.f_GetLast().m_Comment.f_IsEmpty() && !Tokens[i].m_bMultiLine && !fp_SpansLines(iElement - 1, i))
+						{
+							Elements.f_GetLast().m_Comment = fg_TrimCommentTrailingSpace(m_Tokens.f_GetText(Tokens[i]));
+
+							continue;
+						}
+
+						bValid = iLast >= 0 && Comment.f_IsEmpty() && !Tokens[i].m_bMultiLine && !fp_SpansLines(umint(iLast), i);
+						Comment = fg_TrimCommentTrailingSpace(m_Tokens.f_GetText(Tokens[i]));
+
+						continue;
+					}
+
+					bValid = Comment.f_IsEmpty();
+					if (iFirst < 0)
+						iFirst = aint(i);
+
+					iLast = aint(i);
+				}
+
+				if (!bValid)
+					break;
+
+				if (iFirst < 0)
+				{
+					// Nothing but the directive, or a comma ending the list, which stays behind the last element.
+					bTrailingComma = iSplit && iSplit >= List.m_SplitPoints.f_GetLen() && Comment.f_IsEmpty();
+					bValid = bTrailingComma || (iSplit == 0 && iSplit >= List.m_SplitPoints.f_GetLen());
+					break;
+				}
+
+				auto &Element = Elements.f_Insert();
+				Element.m_Comment = Comment;
+				if (Layout.m_Layout == EListLayout::mc_Table)
+				{
+					// A record's fields are the cells of its row.
+					auto iRecord = m_Structure.f_FindNodeOpeningAt(umint(iFirst));
+					bValid = iRecord < Nodes.f_GetLen()
+						&& Nodes[iRecord].m_Kind == ECodeNodeKind::mc_Group
+						&& Nodes[iRecord].m_Bracket == ECodeBracket::mc_Brace
+						&& Nodes[iRecord].m_iLastToken == umint(iLast)
+					;
+					auto const &Record = Nodes[bValid ? iRecord : 0];
+					umint iField = umint(iFirst) + 1;
+					for (umint iFieldSplit = 0; bValid; ++iFieldSplit)
+					{
+						auto iFieldEnd = iFieldSplit < Record.m_SplitPoints.f_GetLen() ? Record.m_SplitPoints[iFieldSplit] : Record.m_iLastToken;
+						auto iFieldFirst = fp_NextCode(iField - 1);
+						auto iFieldLast = fp_PreviousCode(iFieldEnd);
+						if (iFieldFirst >= 0 && iFieldLast >= 0 && umint(iFieldFirst) < iFieldEnd && umint(iFieldLast) >= umint(iFieldFirst) && umint(iFieldFirst) > iField - 1)
+							bValid = fCell(umint(iFieldFirst), umint(iFieldLast), Element.m_Cells.f_Insert());
+						else
+							bValid = iFieldSplit == 0 && iFieldSplit >= Record.m_SplitPoints.f_GetLen();
+
+						if (iFieldSplit >= Record.m_SplitPoints.f_GetLen())
+							break;
+
+						iField = Record.m_SplitPoints[iFieldSplit] + 1;
+					}
+				}
+				else
+					bValid = fCell(umint(iFirst), umint(iLast), Element.m_Cells.f_Insert());
+
+				if (iSplit >= List.m_SplitPoints.f_GetLen())
+					break;
+
+				iElement = List.m_SplitPoints[iSplit] + 1;
+			}
+
+			if (!bValid)
+			{
+				fp_AddDiagnostic
+					(
+						"layout-directive"
+						, Tokens[Layout.m_iDirective].m_iOffset
+						, Tokens[Layout.m_iDirective].m_nLength
+						, "the list holds a comment or a construct its rows cannot spell, and keeps its lines"
+						, false
+					)
+				;
+
+				continue;
+			}
+
+			auto nBraceIndent = fp_GetStatementIndent(iOpen);
+			auto nElementIndent = nBraceIndent + nTab;
+
+			// The rows: a table's records one to each, and otherwise the given number of elements, or as many as fit.
+			auto fRows = [&](umint _nColumns, TCVector<TCVector<umint>> &o_Rows)
+				{
+					o_Rows.f_Clear();
+					for (umint i = 0; i < Elements.f_GetLen(); ++i)
+					{
+						if (o_Rows.f_IsEmpty() || o_Rows.f_GetLast().f_GetLen() >= _nColumns || !Elements[o_Rows.f_GetLast().f_GetLast()].m_Comment.f_IsEmpty())
+							o_Rows.f_Insert();
+
+						o_Rows.f_GetLast().f_Insert(i);
+					}
+				}
+			;
+			struct CColumn
+			{
+				umint m_nWidth = 0;
+				bool m_bNumber = true;
+			};
+			TCVector<TCVector<umint>> Rows;
+			TCVector<CColumn> Columns;
+			auto fColumns = [&]
+				{
+					Columns.f_Clear();
+					for (auto const &Row : Rows)
+					{
+						for (umint iCell = 0; iCell < Row.f_GetLen(); ++iCell)
+						{
+							auto const &Cells = Elements[Row[iCell]].m_Cells;
+							for (umint iField = 0; iField < Cells.f_GetLen(); ++iField)
+							{
+								auto iColumn = Layout.m_Layout == EListLayout::mc_Table ? iField : iCell;
+								while (Columns.f_GetLen() <= iColumn)
+									Columns.f_Insert();
+
+								Columns[iColumn].m_nWidth = fg_Max(Columns[iColumn].m_nWidth, Cells[iField].m_nWidth);
+								Columns[iColumn].m_bNumber &= Cells[iField].m_bNumber;
+							}
+						}
+					}
+				}
+			;
+			auto fCellText = [&](CCell const &_Cell, CColumn const &_Column, bool _bLast)
+				{
+					auto Pad = fSpaces(_Column.m_nWidth - _Cell.m_nWidth);
+					if (_Column.m_bNumber)
+						return Pad + _Cell.m_Text + (_bLast ? CStr() : CStr(", "));
+
+					return _Cell.m_Text + (_bLast ? CStr() : CStr(",") + Pad + " ");
+				}
+			;
+			auto fRowText = [&](TCVector<umint> const &_Row, bool _bFirst)
+				{
+					CStr Text = _bFirst ? "  " : ", ";
+					for (umint iCell = 0; iCell < _Row.f_GetLen(); ++iCell)
+					{
+						auto const &Element = Elements[_Row[iCell]];
+						bool bLastCell = iCell + 1 == _Row.f_GetLen();
+						if (Layout.m_Layout == EListLayout::mc_Table)
+						{
+							Text += "{";
+							for (umint iField = 0; iField < Element.m_Cells.f_GetLen(); ++iField)
+								Text += fCellText(Element.m_Cells[iField], Columns[iField], iField + 1 == Element.m_Cells.f_GetLen());
+
+							Text += "}";
+						}
+						else
+							Text += fCellText(Element.m_Cells[0], Columns[iCell], bLastCell);
+
+						if (bTrailingComma && _Row[iCell] + 1 == Elements.f_GetLen())
+							Text += ",";
+
+						if (bLastCell && !Element.m_Comment.f_IsEmpty())
+							Text += " " + Element.m_Comment;
+					}
+
+					// A last cell padded to its column ends in blanks where nothing follows it.
+					while (Text.f_GetLen() && Text.f_GetStr()[Text.f_GetLen() - 1] == ' ')
+						Text = Text.f_Extract(0, Text.f_GetLen() - 1);
+
+					return Text;
+				}
+			;
+			auto fFits = [&]
+				{
+					for (umint iRow = 0; iRow < Rows.f_GetLen(); ++iRow)
+					{
+						umint nWidth = 0;
+						if (!fg_MeasureTextColumns(fRowText(Rows[iRow], iRow == 0), nTab, nWidth) || (nMaxColumns && nElementIndent + nWidth > nMaxColumns))
+							return false;
+					}
+
+					return true;
+				}
+			;
+
+			if (Layout.m_Layout == EListLayout::mc_Table)
+				fRows(1, Rows);
+			else if (Layout.m_nColumns)
+				fRows(Layout.m_nColumns, Rows);
+			else
+			{
+				for (auto nColumns = Elements.f_GetLen(); nColumns >= 1; --nColumns)
+				{
+					fRows(nColumns, Rows);
+					fColumns();
+					if (nColumns == 1 || fFits())
+						break;
+				}
+			}
+
+			fColumns();
+
+			CStr Interior = Ending + fp_MakeIndent(nElementIndent) + fg_TrimCommentTrailingSpace(m_Tokens.f_GetText(Tokens[Layout.m_iDirective]));
+			for (umint iRow = 0; iRow < Rows.f_GetLen(); ++iRow)
+				Interior += Ending + fp_MakeIndent(nElementIndent) + fRowText(Rows[iRow], iRow == 0);
+
+			Interior += Ending + fp_MakeIndent(nBraceIndent);
+			auto iInterior = Tokens[iOpen].f_GetEnd();
+			fp_AddOwnedEdit(iInterior, Tokens[iClose].m_iOffset - iInterior, Interior, "a list its directive lays out stands in aligned rows");
+		}
+	}
+
+	// An 'align: =' directive aligns the '=' of each line in the run below it, which ends at a blank line or a line
+	// holding none, at one column: one space behind the longest of them.
+	void CFormattingAnalyzer::fp_RenderAlignments()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		for (auto iDirective : m_AlignDirectives)
+		{
+			struct CLine
+			{
+				umint m_iAssign = 0;
+				umint m_nColumn = 0;
+			};
+			TCVector<CLine> Lines;
+			umint nTarget = 0;
+			auto iLineEnd = iDirective;
+			while (true)
+			{
+				// The next line holds code at its start, directly below the one before it.
+				umint nNewlines = 0;
+				auto i = iLineEnd + 1;
+				while (i < Tokens.f_GetLen() && (Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace || Tokens[i].m_Kind == ECodeTokenKind::mc_Newline))
+					nNewlines += Tokens[i++].m_Kind == ECodeTokenKind::mc_Newline;
+
+				bool bCode = i < Tokens.f_GetLen()
+					&& Tokens[i].m_Kind != ECodeTokenKind::mc_LineComment
+					&& Tokens[i].m_Kind != ECodeTokenKind::mc_BlockComment
+					&& Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor
+				;
+				if (!bCode || nNewlines != 1 || m_Tokens.f_IsText(Tokens[i], "}"))
+					break;
+
+				auto iFirst = i;
+				umint iAssign = 0;
+				for (; i < Tokens.f_GetLen() && Tokens[i].m_Kind != ECodeTokenKind::mc_Newline; ++i)
+				{
+					if (!iAssign && m_TokenDepth[i] == m_TokenDepth[iFirst] && i > iFirst && fp_IsAssignment(i) && !fp_IsKeyAssign(i))
+						iAssign = i;
+				}
+
+				iLineEnd = i - 1;
+				auto iHeadEnd = iAssign ? fp_PreviousCode(iAssign) : aint(-1);
+				umint nHead = 0;
+				if (iHeadEnd < 0 || umint(iHeadEnd) < iFirst || !fp_MeasureJoinedWidth(iFirst, umint(iHeadEnd), nHead))
+					break;
+
+				auto &Line = Lines.f_Insert();
+				Line.m_iAssign = iAssign;
+				Line.m_nColumn = fp_GetStatementIndent(iFirst) + nHead;
+				nTarget = fg_Max(nTarget, Line.m_nColumn + 1);
+			}
+
+			for (auto const &Line : Lines)
+			{
+				auto iHeadEnd = umint(fp_PreviousCode(Line.m_iAssign));
+				auto &Owned = m_Owned.f_Insert();
+				Owned.m_iOffset = Tokens[iHeadEnd].m_iOffset;
+				Owned.m_nLength = Tokens[Line.m_iAssign].f_GetEnd() - Owned.m_iOffset;
+
+				CStr Spaces;
+				for (auto nSpace = Line.m_nColumn; nSpace < nTarget; ++nSpace)
+					Spaces += " ";
+
+				auto iGap = Tokens[iHeadEnd].f_GetEnd();
+				fp_AddOwnedEdit(iGap, Tokens[Line.m_iAssign].m_iOffset - iGap, Spaces, "the run its directive aligns has its '=' at one column");
+			}
+		}
+	}
+
+	// The tokens from _iFirst to _iLast written on one line at the spacing the rules give them, which fails for a range
+	// holding a comment, a directive, a token spanning lines or a gap whose spacing is not settled across a line break.
+	bool CFormattingAnalyzer::fp_RenderElement(umint _iFirst, umint _iLast, CStr &o_Text) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		o_Text.f_Clear();
+		aint iPrevious = -1;
+		for (auto i = _iFirst; i <= _iLast; ++i)
+		{
+			auto Kind = Tokens[i].m_Kind;
+			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline)
+				continue;
+
+			if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor || Kind == ECodeTokenKind::mc_LineSplice)
+				return false;
+
+			if (Tokens[i].m_bMultiLine)
+				return false;
+
+			if (iPrevious >= 0)
+			{
+				bool bNewline = false;
+				for (auto iGap = umint(iPrevious) + 1; iGap < i; ++iGap)
+					bNewline |= Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline;
+
+				auto Spacing = fp_GetInlineSpacing(umint(iPrevious), i);
+				if (Spacing == ECodeSpacing::mc_Space)
+					o_Text += " ";
+				else if (Spacing == ECodeSpacing::mc_Preserve)
+				{
+					if (bNewline)
+						return false;
+
+					o_Text += CStr(m_Request.m_Source.f_GetStr() + Tokens[umint(iPrevious)].f_GetEnd(), Tokens[i].m_iOffset - Tokens[umint(iPrevious)].f_GetEnd());
+				}
+			}
+
+			o_Text += m_Tokens.f_GetText(Tokens[i]);
+			iPrevious = aint(i);
+		}
+
+		return iPrevious >= 0;
 	}
 
 	bool CFormattingAnalyzer::fp_IsSelected(umint _iOffset, umint _nLength) const
@@ -2148,6 +2707,22 @@ namespace
 			while (iHeadFirst < iHead && (Tokens[iHeadFirst].m_Kind == ECodeTokenKind::mc_Whitespace || Tokens[iHeadFirst].m_Kind == ECodeTokenKind::mc_ByteOrderMark))
 				++iHeadFirst;
 
+			// A comma the layout moves in front of the line's first token starts the line it is written on, at the
+			// indentation its break gives it.
+			bool bMovedHead = false;
+			while (true)
+			{
+				auto iBefore = fp_PreviousCode(iHeadFirst);
+				if (iBefore < 0 || EGap(m_GapState[iHeadFirst]) != EGap::mc_Inline || !fp_SpansLines(umint(iBefore), iHeadFirst))
+					break;
+
+				iHeadFirst = umint(iBefore);
+				bMovedHead = true;
+			}
+
+			if (bMovedHead && !fp_IsBreakGap(iHeadFirst))
+				continue;
+
 			auto iStatement = m_Structure.f_FindEnclosingNode(iHead);
 			while (iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_Kind != ECodeNodeKind::mc_Statement)
 				iStatement = Nodes[iStatement].m_iParent;
@@ -2155,14 +2730,17 @@ namespace
 			bool bStartsStatement = iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_iFirstToken == iHeadFirst;
 			bStartsStatement |= fp_ContinuesValue(i);
 			umint nColumns = 0;
-			if (!fFormattedColumn(Tokens[iHeadFirst].m_iOffset, nColumns))
+			if (bMovedHead)
+				nColumns = m_GapIndent[iHeadFirst];
+			else if (!fFormattedColumn(Tokens[iHeadFirst].m_iOffset, nColumns))
 				continue;
 
+			auto nHeadColumn = bMovedHead ? aint(nColumns) : aint(nColumns) + fShiftAt(m_Lines.f_FindLine(Tokens[iHead].m_iOffset));
 			fPlaceLine
 				(
 					m_Lines.f_GetLineStart(iLine)
 					, Tokens[i].m_iOffset
-					, umint(fg_Max(aint(nColumns) + fShiftAt(m_Lines.f_FindLine(Tokens[iHead].m_iOffset)), aint(0))) + (bStartsStatement ? nTab : 0)
+					, umint(fg_Max(nHeadColumn, aint(0))) + (bStartsStatement ? nTab : 0)
 					, "string-continuation"
 					, bStartsStatement ? "a string continued on the next line stands one level in" : "a string continued on the next line stands at its element's level"
 				)
@@ -2198,7 +2776,7 @@ namespace
 					(
 						m_Lines.f_GetLineStart(iOperandLine)
 						, Operand.m_iOffset
-						, umint(fg_Max(aint(nColumns) + fShiftAt(m_Lines.f_FindLine(Tokens[iHead].m_iOffset)), aint(0)))
+						, umint(fg_Max(nHeadColumn, aint(0)))
 						, "string-continuation"
 						, "an operator continuing a key's strings stands at the key's level"
 					)
@@ -2574,7 +3152,7 @@ namespace
 			// then named once.
 			// A region the formatter is turned off for keeps its lines as written, long ones too.
 			auto iSource = m_Lines.f_FindLine(fg_MapOffsetToOriginal(_Edits, Lines.f_GetLineStart(iLine)));
-			if (iSource == iReported || !fp_IsLineSelected(iSource) || fp_IsDisabled(m_Lines.f_GetLineStart(iSource), m_Lines.f_GetLine(iSource).m_nLength))
+			if (iSource == iReported || !fp_IsLineSelected(iSource) || fp_IsFormatOff(m_Lines.f_GetLineStart(iSource), m_Lines.f_GetLine(iSource).m_nLength))
 				continue;
 
 			iReported = iSource;
@@ -2645,6 +3223,9 @@ namespace
 		}
 
 		if (!fp_CollectDisabledRegions(Explanation))
+			return fFailed(Explanation);
+
+		if (!bBuildSystem && !fp_CollectListLayouts(Explanation))
 			return fFailed(Explanation);
 
 		if (!fp_ResolveRanges(Explanation))
@@ -2755,6 +3336,8 @@ namespace
 			{
 				fp_RuleBlankLines();
 				fp_RuleLineBreaks();
+				fp_RenderListLayouts();
+				fp_RenderAlignments();
 				fp_RuleTokenSpacing();
 				fp_EmitLayout();
 				// The layout writes the indentation of every line it places, so what this rule
@@ -4073,8 +4656,8 @@ namespace
 		// A comment behind a list's comma describes the element in front of it, so the comma
 		// moves in front of the element behind it instead, as the layout puts it: 'a, // A'
 		// over 'b' is 'a // A' over ', b'.
-		// A braced list written with its commas behind its elements, or holding a directive,
-		// keeps them there.
+		// A braced list holding a directive keeps its commas where they are. A list its layout directive owns has
+		// its commas moved all the same, since its rows are written with them in front.
 		auto fKeepsCommas = [&](CCodeNode const &_List)
 			{
 				if (_List.m_Bracket != ECodeBracket::mc_Brace)
@@ -4083,20 +4666,6 @@ namespace
 				for (auto i = _List.m_iFirstToken; i < _List.m_iLastToken; ++i)
 				{
 					if (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor)
-						return true;
-				}
-
-				for (auto iComma : _List.m_SplitPoints)
-				{
-					auto iNext = fp_NextCode(iComma);
-					if (!m_Tokens.f_IsText(Tokens[iComma], ",") || iNext < 0 || umint(iNext) >= _List.m_iLastToken || !fp_IsLastOnLine(iComma))
-						continue;
-
-					bool bComment = false;
-					for (auto i = iComma + 1; i < umint(iNext) && !bComment; ++i)
-						bComment = Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment;
-
-					if (!bComment)
 						return true;
 				}
 
@@ -4145,7 +4714,7 @@ namespace
 
 				auto nRemove = Tokens[iComma].f_GetEnd() - iRemove;
 				auto iInsert = Tokens[umint(iNext)].m_iOffset;
-				if (fp_IsDisabled(iRemove, nRemove) || !fp_IsSelected(iRemove, nRemove) || fp_IsDisabled(iInsert, 0) || !fp_IsSelected(iInsert, 0))
+				if (fp_IsFormatOff(iRemove, nRemove) || !fp_IsSelected(iRemove, nRemove) || fp_IsFormatOff(iInsert, 0) || !fp_IsSelected(iInsert, 0))
 					continue;
 
 				auto &Remove = m_Structural.f_Insert();
@@ -5200,6 +5769,10 @@ namespace
 				}
 			}
 
+			// A list its directive lays out is written by it, once the layout has placed its braces.
+			if (_iNode < m_iListLayoutOfNode.f_GetLen() && m_iListLayoutOfNode[_iNode])
+				return;
+
 			// Each element on a line of its own stands one level in from a list's opening marker on a line of its own,
 			// with the commas in front of the others, however the first was aligned: '{1, 2}' over ', {3, 4}'. The
 			// closing marker stands under the opening one.
@@ -5209,62 +5782,6 @@ namespace
 				&& !fp_HasOpaqueDirective(Node.m_iFirstToken, Node.m_iLastToken)
 				&& !Node.m_bHasMultiLineToken
 			;
-			// Only a list written with its commas in front of its elements is laid out element by element: one with
-			// its commas behind them is a table written in rows, 'gc_Table[] {' over '-1, 0, 1, 1,'.
-			bool bLeadingCommas = false;
-			for (auto iSplit : Node.m_SplitPoints)
-				bLeadingCommas |= fp_IsFirstOnLine(iSplit) && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[iSplit], ",");
-
-			auto const &ListTokens = m_Tokens.f_GetTokens();
-			// Per line of the list: 0 holds no element, 1 a single literal, 2 several, all of them single literals,
-			// and 3 anything else.
-			TCVector<uint8> LiteralRows;
-			umint iFirstListLine = m_Lines.f_FindLine(ListTokens[Node.m_iFirstToken].m_iOffset);
-			if (bLevelled && bLeadingCommas && Node.m_Bracket == ECodeBracket::mc_Brace)
-			{
-				LiteralRows.f_SetLen(m_Lines.f_FindLine(ListTokens[Node.m_iLastToken].m_iOffset) - iFirstListLine + 1);
-				for (auto &Row : LiteralRows)
-					Row = 0;
-
-				umint iRowElement = Node.m_iFirstToken + 1;
-				for (umint iRow = 0; iRowElement <= Node.m_iLastToken; ++iRow)
-				{
-					auto iRowEnd = iRow < Node.m_SplitPoints.f_GetLen() ? Node.m_SplitPoints[iRow] : Node.m_iLastToken;
-					auto iRowFirst = fp_NextCode(iRowElement - 1);
-					if (iRow && iRowFirst >= 0 && m_Tokens.f_IsText(ListTokens[umint(iRowFirst)], ","))
-						iRowFirst = fp_NextCode(umint(iRowFirst));
-
-					auto iRowLast = fp_PreviousCode(iRowEnd);
-					if (iRowFirst >= 0 && iRowLast >= 0 && umint(iRowFirst) <= umint(iRowLast))
-					{
-						auto Kind = ListTokens[umint(iRowFirst)].m_Kind;
-						bool bLiteral = iRowFirst == iRowLast
-							&& (Kind == ECodeTokenKind::mc_Number || Kind == ECodeTokenKind::mc_CharLiteral || Kind == ECodeTokenKind::mc_StringLiteral)
-						;
-						auto &Row = LiteralRows[m_Lines.f_FindLine(ListTokens[umint(iRowFirst)].m_iOffset) - iFirstListLine];
-						Row = !bLiteral ? 3 : Row == 0 ? 1 : Row == 3 ? 3 : 2;
-					}
-
-					if (iRow >= Node.m_SplitPoints.f_GetLen())
-						break;
-
-					iRowElement = Node.m_SplitPoints[iRow];
-				}
-			}
-
-			// Rows are kept only in a list that is data throughout, so a list is never left half in rows.
-			bool bLiteralTable = false;
-			for (auto Row : LiteralRows)
-			{
-				bLiteralTable |= Row == 2;
-				if (Row == 3)
-				{
-					bLiteralTable = false;
-
-					break;
-				}
-			}
-
 			auto nOpenLevel = bLevelled ? fp_GetStatementIndent(Node.m_iFirstToken) : 0;
 			auto nElementLevel = nOpenLevel + m_Request.m_Settings.m_nTabWidth;
 			if (bLevelled && fp_GetStatementIndent(Node.m_iLastToken) != nOpenLevel)
@@ -5282,9 +5799,36 @@ namespace
 					bElement = m_Tokens.f_GetTokens()[i].m_Kind != ECodeTokenKind::mc_Newline;
 
 				// A braced list written across lines is not brought back onto one, but is laid out as an opened list
-				// otherwise: each element takes a line of its own with its comma in front, and is laid out as an element.
-				bool bOneLine = iStart >= 0 && iLast >= 0 && umint(iStart) <= umint(iLast) && !fp_SpansLines(umint(iStart), umint(iLast));
-				if (bLevelled && bLeadingCommas && bOneLine && Node.m_Bracket == ECodeBracket::mc_Brace && iEnd > iElement)
+				// otherwise: each element written on one line takes a line of its own with its comma in front, a comma
+				// written at the end of the line in front of it included, and is laid out as an element.
+				auto iElementFirst = iStart;
+				if (iSplit && iStart >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iStart)], ","))
+					iElementFirst = fp_NextCode(umint(iStart));
+
+				bool bOneLine = iElementFirst >= 0 && iLast >= 0 && umint(iElementFirst) <= umint(iLast) && !fp_SpansLines(umint(iElementFirst), umint(iLast));
+
+				// So does one only a string continued over lines takes across them, which keeps its continuation.
+				if (bLevelled && !bOneLine && Node.m_Bracket == ECodeBracket::mc_Brace && iEnd > iElement && iElementFirst >= 0 && iLast >= 0 && !fp_IsFirstOnLine(umint(iStart)))
+				{
+					auto const &AllTokens = m_Tokens.f_GetTokens();
+					bool bContinuedString = umint(iElementFirst) <= umint(iLast);
+					for (auto i = umint(iElementFirst) + 1; bContinuedString && i <= umint(iLast); ++i)
+					{
+						auto Kind = AllTokens[i].m_Kind;
+						if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment || Kind == ECodeTokenKind::mc_Preprocessor)
+							bContinuedString = false;
+						else if (Kind == ECodeTokenKind::mc_Newline)
+						{
+							auto iNext = fp_NextCode(i);
+							bContinuedString = iNext >= 0 && umint(iNext) <= umint(iLast) && fp_ContinuesLiteral(umint(iNext)) >= 0;
+						}
+					}
+
+					if (bContinuedString)
+						fp_OwnLineBefore(umint(iStart), nElementLevel);
+				}
+
+				if (bLevelled && bOneLine && Node.m_Bracket == ECodeBracket::mc_Brace && iEnd > iElement)
 				{
 					auto const &AllTokens = m_Tokens.f_GetTokens();
 					bool bTrivia = false;
@@ -5319,14 +5863,6 @@ namespace
 							break;
 
 						if (Child.m_iLastToken <= umint(iLast) && (Child.m_Kind == ECodeNodeKind::mc_Block || Child.m_bHasMultiLineBrace))
-							bJoinable = false;
-					}
-
-					// A list holding nothing but single literals is data written in rows, '0x02, 0x00, 0x00, 0x00', and keeps them.
-					if (bJoinable && bLiteralTable)
-					{
-						auto iRowLine = m_Lines.f_FindLine(AllTokens[umint(iStart)].m_iOffset) - iFirstListLine;
-						if (iRowLine < LiteralRows.f_GetLen() && LiteralRows[iRowLine] == 2)
 							bJoinable = false;
 					}
 
