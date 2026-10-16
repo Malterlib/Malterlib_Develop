@@ -901,8 +901,8 @@ takes a level:
 ```
 
 A line a backslash continues aligns with the value it continues, the first string
-on the line the chain starts on, at the tab stop at or in front of it when tabs
-indent:
+on the line the chain starts on, its tabs filled out with spaces up to that
+column where the string does not start on a tab stop:
 
 ```
 	Contents	`#include <Mib/Core/Core>\n`\

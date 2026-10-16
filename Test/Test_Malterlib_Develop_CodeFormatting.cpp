@@ -422,12 +422,12 @@ namespace
 							, "A\n{\n\tB\n\t{\n\t\tContents\t`a\\n`\\\n\t\t\t\t\t`b @(`c`->F())\\n`\\\n\t\t\t\t\t`d`\n\t}\n}\n"
 						)
 					;
-					// A value off a tab stop is aligned with the stop in front of it.
+					// A value off a tab stop is aligned with it, the tabs filled out with spaces.
 					fg_ExpectBuildSystemFormat
 						(
 							"OffTabStop"
 							, "P\n{\n\tScript =+ `a`\\\n\t\t`b`\n\t{\n\t\tC 1\n\t}\n}\n"
-							, "P\n{\n\tScript =+ `a`\\\n\t\t\t`b`\n\t{\n\t\tC 1\n\t}\n}\n"
+							, "P\n{\n\tScript =+ `a`\\\n\t\t\t  `b`\n\t{\n\t\tC 1\n\t}\n}\n"
 						)
 					;
 				};

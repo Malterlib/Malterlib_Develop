@@ -2843,7 +2843,7 @@ namespace
 	// out. The brackets a line leaves open take one level more than the line, together,
 	// unless the outer one holds lines of its own behind the inner one's, as the objects of
 	// '[{ ... }, { ... }]' do, where each takes a level. A line a backslash continues aligns
-	// with the value it continues, at the tab stop at or in front of it when tabs indent.
+	// with the value it continues, its tabs filled out with spaces up to that column.
 	bool CFormattingAnalyzer::fp_PrepareBuildSystemLines(CStr &o_Explanation)
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
@@ -2953,7 +2953,7 @@ namespace
 					// The line is measured as it will be indented, which starts on a tab stop.
 					umint nColumns = 0;
 					if (fg_MeasureTextColumns(m_Request.m_Source.f_GetStr() + iFirstOffset, Tokens[iToken].m_iOffset - iFirstOffset, nTab, nColumns))
-						nChainColumns = Line.m_Level * nTab + (Settings.m_bIndentWithTabs ? nColumns - nColumns % nTab : nColumns);
+						nChainColumns = Line.m_Level * nTab + nColumns;
 
 					break;
 				}
