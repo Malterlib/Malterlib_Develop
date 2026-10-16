@@ -5813,6 +5813,11 @@ namespace
 			if (bLevelled && fp_GetStatementIndent(Node.m_iLastToken) != nOpenLevel)
 				fp_IndentBefore(Node.m_iLastToken, nOpenLevel);
 
+			// A braced list holding a directive keeps its commas where they are, since none can move across one.
+			bool bMovesCommas = Node.m_Bracket == ECodeBracket::mc_Brace;
+			for (auto i = Node.m_iFirstToken + 1; bMovesCommas && i < Node.m_iLastToken; ++i)
+				bMovesCommas = m_Tokens.f_GetTokens()[i].m_Kind != ECodeTokenKind::mc_Preprocessor;
+
 			umint iElement = Node.m_iFirstToken + 1;
 			umint iChildCursor = 0;
 			for (umint iSplit = 0; iElement <= Node.m_iLastToken; ++iSplit)
@@ -5834,7 +5839,7 @@ namespace
 				bool bOneLine = iElementFirst >= 0 && iLast >= 0 && umint(iElementFirst) <= umint(iLast) && !fp_SpansLines(umint(iElementFirst), umint(iLast));
 
 				// So does one only a string continued over lines takes across them, which keeps its continuation.
-				if (bLevelled && !bOneLine && Node.m_Bracket == ECodeBracket::mc_Brace && iEnd > iElement && iElementFirst >= 0 && iLast >= 0 && !fp_IsFirstOnLine(umint(iStart)))
+				if (bLevelled && !bOneLine && bMovesCommas && iEnd > iElement && iElementFirst >= 0 && iLast >= 0 && !fp_IsFirstOnLine(umint(iStart)))
 				{
 					auto const &AllTokens = m_Tokens.f_GetTokens();
 					bool bContinuedString = umint(iElementFirst) <= umint(iLast);
@@ -5854,7 +5859,7 @@ namespace
 						fp_OwnLineBefore(umint(iStart), nElementLevel);
 				}
 
-				if (bLevelled && bOneLine && Node.m_Bracket == ECodeBracket::mc_Brace && iEnd > iElement)
+				if (bLevelled && bOneLine && bMovesCommas && iEnd > iElement)
 				{
 					auto const &AllTokens = m_Tokens.f_GetTokens();
 					bool bTrivia = false;

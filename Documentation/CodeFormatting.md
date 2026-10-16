@@ -625,7 +625,8 @@ one; an element holding a multiline token stays where it is. A braced list
 written across lines is not brought back onto one line, but is otherwise laid
 out as an opened list: each element written on one line takes a line of its own
 with its comma in front, a comma written behind the element in front of it
-included, and is laid out as an element. So does an element only a continued
+included, and is laid out as an element. A list holding a directive keeps its
+commas where they are, since none can move across one. So does an element only a continued
 string takes across lines, its continuation at the element's level. Data meant to stand in rows,
 such as a table of bytes, says so with a layout directive (see Protected
 regions). A line comment only

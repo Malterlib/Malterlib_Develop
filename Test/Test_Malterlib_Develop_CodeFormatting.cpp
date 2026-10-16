@@ -1210,6 +1210,14 @@ namespace
 							, false
 						)
 					;
+					// A list holding a directive keeps its commas, which none could move across.
+					fg_ExpectFormat
+						(
+							"KeptListDirectiveCommas"
+							, "char const *g_Names[] =\n\t{\n#ifdef DFirst\n\t\t\"a\",\n\t\t\"b\",\n#else\n\t\t\"c\",\n#endif\n\t\t\"d\",\n\t\t\"e\"\n\t}\n;\n"
+							, "char const *g_Names[] =\n\t{\n#ifdef DFirst\n\t\t\"a\",\n\t\t\"b\",\n#else\n\t\t\"c\",\n#endif\n\t\t\"d\",\n\t\t\"e\"\n\t}\n;\n"
+						)
+					;
 					// An element a string continues over lines takes a line of its own, the continuation at its level.
 					fg_ExpectFormat
 						(
