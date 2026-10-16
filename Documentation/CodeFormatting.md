@@ -685,10 +685,11 @@ in from that clause, each clause of a chain counting for one, while the block
 one guards stands at the clause's own level. A label stands one level out from
 the statements written under it, which is where `case`, `default` and an access
 specifier go. A statement whose own lines are fixed keeps the line it starts as
-well, since moving that one alone would leave the rest of them behind: a braced
-initializer written across lines, a block comment inside, a multiline token. So
-does a statement inside a conditional, whose depth the sources decide for
-themselves. A case whose body is one statement, a `break` behind it included,
+well, since moving that one alone would leave the rest of them behind: a block
+comment inside, a multiline token. One ending in a braced initializer written
+across lines moves, and the initializer's lines with it. A statement inside a
+conditional stands at its scope's depth like any other, since directives are
+indented apart from the code. A case whose body is one statement, a `break` behind it included,
 stands on its label's line where the whole fits there, `case 1: a = 1; break;`;
 a block, a clause, more statements, a comment or a blank line between them keep
 the body under the label, a block opened like any other, and so does a label that
@@ -886,9 +887,9 @@ tighter than the boundary around it.
 	;
 ```
 
-Directive lines themselves are never rewritten. The sources spell them both at
-column one and indented by conditional depth, so the standard does not settle
-them and they keep what they have, a block moving around them included.
+Directive lines are written by `directive-indentation` alone: at column one,
+indented behind the `#` by conditional depth, a block moving around them
+included.
 
 ## Build system files
 

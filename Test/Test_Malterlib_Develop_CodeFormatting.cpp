@@ -1815,10 +1815,14 @@ namespace
 					// braced initializer written across lines, and a block comment inside.
 					CStr Initializer = "void f()\n{\n\tCJsonSorted Json =\n\t\t{\n\t\t\t\"Name\"_j= \"John\"\n\t\t\t, \"Age\"_j= 30\n\t\t}\n\t;\n}\n";
 					fg_ExpectFormat("Initializer", Initializer, Initializer);
-					// The depth of a line inside a conditional is the file's own business:
-					// the sources indent one by conditional nesting and by nothing at all.
-					CStr Conditional = "void f()\n{\n#if DDebug\n\t\tg();\n#endif\n\th();\n}\n";
-					fg_ExpectFormat("Conditional", Conditional, Conditional);
+					// Directives are indented apart from the code, so a statement inside a conditional stands at its block's depth.
+					fg_ExpectFormat
+						(
+							"Conditional"
+							, "void f()\n{\n\t#if DDebug\n\t\tg();\n\t#endif\n\th();\n}\n"
+							, "void f()\n{\n#if DDebug\n\tg();\n#endif\n\th();\n}\n"
+						)
+					;
 				};
 
 				DMibTestCategory("Braces")
@@ -3269,7 +3273,7 @@ namespace
 						(
 							"ConditionalAroundScope"
 							, "#if 1\nvoid f()\n{\n\t\tg();\n#if DFoo\n\t\th();\n#endif\n}\n#endif\n"
-							, "#if 1\nvoid f()\n{\n\tg();\n#if DFoo\n\t\th();\n#endif\n}\n#endif\n"
+							, "#if 1\nvoid f()\n{\n\tg();\n#if DFoo\n\th();\n#endif\n}\n#endif\n"
 						)
 					;
 					// A directive starts its line, indented behind its '#' by a tab for each conditional it stands in, apart from
