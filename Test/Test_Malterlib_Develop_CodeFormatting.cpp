@@ -1228,6 +1228,14 @@ namespace
 							, "char const *g_Names[] =\n\t{\n#ifdef DFirst\n\t\t\"a\",\n\t\t\"b\",\n#endif\n#ifdef DSecond\n\t\t\"c\",\n#endif\n\t\t\"d\",\n\t\t\"e\"\n\t}\n;\n"
 						)
 					;
+					// An opening brace written behind the '=' takes a line of its own, and the list's lines move with it.
+					fg_ExpectFormat
+						(
+							"KeptListTrailingOpen"
+							, "namespace N\n{\n\tch8 const *g_pTests[] = {\n\t\t\"abc\",\n\t\t\"abcd\"\n\t};\n}\n"
+							, "namespace N\n{\n\tch8 const *g_pTests[] =\n\t\t{\n\t\t\t\"abc\"\n\t\t\t, \"abcd\"\n\t\t}\n\t;\n}\n"
+						)
+					;
 					// An element a string continues over lines takes a line of its own, the continuation at its level.
 					fg_ExpectFormat
 						(

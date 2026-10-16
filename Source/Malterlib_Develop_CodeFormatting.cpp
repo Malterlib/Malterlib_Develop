@@ -5728,8 +5728,15 @@ namespace
 		if (Node.m_Kind == ECodeNodeKind::mc_Group && (Node.m_Bracket == ECodeBracket::mc_Brace || Node.m_Bracket == ECodeBracket::mc_Paren))
 		{
 			// A statement a braced initializer written across lines ends is a split one: the braces stand one level
-			// in from it, and its terminator on a line of its own: 'CFoo Value =' over '{' over '}' over ';'.
-			bool bOpened = Node.m_bHasMultiLineBrace && fp_IsFirstOnLine(Node.m_iFirstToken) && fp_IsFirstOnLine(Node.m_iLastToken);
+			// in from it, and its terminator on a line of its own: 'CFoo Value =' over '{' over '}' over ';'. An opening
+			// brace written behind the '=' takes that line, and the list's lines move with it.
+			auto iAssign = fp_PreviousCode(Node.m_iFirstToken);
+			bool bTrailingOpen = Node.m_Bracket == ECodeBracket::mc_Brace
+				&& !fp_IsFirstOnLine(Node.m_iFirstToken)
+				&& iAssign >= 0
+				&& m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAssign)], "=")
+			;
+			bool bOpened = Node.m_bHasMultiLineBrace && (bTrailingOpen || fp_IsFirstOnLine(Node.m_iFirstToken)) && fp_IsFirstOnLine(Node.m_iLastToken);
 			if (Node.m_Bracket == ECodeBracket::mc_Brace && Node.m_iParent < Nodes.f_GetLen() && bOpened)
 			{
 				auto const &Statement = Nodes[Node.m_iParent];
@@ -5750,11 +5757,14 @@ namespace
 					// nested in it, and are placed by it.
 					auto nStatementIndent = fp_GetStatementIndent(Statement.m_iFirstToken);
 					auto nBraceIndent = nStatementIndent + m_Request.m_Settings.m_nTabWidth;
-					auto nBraceWritten = fp_GetStatementIndent(Node.m_iFirstToken);
-					if (nBraceWritten != nBraceIndent && fp_CanPlaceBlock(_iNode))
+					auto nBraceWritten = fp_GetStatementIndent(bTrailingOpen ? Node.m_iLastToken : Node.m_iFirstToken);
+					if ((bTrailingOpen || nBraceWritten != nBraceIndent) && fp_CanPlaceBlock(_iNode))
 					{
 						auto nDelta = aint(nBraceIndent) - aint(nBraceWritten);
-						fp_IndentBefore(Node.m_iFirstToken, nBraceIndent);
+						if (bTrailingOpen)
+							fp_OwnLineBefore(Node.m_iFirstToken, nBraceIndent);
+						else
+							fp_IndentBefore(Node.m_iFirstToken, nBraceIndent);
 						auto nContentDepth = m_TokenDepth[Node.m_iFirstToken] + 1;
 						auto const &ListTokens = m_Tokens.f_GetTokens();
 						for (auto i = Node.m_iFirstToken + 1; i <= Node.m_iLastToken; ++i)

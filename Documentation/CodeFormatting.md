@@ -619,7 +619,8 @@ or a braced initializer written across lines keeps its lines; only its inner
 constructs are brought back to one line where they fit. Where its braces stand on
 lines of their own, the statement it ends is a split one: the braces stand one
 level in from the statement and its terminator on a line of its own,
-`CFoo Value =` over `{` over `}` over `;`. Each element starting a line stands
+`CFoo Value =` over `{` over `}` over `;`. An opening brace written behind the `=` takes a line of
+its own there, and the list's lines move with it. Each element starting a line stands
 one level in from the opening brace, the first among them, and the closing brace under the opening
 one; an element holding a multiline token stays where it is. A braced list
 written across lines is not brought back onto one line, but is otherwise laid
