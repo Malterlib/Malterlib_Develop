@@ -3307,7 +3307,7 @@ namespace
 				else if (Edit.m_Rule == "enum-comma")
 					Explanation = "an enumerator's comma stands in front of it, and the last one has none";
 				else if (Edit.m_Rule == "list-comma")
-					Explanation = "a comment describes the element in front of it, which the comma behind it goes past";
+					Explanation = "a comment describes the element in front of it, which the comma behind it goes past, and no comma ends a braced list";
 				else if (Edit.m_Rule == "trailing-comment")
 					Explanation = "a comment trailing a line is a line comment, on a line of its own above it where it makes the line too long";
 
@@ -4676,6 +4676,32 @@ namespace
 		{
 			if (Node.m_Kind != ECodeNodeKind::mc_Group || fKeepsCommas(Node))
 				continue;
+
+			// A comma ending a braced list written across lines separates nothing, and goes.
+			if (Node.m_Bracket == ECodeBracket::mc_Brace && !Node.m_SplitPoints.f_IsEmpty() && fp_SpansLines(Node.m_iFirstToken, Node.m_iLastToken))
+			{
+				auto iComma = Node.m_SplitPoints.f_GetLast();
+				auto iBefore = fp_PreviousCode(iComma);
+				if (m_Tokens.f_IsText(Tokens[iComma], ",") && fp_NextCode(iComma) == aint(Node.m_iLastToken) && iBefore > aint(Node.m_iFirstToken))
+				{
+					auto iRemove = Tokens[iComma].m_iOffset;
+					bool bTight = true;
+					for (auto i = umint(iBefore) + 1; i < iComma && bTight; ++i)
+						bTight = Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace;
+
+					if (bTight)
+						iRemove = Tokens[umint(iBefore)].f_GetEnd();
+
+					auto nRemove = Tokens[iComma].f_GetEnd() - iRemove;
+					if (!fp_IsFormatOff(iRemove, nRemove) && fp_IsSelected(iRemove, nRemove))
+					{
+						auto &Remove = m_Structural.f_Insert();
+						Remove.m_iOffset = iRemove;
+						Remove.m_nLength = nRemove;
+						Remove.m_Rule = "list-comma";
+					}
+				}
+			}
 
 			for (auto iComma : Node.m_SplitPoints)
 			{

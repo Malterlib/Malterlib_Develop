@@ -64,7 +64,8 @@ type, the braces dropped around a single guarded statement, a qualifier moved
 behind the type it leads, `static` moved in front of `constexpr`, an empty
 statement taken out behind another terminator, an enumerator's comma moved in
 front of it across a comment or a conditional's directive, a list's comma
-moved past the comment that describes the element in front of it, and a block
+moved past the comment that describes the element in front of it or taken out
+where it ends a braced list, and a block
 comment ending its line written as a line comment, moved above that line where it makes it too long. A conversion is decided first, on the original
 source, and the layout is made on the converted source, so a plan is verified
 with `fg_HasEquivalentCodeTokens` against the converted source, and a whole-file

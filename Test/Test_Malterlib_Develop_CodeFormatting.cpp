@@ -1215,15 +1215,17 @@ namespace
 						(
 							"KeptListContinuedString"
 							, "int g_A[] =\n\t{\n\t\t-1, \"x\",\n\t\t2, \"Name\", \"Long\"\n\t\t\"Rest\",\n\t\t-904, \"c\",\n\t}\n;\n"
-							, "int g_A[] =\n\t{\n\t\t-1\n\t\t, \"x\"\n\t\t, 2\n\t\t, \"Name\"\n\t\t, \"Long\"\n\t\t\"Rest\"\n\t\t, -904\n\t\t, \"c\",\n\t}\n;\n"
+							, "int g_A[] =\n\t{\n\t\t-1\n\t\t, \"x\"\n\t\t, 2\n\t\t, \"Name\"\n\t\t, \"Long\"\n\t\t\"Rest\"\n\t\t, -904\n\t\t, \"c\"\n\t}\n;\n"
+							, false
 						)
 					;
-					// A comma ending the list stays behind its last element.
+					// A comma ending the list goes.
 					fg_ExpectFormat
 						(
 							"ColumnsTrailingComma"
 							, "CError g_Errors[] =\n\t{\n\t\t// malterlib-format columns: 2\n\t\t-5, \"Five\",\n\t\t-100, \"Hundred\",\n\t}\n;\n"
-							, "CError g_Errors[] =\n\t{\n\t\t// malterlib-format columns: 2\n\t\t    -5, \"Five\"\n\t\t, -100, \"Hundred\",\n\t}\n;\n"
+							, "CError g_Errors[] =\n\t{\n\t\t// malterlib-format columns: 2\n\t\t    -5, \"Five\"\n\t\t, -100, \"Hundred\"\n\t}\n;\n"
+							, false
 						)
 					;
 					{

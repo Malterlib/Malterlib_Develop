@@ -182,7 +182,7 @@ formatter failure, not an edit.
 | `specifier-order` | `static` stands in front of `constexpr`: `constexpr static umint` becomes `static constexpr umint`. |
 | `empty-statement` | A statement terminator that ends nothing is taken out: `f_Call();;` becomes `f_Call();`. Only an empty statement standing directly behind another terminator goes, with nothing but spaces and line breaks between them; a comment between the two keeps both. |
 | `enum-comma` | An enumerator's comma stands in front of it, and the last one has none. A comma that a comment or a conditional's directive separates from the enumerator behind it moves in front of that enumerator, into every branch it is compiled in, and the one behind the last enumerator is taken out; the layout moves the rest. An enum holding another directive, or an enumerator that is the first in some configurations only, keeps its commas. |
-| `list-comma` | A comment behind a comma in a bracketed list describes the element in front of it, so the comma moves in front of the element behind it, as the layout writes it: `a, // A` over `b` becomes `a // A` over `, b`. Only a line comment on the comma's line, with the next element on a later line and nothing but blanks and comments between, moves it; a braced list holding a directive, or written with other commas behind their elements, keeps its commas. |
+| `list-comma` | A comment behind a comma in a bracketed list describes the element in front of it, so the comma moves in front of the element behind it, as the layout writes it: `a, // A` over `b` becomes `a // A` over `, b`. A comma ending a braced list written across lines is taken out. Only a line comment on the comma's line, with the next element on a later line and nothing but blanks and comments between, moves it; a braced list holding a directive, or written with other commas behind their elements, keeps its commas. |
 | `trailing-comment` | A block comment ending its line behind code is written as a line comment: `f_Call(); /* Text */` becomes `f_Call(); // Text`, and one over several lines becomes one line comment per line of its text, its documenting marker kept (`/**<` as `///<`) and the continuation lines aligned under the first. A comment the line would be longer than `max_line_length` with, behind code that fits by itself, moves to a line of its own above that line, at its indentation, as a line comment. A documenting comment such as `///<`, a `malterlib-format` marker, a comment behind a directive, and a block comment whose text ends in a line splice stay as they are. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
@@ -626,8 +626,7 @@ written across lines is not brought back onto one line, but is otherwise laid
 out as an opened list: each element written on one line takes a line of its own
 with its comma in front, a comma written behind the element in front of it
 included, and is laid out as an element. So does an element only a continued
-string takes across lines, its continuation at the element's level. A comma
-ending the list stays behind its last element. Data meant to stand in rows,
+string takes across lines, its continuation at the element's level. Data meant to stand in rows,
 such as a table of bytes, says so with a layout directive (see Protected
 regions). A line comment only
 ends its line: a construct holding one never fits on a line and is split, and
@@ -981,7 +980,7 @@ ch8 g_Table[] =
 Rows after the first start with their comma, and the first is indented as far
 as the comma takes. A column is as wide as its widest cell, numbers aligned to
 the right and anything else to the left. A comment behind an element ends its
-row, and a comma ending the list stays behind its last element. A list holding
+row. A list holding
 a comment elsewhere, or an element its row cannot spell on one line, keeps its
 lines and the directive is reported; so is a row longer than
 `max_line_length`.
