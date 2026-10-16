@@ -490,6 +490,9 @@ namespace NMib::NDevelop
 			if (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_Preprocessor)
 				Text = fg_TrimCommentTrailingSpace(Text);
 
+			if (Kind == ECodeTokenKind::mc_Preprocessor && Text.f_StartsWith("#"))
+				Text = "#" + CStr(Text.f_GetStr() + 1, Text.f_GetLen() - 1).f_TrimLeft();
+
 			auto fInsert = [&](CStr const &_Text)
 				{
 					Texts.f_Insert("{}:{}"_f << umint(Kind) << _Text);
@@ -553,6 +556,17 @@ namespace NMib::NDevelop
 			{
 				while (nLength && (pText[nLength - 1] == ' ' || pText[nLength - 1] == '\t'))
 					--nLength;
+			}
+
+			// The blanks between a directive's '#' and its name are its indentation.
+			if (Kind == ECodeTokenKind::mc_Preprocessor && nLength && pText[0] == '#')
+			{
+				umint nSkip = 1;
+				while (nSkip < nLength && (pText[nSkip] == ' ' || pText[nSkip] == '\t'))
+					++nSkip;
+
+				pText += nSkip;
+				nLength -= nSkip;
 			}
 
 			if
@@ -672,6 +686,7 @@ namespace
 		bool fp_IsLastOnLine(umint _iToken) const;
 
 		void fp_RuleIndentation();
+		void fp_RuleDirectiveIndentation();
 		void fp_RuleTrailingWhitespace();
 		void fp_RuleLineEndings();
 		void fp_RuleFinalNewline();
@@ -2018,9 +2033,9 @@ namespace
 				continue;
 
 			// A line the layout placed takes its indentation from that decision, already
-			// spelled the way this rule would spell it.
+			// spelled the way this rule would spell it, and a directive's is its own rule's.
 			auto iToken = m_Tokens.f_FindToken(iIndent);
-			if (fp_IsBreakGap(iToken))
+			if (fp_IsBreakGap(iToken) || m_Tokens.f_GetTokens()[iToken].m_Kind == ECodeTokenKind::mc_Preprocessor)
 				continue;
 
 			umint nColumns = 0;
@@ -2046,6 +2061,119 @@ namespace
 				continue;
 
 			fp_AddEdit("indentation", iStart, iIndent - iStart, Canonical, Settings.m_bIndentWithTabs ? "indentation must use tabs" : "indentation must use spaces");
+		}
+	}
+
+	// A directive starts its line with its '#', indented behind it by a tab for each conditional it stands in, apart
+	// from the code around it: a conditional's '#elif', '#else' and '#endif' stand where its '#if' does. A conditional
+	// without alternatives around all of a file's code, as '#ifdef __cplusplus' around a header's, adds no depth. A
+	// file whose conditionals do not pair up keeps its directives as they are.
+	void CFormattingAnalyzer::fp_RuleDirectiveIndentation()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Source = m_Request.m_Source;
+		struct CDirective
+		{
+			umint m_iToken;
+			umint m_iGroup;									// The conditional the directive opens, continues or stands in.
+			bool m_bOwn;									// It opens or continues that conditional rather than standing in it.
+		};
+		struct CGroup
+		{
+			umint m_iParent;
+			umint m_iOpen;
+			umint m_iClose = 0;
+			bool m_bAlternatives = false;
+		};
+		constexpr umint c_iNoGroup = TCLimitsInt<umint>::mc_Max;
+		TCVector<CDirective> Directives;
+		TCVector<CGroup> Groups;
+		umint iGroup = c_iNoGroup;
+		aint iFirstCode = -1;
+		aint iLastCode = -1;
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor)
+			{
+				if (fg_IsCodeToken(Tokens[i]))
+				{
+					if (iFirstCode < 0)
+						iFirstCode = aint(i);
+
+					iLastCode = aint(i);
+				}
+
+				continue;
+			}
+
+			auto Keyword = fp_GetDirectiveKeyword(i);
+			bool bOpens = Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef";
+			bool bAlternative = Keyword == "elif" || Keyword == "elifdef" || Keyword == "elifndef" || Keyword == "else";
+			if ((bAlternative || Keyword == "endif") && iGroup == c_iNoGroup)
+				return;
+
+			if (bOpens)
+			{
+				Groups.f_Insert(CGroup{.m_iParent = iGroup, .m_iOpen = i});
+				iGroup = Groups.f_GetLen() - 1;
+			}
+			else if (bAlternative)
+				Groups[iGroup].m_bAlternatives = true;
+
+			if (!Keyword.f_IsEmpty())
+				Directives.f_Insert(CDirective{i, iGroup, bOpens || bAlternative || Keyword == "endif"});
+
+			if (Keyword == "endif")
+			{
+				Groups[iGroup].m_iClose = i;
+				iGroup = Groups[iGroup].m_iParent;
+			}
+		}
+
+		if (iGroup != c_iNoGroup)
+			return;
+
+		auto fIsWrapper = [&](CGroup const &_Group)
+			{
+				return _Group.m_iParent == c_iNoGroup
+					&& !_Group.m_bAlternatives
+					&& iFirstCode >= 0
+					&& _Group.m_iOpen < umint(iFirstCode)
+					&& _Group.m_iClose > umint(iLastCode)
+				;
+			}
+		;
+
+		for (auto const &Directive : Directives)
+		{
+			auto const &Token = Tokens[Directive.m_iToken];
+			auto iLine = m_Lines.f_FindLine(Token.m_iOffset);
+			auto iStart = m_Lines.f_GetLineStart(iLine);
+			bool bFirst = true;
+			for (auto iByte = iStart; iByte < Token.m_iOffset && bFirst; ++iByte)
+				bFirst = fg_IsSpaceOrTab(Source.f_GetStr()[iByte]);
+
+			if (!bFirst || m_bProtectedStart[iLine] || !fp_IsLineSelected(iLine))
+				continue;
+
+			auto pText = Source.f_GetStr() + Token.m_iOffset;
+			umint iName = 1;
+			while (iName < Token.m_nLength && fg_IsSpaceOrTab(pText[iName]))
+				++iName;
+
+			umint nDepth = 0;
+			for (auto iEnclosing = Directive.m_bOwn ? Groups[Directive.m_iGroup].m_iParent : Directive.m_iGroup; iEnclosing != c_iNoGroup; iEnclosing = Groups[iEnclosing].m_iParent)
+				nDepth += !fIsWrapper(Groups[iEnclosing]);
+
+			CStr Canonical = "#";
+			for (umint iTab = 0; iTab < nDepth; ++iTab)
+				Canonical += "\t";
+
+			auto iEnd = Token.m_iOffset + iName;
+			if (Canonical == CStr(Source.f_GetStr() + iStart, iEnd - iStart) || fp_IsFormatOff(iStart, iEnd - iStart))
+				continue;
+
+			fp_AddEdit("directive-indentation", iStart, iEnd - iStart, Canonical, "a directive stands at the start of its line, a tab behind its '#' for each conditional around it");
 		}
 	}
 
@@ -3392,6 +3520,7 @@ namespace
 				// The layout writes the indentation of every line it places, so what this rule
 				// is left to spell is only the lines it did not.
 				fp_RuleIndentation();
+				fp_RuleDirectiveIndentation();
 
 				fp_LimitJoinedLines();
 				fp_AlignContinuations();

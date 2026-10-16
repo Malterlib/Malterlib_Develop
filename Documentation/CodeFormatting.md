@@ -157,6 +157,7 @@ formatter failure, not an edit.
 | Rule | Behavior |
 | --- | --- |
 | `indentation` | Rewrites leading whitespace in the configured style, preserving the width of a line the layout does not place. |
+| `directive-indentation` | A preprocessor directive starts its line with its `#`, indented behind it by a tab for each conditional it stands in, apart from the code around it: `#elif`, `#else` and `#endif` stand where their `#if` does, and `#if 0` over `#\tif 0` over `#\t\tdefine A`. A conditional without `#elif` or `#else` that has no code in front of its `#if` or behind its `#endif`, such as `#ifdef __cplusplus` around a header, adds no depth. A file whose conditionals do not pair up keeps its directives. |
 | `trailing-whitespace` | Removes spaces and tabs before a line terminator. |
 | `final-newline` | Appends a terminator to an unterminated last line. Whole-file requests only. |
 | `line-ending` | Converts terminators to `end_of_line`. Whole-file requests only. |

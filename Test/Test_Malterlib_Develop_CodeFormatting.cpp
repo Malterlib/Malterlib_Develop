@@ -3272,6 +3272,39 @@ namespace
 							, "#if 1\nvoid f()\n{\n\tg();\n#if DFoo\n\t\th();\n#endif\n}\n#endif\n"
 						)
 					;
+					// A directive starts its line, indented behind its '#' by a tab for each conditional it stands in, apart from
+					// the code around it.
+					fg_ExpectFormat
+						(
+							"DirectiveIndentation"
+							, "#if 0\n#if 0\n  #  if 0\n#elif 1\n#else\n#endif\n#elif 1\n#define DValue 1\n#else\n#endif\n#elif 1\n#else\n#endif\n"
+							"namespace N\n{\n\t#ifdef DFoo\n\tint g_A;\n\t#endif\n}\n"
+							, "#if 0\n#\tif 0\n#\t\tif 0\n#\t\telif 1\n#\t\telse\n#\t\tendif\n#\telif 1\n#\t\tdefine DValue 1\n#\telse\n#\tendif\n#elif 1\n#else\n#endif\n"
+							"namespace N\n{\n#ifdef DFoo\n\tint g_A;\n#endif\n}\n"
+						)
+					;
+					// A conditional without alternatives around all of a file's code adds no depth; one with them does.
+					fg_ExpectFormat
+						(
+							"DirectiveIndentationWrapper"
+							, "#pragma once\n#ifdef __cplusplus\n#\tinclude <A>\n#ifdef DFoo\n#define DBar 1\n#endif\nint g_A;\n#endif\n#include <B>\n"
+							, "#pragma once\n#ifdef __cplusplus\n#include <A>\n#ifdef DFoo\n#\tdefine DBar 1\n#endif\nint g_A;\n#endif\n#include <B>\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"DirectiveIndentationWrapperAlternatives"
+							, "#ifdef __cplusplus\n#include <A>\nint g_A;\n#else\n#include <B>\nint g_B;\n#endif\n"
+							, "#ifdef __cplusplus\n#\tinclude <A>\nint g_A;\n#else\n#\tinclude <B>\nint g_B;\n#endif\n"
+						)
+					;
+					fg_ExpectFormat
+						(
+							"DirectiveIndentationBeforeCode"
+							, "#if DBits < 64\n#define DWide\n#endif\nint g_A;\n"
+							, "#if DBits < 64\n#\tdefine DWide\n#endif\nint g_A;\n"
+						)
+					;
 					// The call holding more is the one that breaks. Behind an access it opens, and the
 					// chain in front of it stays on the line; in front of the access its closing marker
 					// would have the access behind it, so the line gives at the access instead.
