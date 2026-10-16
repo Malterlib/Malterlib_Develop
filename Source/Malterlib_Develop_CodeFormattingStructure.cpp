@@ -1381,7 +1381,11 @@ namespace
 					bool bDecltype = bParen
 						&& (_Tokens.f_IsText(Tokens[umint(iBeforeChild)], "decltype") || _Tokens.f_HasRole(Tokens[umint(iBeforeChild)], ECodeNameRole::mc_Macro))
 					;
-					bool bTypePart = Child.m_Bracket == ECodeBracket::mc_Angle || Child.m_Bracket == ECodeBracket::mc_Square || bRequires || bDecltype;
+					// An attribute qualifies the type in front of it: 'umint __attribute__((address_space(256))) *pAddress'.
+					bool bAttribute = bParen
+						&& (_Tokens.f_IsText(Tokens[umint(iBeforeChild)], "__attribute__") || _Tokens.f_IsText(Tokens[umint(iBeforeChild)], "__declspec"))
+					;
+					bool bTypePart = Child.m_Bracket == ECodeBracket::mc_Angle || Child.m_Bracket == ECodeBracket::mc_Square || bRequires || bDecltype || bAttribute;
 					if (Child.m_Kind != ECodeNodeKind::mc_Group || !bTypePart)
 						return false;
 
@@ -1432,9 +1436,12 @@ namespace
 		if (_Token.m_Kind != ECodeTokenKind::mc_Identifier)
 			return false;
 
+		// The standard library's aliases of fundamental types are spelled by the language as well.
 		constexpr ch8 const *c_pFundamental[] =
 			{
 				"bool", "char", "short", "int", "long", "unsigned", "signed", "float", "double", "void", "wchar_t", "char8_t", "char16_t", "char32_t"
+				, "size_t", "ssize_t", "ptrdiff_t", "intptr_t", "uintptr_t", "intmax_t", "uintmax_t", "nullptr_t", "max_align_t"
+				, "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t"
 			}
 		;
 
@@ -2688,10 +2695,16 @@ namespace NMib::NDevelop
 			auto iNode = fg_FindGroupClosingAt(_Structure, umint(iPrevious), ECodeBracket::mc_None);
 			if (iNode >= 0)
 			{
-				// So does a macro the naming lists, whose expansion is a type where a declarator follows it.
+				// So does a macro the naming lists, whose expansion is a type where a declarator follows it, and
+				// an attribute of the type: 'umint __attribute__((address_space(256))) *pAddress'.
 				auto iKeyword = fg_PreviousCode(_Tokens, _Structure.f_GetNodes()[umint(iNode)].m_iFirstToken);
 				bBehindTemplate = iKeyword >= 0
-					&& (_Tokens.f_IsText(Tokens[umint(iKeyword)], "decltype") || _Tokens.f_HasRole(Tokens[umint(iKeyword)], ECodeNameRole::mc_Macro))
+					&& (
+						_Tokens.f_IsText(Tokens[umint(iKeyword)], "decltype")
+						|| _Tokens.f_IsText(Tokens[umint(iKeyword)], "__attribute__")
+						|| _Tokens.f_IsText(Tokens[umint(iKeyword)], "__declspec")
+						|| _Tokens.f_HasRole(Tokens[umint(iKeyword)], ECodeNameRole::mc_Macro)
+					)
 				;
 			}
 		}

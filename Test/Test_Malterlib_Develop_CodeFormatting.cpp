@@ -1778,6 +1778,23 @@ namespace
 							)
 						;
 					}
+					// A value that fits on a line of its own behind its '=' takes that line whole, unless a comment or a
+					// directive cuts it, where it gives at each operand as its other stretches do.
+					{
+						CStr Head = "\t\t\t\tpWatch->m_ChildFiles[File.m_Path.f_Extract(_Path.f_GetLen() + 1)]";
+						CStr Value = "(File.m_Attribs & (NFile::EFileAttrib_Directory | NFile::EFileAttrib_Link)) == NFile::EFileAttrib_Directory";
+						fg_ExpectFormat
+							(
+								"ValueLineBehindAssign"
+								, "void f()\n{\n\t{\n\t\t{\n\t\t\t{\n" + Head + " = " + Value + ";\n\t\t\t}\n\t\t}\n\t}\n}\n"
+								, "void f()\n{\n\t{\n\t\t{\n\t\t\t{\n" + Head + "\n\t\t\t\t\t= " + Value + "\n\t\t\t\t;\n\t\t\t}\n\t\t}\n\t}\n}\n"
+							)
+						;
+						CStr Cut = "void f()\n{\n\tName\n\t\t= \"{}_{}\"_f\n\t\t<< m_FriendlyName // Never mixed between hosts\n\t\t<< f_GetRealHostID()\n\t;\n"
+							"\tSize\n\t\t= sizeof(void *) * 2\n\t\t+ sizeof(uint32)\n#if DDebug\n\t\t+ sizeof(void *)\n#endif\n\t;\n}\n"
+						;
+						fg_ExpectFormat("ValueLineCut", Cut, Cut);
+					}
 					// A lambda is a template argument like any other value, its body skipped with the
 					// groups inside the list: 'f_Test<[](umint _Len) { ... }>(...)' is no comparison.
 					fg_ExpectFormat
@@ -3933,6 +3950,29 @@ namespace
 							, false
 						)
 					;
+					// An MSVC '__asm' block holds assembly, which keeps its spelling, and the standard library's
+					// aliases of fundamental types spell casts: '(size_t)-1'.
+					{
+						CStr Source = "void f()\n{\n\t__asm\n\t{\n\t\tmov eax, dword ptr fs:[0h]\n\t\tmov  [pRet],eax\n\t}\n}\n";
+						fExpect("MsvcAsmBlock", Source, Source, false);
+						// An attribute qualifies the type in front of it, so the declarator behind it hugs the name.
+						fExpect
+							(
+								"AttributeTypeDeclarator"
+								, "void f()\n{\n\tumint __attribute__((address_space(256))) * pAddress = (umint __attribute__((address_space(256))) *)0x8;\n}\n"
+								, "void f()\n{\n\tumint __attribute__((address_space(256))) *pAddress = (umint __attribute__((address_space(256))) *)0x8;\n}\n"
+								, false
+							)
+						;
+						fExpect
+							(
+								"StandardAliasCast"
+								, "void f()\n{\n\tp = (CFoo *)(void *)(size_t)-1;\n\tq = (uintptr_t) pMemory - (uintptr_t) pHead;\n}\n"
+								, "void f()\n{\n\tp = (CFoo *)(void *)(size_t)-1;\n\tq = (uintptr_t)pMemory - (uintptr_t)pHead;\n}\n"
+								, false
+							)
+						;
+					}
 					// A calling convention only stands in a declarator, so a pointer to function's declarator
 					// holding one stands apart from the return type in front of it, whatever that names.
 					fExpect

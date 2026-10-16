@@ -906,6 +906,37 @@ namespace
 			return false;
 		}
 
+		// The braces of an MSVC '__asm' block hold assembly, which keeps its spelling: 'mov dword ptr fs:[0h], eax'.
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		{
+			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Identifier || (!m_Tokens.f_IsText(Tokens[i], "__asm") && !m_Tokens.f_IsText(Tokens[i], "_asm")))
+				continue;
+
+			auto iOpen = i + 1;
+			while (iOpen < Tokens.f_GetLen() && (Tokens[iOpen].m_Kind == ECodeTokenKind::mc_Whitespace || Tokens[iOpen].m_Kind == ECodeTokenKind::mc_Newline))
+				++iOpen;
+
+			if (iOpen >= Tokens.f_GetLen() || !m_Tokens.f_IsText(Tokens[iOpen], "{"))
+				continue;
+
+			umint nDepth = 0;
+			for (auto iClose = iOpen; iClose < Tokens.f_GetLen(); ++iClose)
+			{
+				if (m_Tokens.f_IsText(Tokens[iClose], "{"))
+					++nDepth;
+				else if (m_Tokens.f_IsText(Tokens[iClose], "}") && !--nDepth)
+				{
+					auto &Range = m_Disabled.f_Insert();
+					Range.m_iOffset = Tokens[iOpen].f_GetEnd();
+					Range.m_nLength = Tokens[iClose].m_iOffset - Range.m_iOffset;
+					i = iClose;
+
+					break;
+				}
+			}
+		}
+
 		return true;
 	}
 
@@ -9025,6 +9056,63 @@ namespace
 		umint nJoined = 0;
 		if (!_bMustSplit && !fp_MeasureJoinedWidth(_iFirst, _iLast, nJoined))
 			return false;
+
+		// A value that fits on a line of its own behind its '=' takes that line whole, rather than
+		// the statement giving at the value's operators: 'pWatch->m_Files[Name]' over '= (Attribs & Mask) == Directory'.
+		for (auto i = Operators[0]; i > _iFirst && _bIndentContinuations; --i)
+		{
+			if (m_TokenDepth[i] != m_TokenDepth[_iFirst] || !fp_IsAssignment(i))
+				continue;
+
+			// One that takes a lambda keeps the '=' on the head: 'auto Cleanup = g_OnScopeExit / [&]'. One a
+			// comment or a directive cuts goes on behind it with an operand on each line, as its stretches do.
+			bool bKeepsSplit = false;
+			for (auto iValue = i + 1; iValue <= _iLast && !bKeepsSplit; ++iValue)
+				bKeepsSplit = fp_IsLambdaIntroducer(iValue);
+
+			bool bCut = false;
+			for (auto iBehind = _iLast + 1; iBehind < Tokens.f_GetLen() && !bKeepsSplit; ++iBehind)
+			{
+				auto Kind = Tokens[iBehind].m_Kind;
+				if (Kind == ECodeTokenKind::mc_Preprocessor || Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment)
+					bCut = true;
+				else if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline)
+				{
+					constexpr ch8 const *c_pEnds[] =
+						{
+							";", ",", ")", "]", "}"
+						}
+					;
+					bool bEnds = false;
+					for (auto pEnd : c_pEnds)
+						bEnds |= m_Tokens.f_IsText(Tokens[iBehind], pEnd);
+
+					bKeepsSplit = bCut && !bEnds;
+
+					break;
+				}
+			}
+
+			auto iHeadEnd = fp_PreviousCode(i);
+			bool bValueLine = !bKeepsSplit
+				&& !fp_IsKeyAssign(i)
+				&& iHeadEnd >= 0
+				&& umint(iHeadEnd) >= _iFirst
+				&& fp_GetCanonicalSpacing(umint(iHeadEnd), i) == ECodeSpacing::mc_Space
+				&& fp_FitsInline(_iFirst, umint(iHeadEnd), _iIndent)
+				&& fp_FitsInline(i, _iLast, _iIndent + nTab)
+			;
+			if (bValueLine)
+			{
+				fp_MarkInline(_iFirst, umint(iHeadEnd));
+				fp_BreakBefore(i, _iIndent + nTab);
+				fp_MarkInline(i, _iLast);
+
+				return true;
+			}
+
+			break;
+		}
 
 		// A single stream operator writing a named call into a plain target stays on the line with
 		// the call where the line fits up to its parenthesis, and the call opens instead:

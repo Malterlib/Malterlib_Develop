@@ -691,6 +691,11 @@ every operand stands under the one in front of it:
 	;
 ```
 
+A value that fits on a line of its own behind its `=` takes that line whole
+instead, and is broken at its operators only where it does not: a value that
+takes a lambda keeps the `=` on the head, and one a comment or a directive cuts
+gives at each operand, as its other stretches do.
+
 That holds where the first operand is a plain line. One that has to be opened,
 `auto Value = fg_Function` with its parenthesis below, or that takes a lambda's
 body, `auto Cleanup = g_OnScopeExit / [&]`, keeps the `=` on the head, and so
