@@ -1243,7 +1243,14 @@ namespace
 							, "void fg_Test()\n{\n\tfg_Call\n\t\t(\n\t\t\t[]\n\t\t\t{\n\t\t\t\tfg_Work();\n\t\t\t}\n\t\t)\n\t;\n}\n"
 						)
 					;
-					// An opening brace written behind the '=' takes a line of its own, and the list's lines move with it.
+					// An opening brace written at the end of a line takes a line of its own, and the list's lines move with it.
+					fg_ExpectFormat
+						(
+							"KeptListTrailingOpenOperator"
+							, "void fg_Test()\n{\n\tg_Testing / {\n\t\t\"abc\",\n\t\t\"abcd\"\n\t};\n}\n"
+							, "void fg_Test()\n{\n\tg_Testing /\n\t\t{\n\t\t\t\"abc\"\n\t\t\t, \"abcd\"\n\t\t}\n\t;\n}\n"
+						)
+					;
 					fg_ExpectFormat
 						(
 							"KeptListTrailingOpen"

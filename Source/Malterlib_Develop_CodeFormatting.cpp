@@ -5784,13 +5784,8 @@ namespace
 		{
 			// A statement a braced initializer written across lines ends is a split one: the braces stand one level
 			// in from it, and its terminator on a line of its own: 'CFoo Value =' over '{' over '}' over ';'. An opening
-			// brace written behind the '=' takes that line, and the list's lines move with it.
-			auto iAssign = fp_PreviousCode(Node.m_iFirstToken);
-			bool bTrailingOpen = Node.m_Bracket == ECodeBracket::mc_Brace
-				&& !fp_IsFirstOnLine(Node.m_iFirstToken)
-				&& iAssign >= 0
-				&& m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iAssign)], "=")
-			;
+			// brace written at the end of a line takes a line of its own, and the list's lines move with it.
+			bool bTrailingOpen = Node.m_Bracket == ECodeBracket::mc_Brace && !fp_IsFirstOnLine(Node.m_iFirstToken);
 
 			bool bOpened = Node.m_bHasMultiLineBrace && (bTrailingOpen || fp_IsFirstOnLine(Node.m_iFirstToken)) && fp_IsFirstOnLine(Node.m_iLastToken);
 			if (Node.m_Bracket == ECodeBracket::mc_Brace && Node.m_iParent < Nodes.f_GetLen() && bOpened)
