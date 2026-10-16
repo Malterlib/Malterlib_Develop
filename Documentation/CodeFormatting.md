@@ -616,8 +616,10 @@ decision depends on an edit already made, or on where the source happened to
 break its lines. A construct that contains a block comment, a multiline token,
 or a braced initializer written across lines keeps its lines; only its inner
 constructs are brought back to one line where they fit. Where its braces stand on
-lines of their own, each element starting a line stands one level in from the
-opening brace, the first among them, and the closing brace under the opening
+lines of their own, the statement it ends is a split one: the braces stand one
+level in from the statement and its terminator on a line of its own,
+`CFoo Value =` over `{` over `}` over `;`. Each element starting a line stands
+one level in from the opening brace, the first among them, and the closing brace under the opening
 one; an element holding a multiline token stays where it is. A braced list
 written with its commas in front of its elements is not brought back onto one
 line, but is otherwise laid out as an opened list: each element written on one

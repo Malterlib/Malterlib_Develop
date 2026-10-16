@@ -5124,11 +5124,88 @@ namespace
 		TCVector<umint> LaidOut;
 		if (Node.m_Kind == ECodeNodeKind::mc_Group && (Node.m_Bracket == ECodeBracket::mc_Brace || Node.m_Bracket == ECodeBracket::mc_Paren))
 		{
+			// A statement a braced initializer written across lines ends is a split one: the braces stand one level
+			// in from it, and its terminator on a line of its own: 'CFoo Value =' over '{' over '}' over ';'.
+			bool bOpened = Node.m_bHasMultiLineBrace && fp_IsFirstOnLine(Node.m_iFirstToken) && fp_IsFirstOnLine(Node.m_iLastToken);
+			if (Node.m_Bracket == ECodeBracket::mc_Brace && Node.m_iParent < Nodes.f_GetLen() && bOpened)
+			{
+				auto const &Statement = Nodes[Node.m_iParent];
+				auto iTerminator = fp_NextCode(Node.m_iLastToken);
+				auto iBefore = fp_PreviousCode(Node.m_iFirstToken);
+				bool bEnds = Statement.m_Kind == ECodeNodeKind::mc_Statement
+					&& iTerminator >= 0
+					&& umint(iTerminator) == Statement.m_iLastToken
+					&& m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTerminator)], ";")
+					&& iBefore >= 0
+					&& umint(iBefore) >= Statement.m_iFirstToken
+					&& fp_IsFirstOnLine(Statement.m_iFirstToken)
+					&& !fp_HasOpaqueDirective(Statement.m_iFirstToken, Statement.m_iLastToken)
+				;
+				if (bEnds)
+				{
+					// The lines starting at the list's own depth move with its braces; deeper ones belong to what is
+					// nested in it, and are placed by it.
+					auto nStatementIndent = fp_GetStatementIndent(Statement.m_iFirstToken);
+					auto nBraceIndent = nStatementIndent + m_Request.m_Settings.m_nTabWidth;
+					auto nBraceWritten = fp_GetStatementIndent(Node.m_iFirstToken);
+					if (nBraceWritten != nBraceIndent && fp_CanPlaceBlock(_iNode))
+					{
+						auto nDelta = aint(nBraceIndent) - aint(nBraceWritten);
+						fp_IndentBefore(Node.m_iFirstToken, nBraceIndent);
+						auto nContentDepth = m_TokenDepth[Node.m_iFirstToken] + 1;
+						auto const &ListTokens = m_Tokens.f_GetTokens();
+						for (auto i = Node.m_iFirstToken + 1; i <= Node.m_iLastToken; ++i)
+						{
+							auto Kind = ListTokens[i].m_Kind;
+							bool bCode = Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline && Kind != ECodeTokenKind::mc_LineComment
+								&& Kind != ECodeTokenKind::mc_BlockComment && Kind != ECodeTokenKind::mc_Preprocessor
+							;
+							auto const &Token = ListTokens[i];
+							bool bCloser = i != Node.m_iLastToken && (m_Tokens.f_IsText(Token, "}") || m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]"));
+							bool bLine = bCode && !bCloser && fp_IsFirstOnLine(i) && (m_TokenDepth[i] == nContentDepth || i == Node.m_iLastToken);
+							auto nIndent = aint(fp_GetSourceLineIndent(i)) + nDelta;
+							if (bLine && nIndent >= 0)
+								fp_IndentBefore(i, umint(nIndent));
+
+							// A nested list never opened takes its stray closing brace back behind its last element here, as
+							// the pass that does so elsewhere would leave a line this move has decided.
+							auto iNested = bLine && m_Tokens.f_IsText(ListTokens[i], "{") ? m_Structure.f_FindNodeOpeningAt(i) : Nodes.f_GetLen();
+							if (iNested < Nodes.f_GetLen() && Nodes[iNested].m_Kind == ECodeNodeKind::mc_Group && fp_IsFirstOnLine(Nodes[iNested].m_iLastToken))
+							{
+								auto const &Nested = Nodes[iNested];
+								auto iNestedLast = fp_PreviousCode(Nested.m_iLastToken);
+								bool bNeverOpened = iNestedLast >= 0 && umint(iNestedLast) > Nested.m_iFirstToken && !ListTokens[umint(iNestedLast)].m_bMultiLine;
+								for (auto iInner = Nested.m_iFirstToken + 1; bNeverOpened && iInner < Nested.m_iLastToken; ++iInner)
+								{
+									auto InnerKind = ListTokens[iInner].m_Kind;
+									if (iInner > umint(iNestedLast))
+										bNeverOpened = InnerKind == ECodeTokenKind::mc_Whitespace || InnerKind == ECodeTokenKind::mc_Newline;
+									else
+										bNeverOpened = InnerKind != ECodeTokenKind::mc_Newline && InnerKind != ECodeTokenKind::mc_LineComment && InnerKind != ECodeTokenKind::mc_Preprocessor;
+								}
+
+								if (bNeverOpened)
+									fp_MarkInline(umint(iNestedLast), Nested.m_iLastToken);
+							}
+						}
+					}
+
+					if (fp_IsFirstOnLine(umint(iTerminator)))
+					{
+						if (fp_GetStatementIndent(umint(iTerminator)) != nStatementIndent)
+							fp_IndentBefore(umint(iTerminator), nStatementIndent);
+					}
+					else
+						fp_OwnLineBefore(umint(iTerminator), nStatementIndent);
+				}
+			}
+
 			// Each element on a line of its own stands one level in from a list's opening marker on a line of its own,
 			// with the commas in front of the others, however the first was aligned: '{1, 2}' over ', {3, 4}'. The
 			// closing marker stands under the opening one.
 			bool bLevelled = fp_IsFirstOnLine(Node.m_iFirstToken)
 				&& fp_IsFirstOnLine(Node.m_iLastToken)
+				&& (Node.m_Bracket != ECodeBracket::mc_Brace || Node.m_bHasMultiLineBrace)
 				&& !fp_HasOpaqueDirective(Node.m_iFirstToken, Node.m_iLastToken)
 				&& !Node.m_bHasMultiLineToken
 			;

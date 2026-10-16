@@ -1086,7 +1086,7 @@ namespace
 							, "struct CA\n{\n};\nstruct CB : CA\n{\n\tenum EKind\n\t{\n\t\tEKind_A\n\t};\n\tEKind m_Kind;\n};\n"
 							"template <typename t_C>\nclass TCC\n{\n};\nusing CD = TCC<int>;\nvoid f()\n{\n\tstruct timespec Time =\n\t{\n\t};\n\tg(Time);\n}\n"
 							, "struct CA\n{\n};\n\nstruct CB : CA\n{\n\tenum EKind\n\t{\n\t\tEKind_A\n\t};\n\n\tEKind m_Kind;\n};\n\n"
-							"template <typename t_C>\nclass TCC\n{\n};\n\nusing CD = TCC<int>;\nvoid f()\n{\n\tstruct timespec Time =\n\t{\n\t};\n\tg(Time);\n}\n"
+							"template <typename t_C>\nclass TCC\n{\n};\n\nusing CD = TCC<int>;\nvoid f()\n{\n\tstruct timespec Time =\n\t\t{\n\t\t}\n\t;\n\tg(Time);\n}\n"
 						)
 					;
 					// A function's body is set off from what follows it, a comment behind its
@@ -1175,7 +1175,7 @@ namespace
 							"KeptListElementLevel"
 							, "static CMap const gc_Map[] =\n{\n\t\t{0x0000, SCHED_OTHER}\n\t, {0x4000, SCHED_RR}\n};\n\nvoid f()\n{\n\tCFoo Values =\n\t\t{\n\t\t\t Get()\n"
 							"\t\t\t, a\n\t}\n\t;\n}\n"
-							, "static CMap const gc_Map[] =\n{\n\t{0x0000, SCHED_OTHER}\n\t, {0x4000, SCHED_RR}\n};\n\nvoid f()\n{\n\tCFoo Values =\n\t\t{\n\t\t\tGet()\n"
+							, "static CMap const gc_Map[] =\n\t{\n\t\t{0x0000, SCHED_OTHER}\n\t\t, {0x4000, SCHED_RR}\n\t}\n;\n\nvoid f()\n{\n\tCFoo Values =\n\t\t{\n\t\t\tGet()\n"
 							"\t\t\t, a\n\t\t}\n\t;\n}\n"
 						)
 					;
@@ -2807,7 +2807,7 @@ namespace
 						(
 							"StrayClosingBrace"
 							, "void f()\n{\n\tstruct timespec Times[2] =\n\t{\n\t\t{1000000000, 0\n\t\t}, {1000000000, 0}\n\t};\n}\n"
-							, "void f()\n{\n\tstruct timespec Times[2] =\n\t{\n\t\t{1000000000, 0}, {1000000000, 0}\n\t};\n}\n"
+							, "void f()\n{\n\tstruct timespec Times[2] =\n\t\t{\n\t\t\t{1000000000, 0}, {1000000000, 0}\n\t\t}\n\t;\n}\n"
 						)
 					;
 					// A pack expansion stays behind the closing marker of an opened scope, and an empty
