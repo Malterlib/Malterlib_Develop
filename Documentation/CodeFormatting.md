@@ -157,7 +157,7 @@ formatter failure, not an edit.
 | Rule | Behavior |
 | --- | --- |
 | `indentation` | Rewrites leading whitespace in the configured style, preserving the width of a line the layout does not place. |
-| `directive-indentation` | A preprocessor directive starts its line with its `#`, indented behind it by a tab for each conditional it stands in, apart from the code around it: `#elif`, `#else` and `#endif` stand where their `#if` does, and `#if 0` over `#\tif 0` over `#\t\tdefine A`. A conditional without `#elif` or `#else` that has no code in front of its `#if` or behind its `#endif`, such as `#ifdef __cplusplus` around a header, adds no depth. A file whose conditionals do not pair up keeps its directives. |
+| `directive-indentation` | A preprocessor directive starts its line with its `#`, indented behind it by a tab for each conditional it stands in, apart from the code around it: `#elif`, `#else` and `#endif` stand where their `#if` does, and `#if 0` over `#\tif 0` over `#\t\tdefine A`. A conditional without `#elif` or `#else` that has no code in front of its `#if` or behind its `#endif`, such as `#ifdef __cplusplus` around a header, adds no depth. A directive's continuation lines move together, the least indented one level in from the directive and the others as far in from that as the source has them, and splices the source aligns at one column are aligned again behind the longest line. A file whose conditionals do not pair up keeps its directives. |
 | `trailing-whitespace` | Removes spaces and tabs before a line terminator. |
 | `final-newline` | Appends a terminator to an unterminated last line. Whole-file requests only. |
 | `line-ending` | Converts terminators to `end_of_line`. Whole-file requests only. |
@@ -948,8 +948,9 @@ that never closes, and a literal the file ends inside make the file unsupported.
 ## Protected regions
 
 Layout inside multiline tokens is never touched: block comments, string and
-character literals including raw strings, preprocessor directives with their
-continuations, and the line a backslash splice ends on. A leading UTF-8
+character literals including raw strings, and the line a backslash splice ends
+on. A directive continued over lines is the exception: `directive-indentation`
+moves its continuation lines and the splices behind them. A leading UTF-8
 signature is its own token and is preserved.
 
 clang-tidy's `NOLINT` suppresses the diagnostics of the line it stands on, and

@@ -649,7 +649,8 @@ namespace
 					// Layout inside a multiline literal or comment is protected.
 					fg_ExpectFormat("RawStringBody", "auto x = R\"(\n    keep\n)\";\n", "auto x = R\"(\n    keep\n)\";\n");
 					fg_ExpectFormat("BlockCommentBody", "/* text\n    keep\n */\n", "/* text\n    keep\n */\n");
-					fg_ExpectFormat("MacroBody", "#define A \\\n    B\n", "#define A \\\n    B\n");
+					// A macro's body is not: its lines stand one level in from the directive.
+					fg_ExpectFormat("MacroBody", "#define A \\\n    B\n", "#define A \\\n\tB\n");
 				};
 
 				DMibTestCategory("TrailingWhitespace")
@@ -3285,6 +3286,24 @@ namespace
 							"namespace N\n{\n\t#ifdef DFoo\n\tint g_A;\n\t#endif\n}\n"
 							, "#if 0\n#\tif 0\n#\t\tif 0\n#\t\telif 1\n#\t\telse\n#\t\tendif\n#\telif 1\n#\t\tdefine DValue 1\n#\telse\n#\tendif\n#elif 1\n#else\n#endif\n"
 							"namespace N\n{\n#ifdef DFoo\n\tint g_A;\n#endif\n}\n"
+						)
+					;
+					// A directive's continuation lines move together, the least indented one level in from the directive.
+					fg_ExpectFormat
+						(
+							"DirectiveContinuation"
+							, "void f()\n{\n#define DApply(d_Name) \\\n\t\t\t\tif (d_Name) \\\n\t\t\t\t\td_Name = 1;\n\tDApply(a);\n}\n"
+							"#ifdef DFoo\n#define DTwo(a, b) \\\n\ta + \\\n\t\tb\n#endif\nint g_A;\n"
+							, "void f()\n{\n#define DApply(d_Name) \\\n\tif (d_Name) \\\n\t\td_Name = 1;\n\tDApply(a);\n}\n"
+							"#ifdef DFoo\n#\tdefine DTwo(a, b) \\\n\t\ta + \\\n\t\t\tb\n#endif\nint g_A;\n"
+						)
+					;
+					// Splices aligned at one column stay aligned, at the next tab stop behind the longest line.
+					fg_ExpectFormat
+						(
+							"DirectiveContinuationAlignedSplices"
+							, "#define DPair(a)\t\t\t\\\n\t\t\tfg_First(a);\t\\\n\t\t\tfg_Second(a)\n"
+							, "#define DPair(a)\t\\\n\tfg_First(a);\t\\\n\tfg_Second(a)\n"
 						)
 					;
 					// A conditional without alternatives around all of a file's code adds no depth; one with them does.

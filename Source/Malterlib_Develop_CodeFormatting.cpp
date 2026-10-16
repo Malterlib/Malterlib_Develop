@@ -474,6 +474,8 @@ namespace NMib::NDevelop
 	// Normalizes a source into comparable token spellings. Closing a nested template
 	// argument list regroups '>' '>' into the single token '>>', the same ambiguity the
 	// language resolves by context, so both spellings normalize alike.
+	static CStr fg_NormalizeDirectiveLines(ch8 const *_pText, umint _nLength);
+
 	static TCVector<CStr> fg_NormalizeCodeTokens(CStr const &_Source, ECodeLanguage _Language)
 	{
 		CCodeTokenStream Stream(_Source, nullptr, _Language);
@@ -491,7 +493,10 @@ namespace NMib::NDevelop
 				Text = fg_TrimCommentTrailingSpace(Text);
 
 			if (Kind == ECodeTokenKind::mc_Preprocessor && Text.f_StartsWith("#"))
+			{
 				Text = "#" + CStr(Text.f_GetStr() + 1, Text.f_GetLen() - 1).f_TrimLeft();
+				Text = fg_NormalizeDirectiveLines(Text.f_GetStr(), Text.f_GetLen());
+			}
 
 			auto fInsert = [&](CStr const &_Text)
 				{
@@ -538,7 +543,49 @@ namespace NMib::NDevelop
 		ECodeTokenKind m_Kind = ECodeTokenKind::mc_Unknown;
 		ch8 const *m_pText = nullptr;
 		umint m_nLength = 0;
+		CStr m_Normalized;									// A directive continued over lines, without the indentation of its lines.
 	};
+
+	// The indentation of a directive's continuation lines and the blanks in front of its splices are layout.
+	static CStr fg_NormalizeDirectiveLines(ch8 const *_pText, umint _nLength)
+	{
+		CStr Result;
+		umint iLine = 0;
+		while (iLine <= _nLength)
+		{
+			auto iNewline = iLine;
+			while (iNewline < _nLength && _pText[iNewline] != '\n')
+				++iNewline;
+
+			auto iContent = iLine;
+			if (iLine)
+			{
+				while (iContent < iNewline && (_pText[iContent] == ' ' || _pText[iContent] == '\t'))
+					++iContent;
+			}
+
+			auto iEnd = iNewline;
+			if (iEnd > iContent && _pText[iEnd - 1] == '\r')
+				--iEnd;
+
+			bool bSplice = iNewline < _nLength && iEnd > iContent && _pText[iEnd - 1] == '\\';
+			auto iBlanks = bSplice ? iEnd - 1 : iEnd;
+			while (bSplice && iBlanks > iContent && (_pText[iBlanks - 1] == ' ' || _pText[iBlanks - 1] == '\t'))
+				--iBlanks;
+
+			Result += CStr(_pText + iContent, iBlanks - iContent);
+			if (bSplice)
+				Result += CStr(_pText + iEnd - 1, iNewline + 1 - (iEnd - 1));
+			else if (iNewline < _nLength)
+				Result += CStr(_pText + iBlanks, iNewline + 1 - iBlanks);
+			else
+				Result += CStr(_pText + iBlanks, _nLength - iBlanks);
+
+			iLine = iNewline + 1;
+		}
+
+		return Result;
+	}
 
 	// A splice is layout in C++, but in the build system's syntax it is what continues a value.
 	static void fg_CollectCodeTokenViews(CCodeTokenStream const &_Stream, ECodeLanguage _Language, TCVector<CCodeTokenView> &o_Views)
@@ -567,6 +614,14 @@ namespace NMib::NDevelop
 
 				pText += nSkip;
 				nLength -= nSkip;
+
+				if (Token.m_bMultiLine)
+				{
+					CCodeTokenView View{Kind, nullptr, 0, fg_NormalizeDirectiveLines(pText, nLength)};
+					o_Views.f_Insert(fg_Move(View));
+
+					continue;
+				}
 			}
 
 			if
@@ -604,12 +659,16 @@ namespace NMib::NDevelop
 		{
 			auto const &Left = First[i];
 			auto const &Right = Second[i];
-			if (Left.m_Kind != Right.m_Kind || Left.m_nLength != Right.m_nLength)
+			auto pLeft = Left.m_pText ? Left.m_pText : Left.m_Normalized.f_GetStr();
+			auto pRight = Right.m_pText ? Right.m_pText : Right.m_Normalized.f_GetStr();
+			auto nLeft = Left.m_pText ? Left.m_nLength : Left.m_Normalized.f_GetLen();
+			auto nRight = Right.m_pText ? Right.m_nLength : Right.m_Normalized.f_GetLen();
+			if (Left.m_Kind != Right.m_Kind || nLeft != nRight)
 				return false;
 
-			for (umint j = 0; j < Left.m_nLength; ++j)
+			for (umint j = 0; j < nLeft; ++j)
 			{
-				if (Left.m_pText[j] != Right.m_pText[j])
+				if (pLeft[j] != pRight[j])
 					return false;
 			}
 		}
@@ -2168,10 +2227,159 @@ namespace
 				Canonical += "\t";
 
 			auto iEnd = Token.m_iOffset + iName;
-			if (Canonical == CStr(Source.f_GetStr() + iStart, iEnd - iStart) || fp_IsFormatOff(iStart, iEnd - iStart))
+			if (Canonical != CStr(Source.f_GetStr() + iStart, iEnd - iStart) && !fp_IsFormatOff(iStart, iEnd - iStart))
+				fp_AddEdit("directive-indentation", iStart, iEnd - iStart, Canonical, "a directive stands at the start of its line, a tab behind its '#' for each conditional around it");
+
+			// The lines a directive is continued on move together, the least indented one level in from the directive.
+			if (!Token.m_bMultiLine)
 				continue;
 
-			fp_AddEdit("directive-indentation", iStart, iEnd - iStart, Canonical, "a directive stands at the start of its line, a tab behind its '#' for each conditional around it");
+			struct CContinuation
+			{
+				umint m_iStart;
+				umint m_iContent;
+				umint m_nColumns;
+			};
+			TCVector<CContinuation> Continuations;
+			umint nLeast = TCLimitsInt<umint>::mc_Max;
+			bool bMeasured = true;
+			for (auto iLine2 = iLine + 1; bMeasured && iLine2 < m_Lines.f_GetLineCount() && m_Lines.f_GetLineStart(iLine2) < Token.f_GetEnd(); ++iLine2)
+			{
+				auto iLineStart = m_Lines.f_GetLineStart(iLine2);
+				auto iContent = iLineStart;
+				while (iContent < Token.f_GetEnd() && fg_IsSpaceOrTab(Source.f_GetStr()[iContent]))
+					++iContent;
+
+				// A line holding nothing but its splice, or nothing at all, has no indentation to keep.
+				bool bEmpty = iContent >= Token.f_GetEnd()
+					|| Source.f_GetStr()[iContent] == '\\'
+					|| Source.f_GetStr()[iContent] == '\n'
+					|| Source.f_GetStr()[iContent] == '\r'
+				;
+				if (bEmpty || !fp_IsLineSelected(iLine2))
+					continue;
+
+				umint nColumns = 0;
+				bMeasured = fg_MeasureTextColumns(Source.f_GetStr() + iLineStart, iContent - iLineStart, m_Request.m_Settings.m_nTabWidth, nColumns);
+				Continuations.f_Insert(CContinuation{iLineStart, iContent, nColumns});
+				nLeast = fg_Min(nLeast, nColumns);
+			}
+
+			if (!bMeasured || Continuations.f_IsEmpty())
+				continue;
+
+			auto nTab = m_Request.m_Settings.m_nTabWidth;
+			auto nBase = (nDepth + 1) * nTab;
+			auto fIndent = [&](umint _nColumns)
+				{
+					CStr Indent;
+					umint nSpaces = _nColumns;
+					if (m_Request.m_Settings.m_bIndentWithTabs)
+					{
+						for (umint iTab = 0; iTab < _nColumns / nTab; ++iTab)
+							Indent += "\t";
+
+						nSpaces = _nColumns % nTab;
+					}
+
+					for (umint iSpace = 0; iSpace < nSpaces; ++iSpace)
+						Indent += " ";
+
+					return Indent;
+				}
+			;
+
+			// The lines of the directive with the indentation each is written at, to align the splices behind them.
+			struct CSpliceLine
+			{
+				CStr m_Prefix;										// The line as written, up to the blanks in front of its splice.
+				umint m_iPadding = 0;
+				umint m_iSplice = 0;
+			};
+			TCVector<CSpliceLine> SpliceLines;
+			auto fSpliceLine = [&](umint _iContent, CStr const &_Indent, umint _iLineEnd)
+				{
+					auto iSplice = _iLineEnd;
+					while (iSplice > _iContent && Source.f_GetStr()[iSplice - 1] != '\\')
+						--iSplice;
+
+					if (iSplice <= _iContent)
+						return;
+
+					--iSplice;
+					auto iPadding = iSplice;
+					while (iPadding > _iContent && fg_IsSpaceOrTab(Source.f_GetStr()[iPadding - 1]))
+						--iPadding;
+
+					SpliceLines.f_Insert(CSpliceLine{_Indent + CStr(Source.f_GetStr() + _iContent, iPadding - _iContent), iPadding, iSplice});
+				}
+			;
+			fSpliceLine(iEnd, Canonical, m_Lines.f_GetLineContentEnd(iLine));
+			for (auto const &Continuation : Continuations)
+			{
+				auto Indent = fIndent(Continuation.m_nColumns - nLeast + nBase);
+				auto iContinuationLine = m_Lines.f_FindLine(Continuation.m_iStart);
+				if (m_Lines.f_GetLineContentEnd(iContinuationLine) < Token.f_GetEnd())
+					fSpliceLine(Continuation.m_iContent, Indent, m_Lines.f_GetLineContentEnd(iContinuationLine));
+
+				auto nLength = Continuation.m_iContent - Continuation.m_iStart;
+				if (Indent == CStr(Source.f_GetStr() + Continuation.m_iStart, nLength) || fp_IsFormatOff(Continuation.m_iStart, nLength))
+					continue;
+
+				fp_AddEdit("directive-indentation", Continuation.m_iStart, nLength, Indent, "a directive's continuation lines stand one level in from it");
+			}
+
+			// Splices the source aligned at one column are aligned again behind the longest line, at the next tab stop
+			// where tabs pad them.
+			if (SpliceLines.f_GetLen() < 2)
+				continue;
+
+			umint nAligned = 0;
+			bool bAligned = true;
+			bool bTabs = false;
+			umint nLongest = 0;
+			for (auto const &Line : SpliceLines)
+			{
+				auto iLineStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Line.m_iSplice));
+				umint nSplice = 0;
+				umint nPrefix = 0;
+				bAligned = bAligned
+					&& fg_MeasureTextColumns(Source.f_GetStr() + iLineStart, Line.m_iSplice - iLineStart, nTab, nSplice)
+					&& fg_MeasureTextColumns(Line.m_Prefix, nTab, nPrefix)
+					&& (&Line == &SpliceLines[0] || nSplice == nAligned)
+				;
+				nAligned = nSplice;
+				nLongest = fg_Max(nLongest, nPrefix);
+				for (auto iPad = Line.m_iPadding; iPad < Line.m_iSplice; ++iPad)
+					bTabs |= Source.f_GetStr()[iPad] == '\t';
+			}
+
+			if (!bAligned)
+				continue;
+
+			auto nTarget = bTabs ? (nLongest / nTab + 1) * nTab : nLongest + 1;
+			for (auto const &Line : SpliceLines)
+			{
+				umint nPrefix = 0;
+				fg_MeasureTextColumns(Line.m_Prefix, nTab, nPrefix);
+				CStr Padding;
+				if (bTabs)
+				{
+					for (auto nColumn = nPrefix; nColumn < nTarget; nColumn = (nColumn / nTab + 1) * nTab)
+						Padding += "\t";
+				}
+				else
+				{
+					for (auto nColumn = nPrefix; nColumn < nTarget; ++nColumn)
+						Padding += " ";
+				}
+
+				auto nLength = Line.m_iSplice - Line.m_iPadding;
+				if (Padding == CStr(Source.f_GetStr() + Line.m_iPadding, nLength) || fp_IsFormatOff(Line.m_iPadding, nLength))
+					continue;
+
+				fp_AddEdit("directive-indentation", Line.m_iPadding, nLength, Padding, "the splices of a directive's lines stay aligned");
+			}
 		}
 	}
 
