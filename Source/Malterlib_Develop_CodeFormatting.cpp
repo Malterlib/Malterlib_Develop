@@ -8083,6 +8083,21 @@ namespace
 			auto iFirst = Child.m_iFirstToken;
 			auto const &First = Tokens[iFirst];
 			bool bFirstOnLine = fp_IsFirstOnLine(iFirst);
+			// In a block a conditional cuts, only the statements it stands in or in front of keep their depths.
+			bool bPlaced = bDepths;
+			if (!bPlaced)
+			{
+				bPlaced = true;
+				auto iFrom = iPrevious != TCLimitsInt<umint>::mc_Max ? Nodes[iPrevious].m_iLastToken + 1 : Node.m_iFirstToken + 1;
+				for (auto i = iFrom; bPlaced && i <= Child.m_iLastToken && i < Node.m_iLastToken; ++i)
+				{
+					if (i > iFirst && m_iBlockEnd[i] <= Child.m_iLastToken)
+						i = m_iBlockEnd[i];
+					else
+						bPlaced = Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor || !m_bOpaqueDirective[i];
+				}
+			}
+
 			bool bGuarded = iGuard != TCLimitsInt<umint>::mc_Max;
 			bool bLabelled = false;
 			bool bAfterBlock = false;
@@ -8323,7 +8338,7 @@ namespace
 				fp_OwnLineBefore(iFirst, nPlace);
 				nWritten = nPlace;
 			}
-			else if (!bStays && bDepths && nWritten != nPlace && !fp_KeepsOwnLines(iChild, true))
+			else if (!bStays && bPlaced && nWritten != nPlace && !fp_KeepsOwnLines(iChild, true))
 			{
 				// The statement's other lines move with its first, where its layout keeps them; a block inside it
 				// places its own, and an enum's enumerators stand at the body's level each.
@@ -8354,7 +8369,7 @@ namespace
 			for
 			(
 				auto iHead = iFirst, iNext = fp_SkipTemplateHeader(iFirst);
-				!bStays && bDepths && iNext != iHead && iNext <= Child.m_iLastToken;
+				!bStays && bPlaced && iNext != iHead && iNext <= Child.m_iLastToken;
 				iHead = iNext, iNext = fp_SkipTemplateHeader(iNext)
 			)
 			{

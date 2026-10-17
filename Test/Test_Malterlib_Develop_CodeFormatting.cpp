@@ -1901,6 +1901,14 @@ namespace
 							, "extern \"C\"\n{\n#ifndef A\n\tstatic\n#endif\n\tint g_A[] =\n\t\t{\n#include \"B.h\"\n\t\t}\n\t;\n\n\tstruct CFoo\n\t{\n\t\tint m_A;\n\t};\n}\n"
 						)
 					;
+					// A statement no cutting conditional stands in or in front of is placed as in any block.
+					fg_ExpectFormat
+						(
+							"OpaqueConditionalBodyUncut"
+							, "extern \"C\"\n{\n#ifndef A\n\tstatic\n#endif\n\tint g_A = 1;\n\nstruct CFoo\n{\n\tint m_A;\n};\n}\n"
+							, "extern \"C\"\n{\n#ifndef A\n\tstatic\n#endif\n\tint g_A = 1;\n\n\tstruct CFoo\n\t{\n\t\tint m_A;\n\t};\n}\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(
