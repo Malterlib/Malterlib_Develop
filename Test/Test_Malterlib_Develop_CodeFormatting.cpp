@@ -4606,6 +4606,25 @@ namespace
 					// An indivisible overlong line stays visible and is not rewritten.
 					DMibExpectTrue(Result.m_Edits.f_IsEmpty());
 
+					// In the build system's files a line's strings count for no width, its code and comments for theirs.
+					{
+						CStr Value;
+						for (umint i = 0; i < 200; ++i)
+							Value += "v";
+
+						auto fLengthReports = [&](CStr const &_Source)
+							{
+								umint nReports = 0;
+								for (auto const &Diagnostic : fg_AnalyzeCodeFormatting(fg_BuildSystemRequest(_Source)).m_Diagnostics)
+									nReports += Diagnostic.m_Rule == "line-length";
+
+								return nReports;
+							}
+						;
+						DMibExpect(fLengthReports("Property\n{\n\tA \"" + Value + "\"\n\tB `" + Value + " @(A)`\n}\n"), ==, 0u);
+						DMibExpect(fLengthReports("Property\n{\n\tA \"a\" // " + Value + "\n}\n"), ==, 1u);
+					}
+
 					// One the layout breaks up is no violation of the result's making, so it
 					// is not reported as one left to resolve.
 					DMibTestPath("Split");

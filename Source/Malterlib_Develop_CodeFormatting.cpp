@@ -3514,7 +3514,8 @@ namespace
 
 	// The limit applies to the lines the rules produce, not to the ones the source has: a
 	// line they break up is no violation, and only what they leave too long is reported,
-	// against the source line the result's line came from.
+	// against the source line the result's line came from. In the build system's files the
+	// strings a line holds count for no width, since their values are what make its lines long.
 	void CFormattingAnalyzer::fp_DiagnoseLineLength(NContainer::TCVector<CCodeFormattingEdit> const &_Edits)
 	{
 		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
@@ -3523,6 +3524,38 @@ namespace
 
 		auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, _Edits);
 		CTextLineMap Lines(Formatted);
+		auto Language = m_Request.m_Settings.f_GetLanguage();
+		TCUniquePointer<CCodeTokenStream> pStringTokens;
+		if (Language == ECodeLanguage::mc_BuildSystem)
+			pStringTokens = fg_Construct(Formatted, nullptr, Language);
+
+		// The line's text without the strings standing on it.
+		auto fWithoutStrings = [&](umint _iStart, umint _nLength)
+			{
+				auto const &Tokens = pStringTokens->f_GetTokens();
+				CStr Text;
+				auto iEnd = _iStart + _nLength;
+				auto iCopied = _iStart;
+				for (auto iToken = pStringTokens->f_FindToken(_iStart); iToken < Tokens.f_GetLen() && Tokens[iToken].m_iOffset < iEnd; ++iToken)
+				{
+					auto const &Token = Tokens[iToken];
+					if (Token.m_Kind != ECodeTokenKind::mc_StringLiteral)
+						continue;
+
+					auto iStringStart = fg_Max(Token.m_iOffset, _iStart);
+					auto iStringEnd = fg_Min(Token.f_GetEnd(), iEnd);
+					if (iStringStart > iCopied)
+						Text += CStr(Formatted.f_GetStr() + iCopied, iStringStart - iCopied);
+
+					iCopied = fg_Max(iCopied, iStringEnd);
+				}
+
+				if (iEnd > iCopied)
+					Text += CStr(Formatted.f_GetStr() + iCopied, iEnd - iCopied);
+
+				return Text;
+			}
+		;
 		auto iReported = TCLimitsInt<umint>::mc_Max;
 		for (umint iLine = 0; iLine < Lines.f_GetLineCount(); ++iLine)
 		{
@@ -3539,6 +3572,10 @@ namespace
 			umint nColumns = 0;
 			bool bMeasured = fg_MeasureTextColumns(Formatted.f_GetStr() + iStart, nLength, m_Request.m_Settings.m_nTabWidth, nColumns);
 			if (bMeasured && nColumns <= nMaxColumns)
+				continue;
+
+			umint nCodeColumns = 0;
+			if (pStringTokens && fg_MeasureTextColumns(fWithoutStrings(iStart, nLength), m_Request.m_Settings.m_nTabWidth, nCodeColumns) && nCodeColumns <= nMaxColumns)
 				continue;
 
 			// Several lines of the result can come from one line of the source, which is
