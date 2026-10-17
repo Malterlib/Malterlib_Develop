@@ -8187,6 +8187,22 @@ namespace
 				nWritten = nPlace;
 			}
 
+			// A template's headers and the declaration under them stand at the statement's indentation; a requires
+			// clause behind a header is the layout's to place.
+			for
+			(
+				auto iHead = iFirst, iNext = fp_SkipTemplateHeader(iFirst);
+				!bStays && bDepths && iNext != iHead && iNext <= Child.m_iLastToken;
+				iHead = iNext, iNext = fp_SkipTemplateHeader(iNext)
+			)
+			{
+				if (m_Tokens.f_IsText(Tokens[iNext], "requires"))
+					break;
+
+				if (fp_IsFirstOnLine(iNext) && EGap(m_GapState[iNext]) == EGap::mc_Keep && fp_GetStatementIndent(iNext) != nWritten)
+					fp_IndentBefore(iNext, nWritten);
+			}
+
 			if (fp_IsGuard(iChild))
 			{
 				iGuard = iChild;

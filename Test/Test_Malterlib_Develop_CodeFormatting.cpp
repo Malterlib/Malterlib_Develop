@@ -1825,6 +1825,14 @@ namespace
 							, "namespace N\n{\n\ttemplate <typename t_CType>\n\tconcept cFoo = true;\n\n\t[[maybe_unused]] static int g_A = 1;\n}\n"
 						)
 					;
+					// The declaration under a template's header stands at the header's indentation.
+					fg_ExpectFormat
+						(
+							"TemplateDeclarationLine"
+							, "namespace N\n{\n\ttemplate <typename t_CType>\n\t\tvoid fg_Test()\n\t{\n\t}\n}\n"
+							, "namespace N\n{\n\ttemplate <typename t_CType>\n\tvoid fg_Test()\n\t{\n\t}\n}\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(
