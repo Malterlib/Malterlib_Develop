@@ -1844,6 +1844,17 @@ namespace
 							, "namespace N\n{\n\ttemplate <typename t_CType>\n\tvoid fg_Test()\n\t{\n\t}\n}\n"
 						)
 					;
+					// A conditional cutting a construct inside a function leaves the depths of the function's own lines alone,
+					// not those of the scope around the function.
+					fg_ExpectFormat
+						(
+							"OpaqueConditionalNested"
+							, "struct CFoo\n{\n\tvoid f()\n\t{\n#if A\n\t\tif (a)\n\t\t{\n\t\t}\n\t\telse\n#endif\n\t\t{\n\t\t}\n\t}\n\n"
+							"#if B\n\t\tvoid g()\n\t\t{\n\t\t}\n#endif\n};\n"
+							, "struct CFoo\n{\n\tvoid f()\n\t{\n#if A\n\t\tif (a)\n\t\t{\n\t\t}\n\t\telse\n#endif\n\t\t{\n\t\t}\n\t}\n\n"
+							"#if B\n\tvoid g()\n\t{\n\t}\n#endif\n};\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(

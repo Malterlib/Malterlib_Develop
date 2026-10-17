@@ -7838,8 +7838,20 @@ namespace
 		bool bBraced = Node.m_Kind == ECodeNodeKind::mc_Block;
 		// A conditional whose branches cut a construct leaves the statements around it no
 		// depth of their own, since the token stream runs through every branch at once. Such
-		// a block keeps the depths the source gave its lines.
+		// a block keeps the depths the source gave its lines. One inside a block nested in it
+		// cuts that block's statements only.
 		bool bDepths = !fp_HasOpaqueDirective(Node.m_iFirstToken, Node.m_iLastToken);
+		if (!bDepths)
+		{
+			bDepths = true;
+			for (auto i = Node.m_iFirstToken + 1; bDepths && i < Node.m_iLastToken; ++i)
+			{
+				if (m_iBlockEnd[i] < Node.m_iLastToken)
+					i = m_iBlockEnd[i];
+				else
+					bDepths = Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor || !m_bOpaqueDirective[i];
+			}
+		}
 		if (bBraced)
 		{
 			if (!fp_IsFirstOnLine(Node.m_iLastToken))
