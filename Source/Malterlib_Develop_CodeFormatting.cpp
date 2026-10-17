@@ -4193,6 +4193,12 @@ namespace
 				if (fIsText(_iLeft, "(") || fIsText(_iLeft, "[") || fIsText(_iRight, ")") || fIsText(_iRight, "]") || fIsText(_iRight, ","))
 					return {};
 
+				// A member is reached without blanks, '->' spelled as '-' and '>'.
+				auto iAfterRight = fNext(_iRight);
+				bool bArrow = fIsText(_iRight, "-") && iAfterRight < Tokens.f_GetLen() && fIsText(iAfterRight, ">") && Tokens[_iRight].f_GetEnd() == Tokens[iAfterRight].m_iOffset;
+				if (bArrow || fIsText(_iRight, ".") || fIsText(_iLeft, "."))
+					return {};
+
 				return " ";
 			}
 		;
