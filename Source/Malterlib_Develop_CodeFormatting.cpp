@@ -4665,9 +4665,25 @@ namespace
 			if (State == EGap::mc_Keep && !fp_IsFirstOnLine(i))
 				continue;
 
+			// The first code in the file has no gap in front of it to write, only its line's indentation.
 			auto iPrevious = fp_PreviousCode(i);
 			if (iPrevious < 0)
+			{
+				if (State == EGap::mc_Inline)
+					continue;
+
+				auto iLineStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[i].m_iOffset));
+				bool bIndentation = true;
+				for (auto iByte = iLineStart; iByte < Tokens[i].m_iOffset && bIndentation; ++iByte)
+					bIndentation = fg_IsSpaceOrTab(m_Request.m_Source.f_GetStr()[iByte]);
+
+				auto Indent = fp_MakeIndent(m_GapIndent[i]);
+				auto nLength = Tokens[i].m_iOffset - iLineStart;
+				if (bIndentation && Indent != CStr(m_Request.m_Source.f_GetStr() + iLineStart, nLength))
+					fp_AddEdit("line-break", iLineStart, nLength, Indent, "a statement stands at its scope's depth");
+
 				continue;
+			}
 
 			bool bNewline = false;
 			umint nNewlines = 0;

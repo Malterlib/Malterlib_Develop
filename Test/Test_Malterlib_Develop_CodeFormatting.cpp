@@ -1816,6 +1816,14 @@ namespace
 					// braced initializer written across lines, and a block comment inside.
 					CStr Initializer = "void f()\n{\n\tCJsonSorted Json =\n\t\t{\n\t\t\t\"Name\"_j= \"John\"\n\t\t\t, \"Age\"_j= 30\n\t\t}\n\t;\n}\n";
 					fg_ExpectFormat("Initializer", Initializer, Initializer);
+					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
+					fg_ExpectFormat
+						(
+							"FirstCodeInFile"
+							, "#if A\n#include <a>\n\n\tnamespace std\n\t{\n\t\tint a;\n\t}\n#endif\nint b;\n"
+							, "#if A\n#\tinclude <a>\n\nnamespace std\n{\n\tint a;\n}\n#endif\nint b;\n"
+						)
+					;
 					// Directives are indented apart from the code, so a statement inside a conditional stands at its block's depth.
 					fg_ExpectFormat
 						(
