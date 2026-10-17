@@ -909,7 +909,7 @@ Their rules change whitespace only:
 | `indentation` | A line the value layout does not place stands at the level of the innermost bracket open at its start, and a line that starts by closing it one level out. |
 | `blank-line` | One blank line at most, none right inside a bracket, and none at the start or end of the file. |
 | `trailing-whitespace`, `line-ending`, `final-newline` | As for C++. |
-| `line-length` | Reported only. A string ending a line counts for no width. |
+| `line-length` | Reported only. A string ending a line counts for no width in the report. |
 
 A statement is what stands from a line no value bracket is open at to the line
 its brackets close on; a `{` starting its line outside a value opens a scope of
@@ -921,7 +921,19 @@ whole, or the one holding what keeps its lines: the opener ends its line, the
 members stand one level in, split at their commas with each comma in front, or,
 without commas, in front of the operators that bind loosest, and the closer
 stands at the line's level. A member laid out the same way opens in turn, and
-two objects that both open meet on the line one closes on, `}, {`. A comma
+two objects that both open meet on the line one closes on, `}, {`. A string
+ending a line counts for its width here; only the report leaves it out.
+
+Operators split only the members of a grouping parenthesis, one that follows no
+name or follows its statement's key after a blank, since only there does the
+parser read an operand on past a line break: a statement no bracket is open in,
+a call's arguments, an array and an object end an expression at a line break.
+There, as in C++, a member's own operators split it before a bracket it holds
+opens, and what follows the first of them continues one level in. The operators
+are `?` and `:`, then `||`, then `&&`, then `==`, `!=`, `<=`, `>=`, `<==>` and
+`<!=>`, then `+` and `/`, each written as one run of punctuators. A value its
+brackets cannot shorten, such as a ternary standing as a call's argument, needs
+a grouping parenthesis around it in the source to be split. A comma
 ending an opened list goes, the one change to the tokens these rules make, which
 verification allows for since such a comma separates nothing:
 

@@ -422,6 +422,23 @@ namespace
 								"\tD [\n\t\t\"" + Long + "\"\n\t\t, \"" + Long + "\"\n\t] // Comment\n}\n"
 							)
 						;
+						// Operators spelled with several punctuators split the members of a grouping parenthesis, its own
+						// operators before a bracket it holds and the operand that follows one a level in. Only there does the
+						// parser read an operand past a line break, so a statement, a call's arguments, an array and an object
+						// open a bracket instead. A string ending a line counts for its width here.
+						fg_ExpectBuildSystemFormat
+							(
+								"Operators"
+								, "P\n{\n\tA (F() == \"" + Long + "\" || F() == \"" + Long + "\")\n"
+								"\tB X->Switch(\"k\", ((C <==> \"c\") ? \"" + Long + "\" : \"" + Long + "\"))\n"
+								"\tC G(\"" + Long + "\", \"" + Long + "\") / \"d\"\n"
+								"\tD [F(\"" + Long + "\") || F(\"" + Long + "\")]\n}\n"
+								, "P\n{\n\tA (\n\t\tF() == \"" + Long + "\"\n\t\t|| F() == \"" + Long + "\"\n\t)\n"
+								"\tB X->Switch(\n\t\t\"k\", (\n\t\t\t(C <==> \"c\")\n\t\t\t? \"" + Long + "\"\n\t\t\t: \"" + Long + "\"\n\t\t)\n\t)\n"
+								"\tC G(\n\t\t\"" + Long + "\"\n\t\t, \"" + Long + "\"\n\t) / \"d\"\n"
+								"\tD [\n\t\tF(\n\t\t\t\"" + Long + "\"\n\t\t) || F(\"" + Long + "\")\n\t]\n}\n"
+							)
+						;
 					}
 					fg_ExpectBuildSystemFormat
 						(

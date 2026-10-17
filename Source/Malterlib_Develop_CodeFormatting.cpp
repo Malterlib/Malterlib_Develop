@@ -4230,9 +4230,6 @@ namespace
 					if (i != _iFirst)
 						Text += fGapText(umint(fPrevious(i)), i);
 
-					if (i == _iLast && Tokens[i].m_Kind == ECodeTokenKind::mc_StringLiteral && i != _iFirst)
-						break;
-
 					Text += m_Tokens.f_GetText(Tokens[i]);
 				}
 
@@ -4286,37 +4283,103 @@ namespace
 					Gaps[_iToken] = CGap{true, _nIndent};
 			}
 		;
-		// How loosely an operator binds where a group without commas splits, or zero for no operator.
+		// How loosely an operator binds where a group without commas splits, or zero for no operator. The build system's
+		// lexer spells each punctuator as a token, so an operator is a run of them written together, starting where the
+		// token in front is no punctuator other than a closer attached to it.
+		auto fAttached = [&](umint _iLeft, umint _iRight)
+			{
+				return _iRight < Tokens.f_GetLen() && Tokens[_iRight].m_Kind == ECodeTokenKind::mc_Punctuator && Tokens[_iLeft].f_GetEnd() == Tokens[_iRight].m_iOffset;
+			}
+		;
 		auto fLooseness = [&](umint _iToken, bool _bTernary) -> umint
 			{
 				if (Tokens[_iToken].m_Kind != ECodeTokenKind::mc_Punctuator)
 					return 0;
 
+				auto iBefore = fPrevious(_iToken);
+				bool bContinuesRun = iBefore >= 0 && Tokens[umint(iBefore)].m_Kind == ECodeTokenKind::mc_Punctuator && !fg_IsBuildSystemCloser(m_Tokens, Tokens[umint(iBefore)]);
+				if (bContinuesRun && fAttached(umint(iBefore), _iToken))
+					return 0;
+
+				auto iNext = fNext(_iToken);
+				bool bPair = fAttached(_iToken, iNext);
+				auto fPair = [&](ch8 const *_pFirst, ch8 const *_pSecond)
+					{
+						return bPair && fIsText(_iToken, _pFirst) && fIsText(iNext, _pSecond);
+					}
+				;
+
 				if (fIsText(_iToken, "?") || (_bTernary && fIsText(_iToken, ":")))
 					return 7;
 
-				if (fIsText(_iToken, "||"))
+				if (fPair("|", "|"))
 					return 6;
 
-				if (fIsText(_iToken, "&&"))
+				if (fPair("&", "&"))
 					return 5;
 
-				if (fIsText(_iToken, "==") || fIsText(_iToken, "!=") || fIsText(_iToken, "<=") || fIsText(_iToken, ">="))
-					return 4;
-
 				// '<!=>' and '<==>' compare as well, their '<' starting them.
-				auto iNext = fNext(_iToken);
-				if (fIsText(_iToken, "<") && iNext < Tokens.f_GetLen() && Tokens[iNext].m_iOffset == Tokens[_iToken].f_GetEnd() && (fIsText(iNext, "!=") || fIsText(iNext, "==")))
+				if (fPair("=", "=") || fPair("!", "=") || fPair("<", "=") || fPair(">", "=") || fPair("<", "!"))
 					return 4;
 
-				if (fIsText(_iToken, "+") || fIsText(_iToken, "/"))
+				if (!bPair && (fIsText(_iToken, "+") || fIsText(_iToken, "/")))
 					return 3;
 
 				return 0;
 			}
 		;
 
-		auto fLayout = [&](auto &&_fLayout, umint _nIndent, umint _iFirst, umint _iLast) -> void
+		// The loosest operators at a range's own level, outside the brackets it holds.
+		auto fOperatorSplits = [&](umint _iFirst, umint _iLast)
+			{
+				bool bTernary = false;
+				for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+				{
+					if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= _iLast)
+						i = Closer[i];
+					else if (fIsText(i, "?"))
+						bTernary = true;
+				}
+
+				umint nLoosest = 0;
+				for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+				{
+					if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= _iLast)
+						i = Closer[i];
+					else if (i != _iFirst)
+						nLoosest = fg_Max(nLoosest, fLooseness(i, bTernary));
+				}
+
+				TCVector<umint> Splits;
+				for (auto i = _iFirst; nLoosest && i <= _iLast; i = fNext(i))
+				{
+					if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= _iLast)
+						i = Closer[i];
+					else if (i != _iFirst && fLooseness(i, bTernary) == nLoosest)
+						Splits.f_Insert(i);
+				}
+
+				return Splits;
+			}
+		;
+
+		// A parenthesis that groups an expression rather than holding a call's arguments: it follows no name, or follows the key
+		// of its statement after a blank. Only there does the parser read an operand on past a line break.
+		umint iStatementFirst = 0;
+		auto fIsGroup = [&](umint _iOpener)
+			{
+				if (!fIsText(_iOpener, "("))
+					return false;
+
+				auto iBefore = fPrevious(_iOpener);
+				if (iBefore < 0 || Tokens[umint(iBefore)].m_Kind != ECodeTokenKind::mc_Identifier)
+					return true;
+
+				return umint(iBefore) == iStatementFirst && Tokens[umint(iBefore)].f_GetEnd() != Tokens[_iOpener].m_iOffset;
+			}
+		;
+
+		auto fLayout = [&](auto &&_fLayout, umint _nIndent, umint _iFirst, umint _iLast, bool _bInGroup) -> void
 			{
 				bool bKept = fHoldsKept(_iFirst, _iLast);
 				if (!bKept && fFits(_nIndent, _iFirst, _iLast))
@@ -4324,6 +4387,29 @@ namespace
 					fJoin(_iFirst, _iLast);
 
 					return;
+				}
+
+				// The outermost break comes first, as in C++: a range's own operators split it before a bracket in it opens,
+				// and what follows the first operator continues one level in. A line break ends a statement no bracket is
+				// open in, and call arguments, arrays and objects end their expressions there, so only a grouping parenthesis's
+				// members split at operators.
+				if (!bKept && _bInGroup)
+				{
+					auto Splits = fOperatorSplits(_iFirst, _iLast);
+					if (!Splits.f_IsEmpty())
+					{
+						auto iPart = _iFirst;
+						for (auto iSplit : Splits)
+						{
+							_fLayout(_fLayout, iPart == _iFirst ? _nIndent : _nIndent + nTab, iPart, umint(fPrevious(iSplit)), _bInGroup);
+							fBreak(iSplit, _nIndent + nTab);
+							iPart = iSplit;
+						}
+
+						_fLayout(_fLayout, _nIndent + nTab, iPart, _iLast, _bInGroup);
+
+						return;
+					}
 				}
 
 				// The bracket that opens: one holding what keeps its lines, and otherwise the widest.
@@ -4361,6 +4447,7 @@ namespace
 					fJoin(_iFirst, iOpener);
 
 				auto nInner = _nIndent + nTab;
+				bool bGroup = fIsGroup(iOpener);
 				auto iFirstMember = fNext(iOpener);
 				auto iLastMember = umint(fPrevious(iClose));
 
@@ -4373,17 +4460,14 @@ namespace
 					iLastMember = iBefore;
 				}
 
-				// The member separators at the bracket's own level: its commas, or the operators that bind loosest.
+				// The member separators at the bracket's own level: its commas, or where it has none the operators that bind loosest.
 				TCVector<umint> Splits;
-				bool bTernary = false;
 				auto nSingles = fSwitchSingles(iOpener);
 				umint iArgument = 0;
 				for (auto i = iFirstMember; i <= iLastMember; i = fNext(i))
 				{
 					if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= iLastMember)
 						i = Closer[i];
-					else if (fIsText(i, "?"))
-						bTernary = true;
 					else if (fIsText(i, ","))
 					{
 						// A switch's key and value share a line.
@@ -4393,36 +4477,19 @@ namespace
 					}
 				}
 
-				if (Splits.f_IsEmpty() && !fIsText(iOpener, "{"))
-				{
-					umint nLoosest = 0;
-					for (auto i = iFirstMember; i <= iLastMember; i = fNext(i))
-					{
-						if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= iLastMember)
-							i = Closer[i];
-						else if (i != iFirstMember)
-							nLoosest = fg_Max(nLoosest, fLooseness(i, bTernary));
-					}
-
-					for (auto i = iFirstMember; nLoosest && i <= iLastMember; i = fNext(i))
-					{
-						if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= iLastMember)
-							i = Closer[i];
-						else if (i != iFirstMember && fLooseness(i, bTernary) == nLoosest)
-							Splits.f_Insert(i);
-					}
-				}
+				if (bGroup && !iArgument)
+					Splits = fOperatorSplits(iFirstMember, iLastMember);
 
 				fBreak(iFirstMember, nInner);
 				auto iMember = iFirstMember;
 				for (auto iSplit : Splits)
 				{
-					_fLayout(_fLayout, nInner, iMember, umint(fPrevious(iSplit)));
+					_fLayout(_fLayout, nInner, iMember, umint(fPrevious(iSplit)), bGroup);
 					fBreak(iSplit, nInner);
 					iMember = iSplit;
 				}
 
-				_fLayout(_fLayout, nInner, iMember, iLastMember);
+				_fLayout(_fLayout, nInner, iMember, iLastMember, bGroup);
 				fBreak(iClose, _nIndent);
 
 				// Two objects that both open meet on the line one closes on: '}, {'.
@@ -4449,7 +4516,7 @@ namespace
 
 				// What follows the closer on its line is laid out from there: '])->F(...)'.
 				if (iClose != _iLast)
-					_fLayout(_fLayout, _nIndent, iClose, _iLast);
+					_fLayout(_fLayout, _nIndent, iClose, _iLast, _bInGroup);
 			}
 		;
 
@@ -4521,7 +4588,10 @@ namespace
 			auto iStatementStart = m_Lines.f_GetLineStart(iLine);
 			auto iStatementEnd = m_Lines.f_GetLineStart(iEndLine) + m_Lines.f_GetLine(iEndLine).m_nLength;
 			if (bPlain && bSelected && !fp_IsFormatOff(iStatementStart, iStatementEnd - iStatementStart))
-				fLayout(fLayout, Line.m_Level * nTab, iFirst, iLast);
+			{
+				iStatementFirst = iFirst;
+				fLayout(fLayout, Line.m_Level * nTab, iFirst, iLast, false);
+			}
 
 			iLine = iEndLine;
 		}
