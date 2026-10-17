@@ -1864,6 +1864,15 @@ namespace
 							, "struct CFoo\n{\n\tvoid f()\n\t{\n#if A\n\t\tif (a)\n\t\t\tg();\n\t\telse\n#endif\n\t\t\th();\n\t}\n};\n"
 						)
 					;
+					// Inside such a body the first statement stands one level in from the brace, the other lines and comments
+					// as far from it as the source has them, and the closing brace under the opening one.
+					fg_ExpectFormat
+						(
+							"OpaqueConditionalBodyLevels"
+							, "struct CFoo\n{\n\tvoid f()\n\t{\n#if A\n\t\t\tif (a)\n\t\t\t\tg();\n\t\t\telse\n#endif\n\t\t\t\t// Comment\n\t\t\t\th();\n\t\t}\n};\n"
+							, "struct CFoo\n{\n\tvoid f()\n\t{\n#if A\n\t\tif (a)\n\t\t\tg();\n\t\telse\n#endif\n\t\t\t// Comment\n\t\t\th();\n\t}\n};\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(

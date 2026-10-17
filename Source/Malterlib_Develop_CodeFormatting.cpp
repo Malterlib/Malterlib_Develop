@@ -7354,12 +7354,15 @@ namespace
 
 		// A body that already has a line of its own still takes the depth its head gives
 		// it, and its lines move with it, so that a lambda written one level too far out
-		// is brought back under the expression it belongs to.
-		auto nReference = fp_GetStatementIndent(iBrace);
+		// is brought back under the expression it belongs to. They move by the distance from
+		// where the source wrote the brace, which the head's layout may have placed already.
+		auto nReference = fp_GetSourceLineIndent(iBrace);
 		if (nReference == nPlace || !fp_CanPlaceBlock(_iBlock))
 			return;
 
-		fp_IndentBefore(iBrace, nPlace);
+		if (fp_GetStatementIndent(iBrace) != nPlace)
+			fp_IndentBefore(iBrace, nPlace);
+
 		fp_ShiftBlock(_iBlock, aint(nPlace) - aint(nReference));
 	}
 
@@ -7865,8 +7868,68 @@ namespace
 		{
 			if (!fp_IsFirstOnLine(Node.m_iLastToken))
 				fp_OwnLineBefore(Node.m_iLastToken, _iIndent);
-			else if (bDepths && fp_GetStatementIndent(Node.m_iLastToken) != _iIndent)
+			else if (fp_GetStatementIndent(Node.m_iLastToken) != _iIndent)
 				fp_IndentBefore(Node.m_iLastToken, _iIndent);
+		}
+
+		// A block without depths of its own keeps its lines' depths relative to each other, its first statement one
+		// level in from its brace; a label stands at the brace's level.
+		if (bBraced && !bDepths)
+		{
+			TCVector<umint> LineStarts;
+			TCVector<umint> CommentLines;
+			aint iReference = -1;
+			for (auto i = Node.m_iFirstToken + 1; i < Node.m_iLastToken; ++i)
+			{
+				bool bComment = Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment || Tokens[i].m_Kind == ECodeTokenKind::mc_BlockComment;
+				if ((!bComment && !fg_IsCodeToken(Tokens[i])) || EGap(m_GapState[i]) == EGap::mc_Inline || m_bProtectedStart[m_Lines.f_FindLine(Tokens[i].m_iOffset)])
+					continue;
+
+				auto iLineStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[i].m_iOffset));
+				bool bStartsLine = true;
+				for (auto iByte = iLineStart; iByte < Tokens[i].m_iOffset && bStartsLine; ++iByte)
+					bStartsLine = fg_IsSpaceOrTab(m_Request.m_Source.f_GetStr()[iByte]);
+
+				if (!bStartsLine)
+					continue;
+
+				if (bComment)
+				{
+					CommentLines.f_Insert(i);
+
+					continue;
+				}
+
+				LineStarts.f_Insert(i);
+				if (iReference >= 0)
+					continue;
+
+				auto iNext = fp_NextCode(i);
+				bool bAccess = (m_Tokens.f_IsText(Tokens[i], "public") || m_Tokens.f_IsText(Tokens[i], "private") || m_Tokens.f_IsText(Tokens[i], "protected"))
+					&& iNext >= 0
+					&& m_Tokens.f_IsText(Tokens[umint(iNext)], ":")
+				;
+				if (!bAccess && !m_Tokens.f_IsText(Tokens[i], "case") && !m_Tokens.f_IsText(Tokens[i], "default"))
+					iReference = aint(i);
+			}
+
+			auto nDelta = iReference < 0 ? aint(0) : aint(_iIndent + nTab) - aint(fp_GetStatementIndent(umint(iReference)));
+			for (auto i : LineStarts)
+			{
+				auto nIndent = aint(fp_GetStatementIndent(i)) + nDelta;
+				if (nDelta && nIndent >= 0)
+					fp_IndentBefore(i, umint(nIndent));
+			}
+
+			for (auto i : CommentLines)
+			{
+				auto nIndent = aint(m_bCommentMoved[i] ? m_CommentIndent[i] : fp_GetSourceLineIndent(i)) + nDelta;
+				if (nDelta && nIndent >= 0)
+				{
+					m_bCommentMoved[i] = 1;
+					m_CommentIndent[i] = umint(nIndent);
+				}
+			}
 		}
 
 		constexpr ch8 const *c_pStatementKeywords[] =
