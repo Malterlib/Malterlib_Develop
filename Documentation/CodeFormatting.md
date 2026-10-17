@@ -924,17 +924,37 @@ stands at the line's level. A member laid out the same way opens in turn, and
 two objects that both open meet on the line one closes on, `}, {`. A string
 ending a line counts for its width here; only the report leaves it out.
 
-Operators split only the members of a grouping parenthesis, one that follows no
-name or follows its statement's key after a blank, since only there does the
-parser read an operand on past a line break: a statement no bracket is open in,
-a call's arguments, an array and an object end an expression at a line break.
-There, as in C++, a member's own operators split it before a bracket it holds
-opens, and what follows the first of them continues one level in. The operators
-are `?` and `:`, then `||`, then `&&`, then `==`, `!=`, `<=`, `>=`, `<==>` and
-`<!=>`, then `+` and `/`, each written as one run of punctuators. A value its
-brackets cannot shorten, such as a ternary standing as a call's argument, needs
-a grouping parenthesis around it in the source to be split. A comma
-ending an opened list goes, the one change to the tokens these rules make, which
+Inside a bracket the parser reads a line break as whitespace, and a statement
+no bracket is open in ends at one, so only a value inside a bracket is split
+at its operators or member calls. There, as in C++, a value's own operators
+split it before a bracket it holds opens, in front of the ones binding
+loosest by the build system's precedence: `?` and `:`, then `||` and `??`,
+`&&`, `|`, `^`, `&`, `==`, `!=`, `<==>` and `<!=>`, the other comparisons,
+`<<` and `>>`, `+` and `-`, and `*`, `/` and `%`. A binary operator is a run
+of operator characters with a blank on both sides. What follows the first
+operator continues one level in, except in a grouping parenthesis, one not
+written against a name, whose operands stand at its level, as a C++
+condition's do. A member chain gives at every `->` from the first access on
+what a bracket yields, one level in, unless opening its widest bracket leaves
+the lines in front of and behind that bracket fitting:
+
+```
+	Compile.Disabled (
+		this.Identity->GetFile() == "crtbegin.c"
+		|| this.Identity->GetFile()
+			->GetPath()
+			->GetFile()
+			== "dso_handle.c"
+	)
+	Value Target.Type->SwitchWithError(
+		"Unsupported: "
+		, "StaticLibrary", (Documentation <==> "Doxygen")
+			? `@(Prefix)libtool`
+			: `@(Prefix)llvm-lib`
+	)
+```
+
+A comma ending an opened list goes, the one change to the tokens these rules make, which
 verification allows for since such a comma separates nothing:
 
 ```

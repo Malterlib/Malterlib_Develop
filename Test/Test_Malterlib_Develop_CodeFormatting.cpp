@@ -422,21 +422,28 @@ namespace
 								"\tD [\n\t\t\"" + Long + "\"\n\t\t, \"" + Long + "\"\n\t] // Comment\n}\n"
 							)
 						;
-						// Operators spelled with several punctuators split the members of a grouping parenthesis, its own
-						// operators before a bracket it holds and the operand that follows one a level in. Only there does the
-						// parser read an operand past a line break, so a statement, a call's arguments, an array and an object
-						// open a bracket instead. A string ending a line counts for its width here.
+						// Inside a bracket a line break is whitespace, so operators spelled with several punctuators split a value
+						// there, its own operators before a bracket it holds and what follows one a level in, except a grouping
+						// parenthesis's operands, which stand at its level. A member chain gives at every member from the first
+						// access on what a bracket yields, unless opening a bracket makes it fit. A line break ends a statement, so
+						// a statement opens a bracket instead. A string ending a line counts for its width here.
 						fg_ExpectBuildSystemFormat
 							(
 								"Operators"
 								, "P\n{\n\tA (F() == \"" + Long + "\" || F() == \"" + Long + "\")\n"
-								"\tB X->Switch(\"k\", ((C <==> \"c\") ? \"" + Long + "\" : \"" + Long + "\"))\n"
+								"\tB X->Switch(\"k\", (C <==> \"c\") ? \"" + Long + "\" : \"" + Long + "\")\n"
 								"\tC G(\"" + Long + "\", \"" + Long + "\") / \"d\"\n"
-								"\tD [F(\"" + Long + "\") || F(\"" + Long + "\")]\n}\n"
+								"\tD [F(\"" + Long + "\") || F(\"" + Long + "\")]\n"
+								"\tE (Y->F(\"" + Long + "\")->G(\"" + Long + "\")->H(\"" + Long + "\"))\n"
+								"\tF [G(\"" + Long + "\", \"" + Long + "\")->H()]\n"
+								"\tG (F(\"" + Long + "\") + F(\"" + Long + "\") * F(\"" + Long + "\"))\n}\n"
 								, "P\n{\n\tA (\n\t\tF() == \"" + Long + "\"\n\t\t|| F() == \"" + Long + "\"\n\t)\n"
-								"\tB X->Switch(\n\t\t\"k\", (\n\t\t\t(C <==> \"c\")\n\t\t\t? \"" + Long + "\"\n\t\t\t: \"" + Long + "\"\n\t\t)\n\t)\n"
+								"\tB X->Switch(\n\t\t\"k\", (C <==> \"c\")\n\t\t\t? \"" + Long + "\"\n\t\t\t: \"" + Long + "\"\n\t)\n"
 								"\tC G(\n\t\t\"" + Long + "\"\n\t\t, \"" + Long + "\"\n\t) / \"d\"\n"
-								"\tD [\n\t\tF(\n\t\t\t\"" + Long + "\"\n\t\t) || F(\"" + Long + "\")\n\t]\n}\n"
+								"\tD [\n\t\tF(\"" + Long + "\")\n\t\t\t|| F(\"" + Long + "\")\n\t]\n"
+								"\tE (\n\t\tY->F(\"" + Long + "\")\n\t\t\t->G(\"" + Long + "\")\n\t\t\t->H(\"" + Long + "\")\n\t)\n"
+								"\tF [\n\t\tG(\n\t\t\t\"" + Long + "\"\n\t\t\t, \"" + Long + "\"\n\t\t)->H()\n\t]\n"
+								"\tG (\n\t\tF(\"" + Long + "\")\n\t\t+ F(\"" + Long + "\")\n\t\t\t* F(\"" + Long + "\")\n\t)\n}\n"
 							)
 						;
 					}
