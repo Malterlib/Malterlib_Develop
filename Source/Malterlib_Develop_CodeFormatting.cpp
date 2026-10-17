@@ -7924,7 +7924,8 @@ namespace
 				auto Kind = Tokens[i].m_Kind;
 				if (Kind == ECodeTokenKind::mc_Preprocessor)
 				{
-					if (bNested)
+					// A directive inside brackets is part of the statement they are in.
+					if (bNested || m_TokenDepth[i] != nBodyDepth)
 						continue;
 
 					bNeedsReference = true;
@@ -7965,6 +7966,9 @@ namespace
 						nDelta = nStretchDelta;
 
 					bool bStatement = m_TokenDepth[i] == nBodyDepth
+						&& !m_Tokens.f_IsText(Tokens[i], "}")
+						&& !m_Tokens.f_IsText(Tokens[i], ")")
+						&& !m_Tokens.f_IsText(Tokens[i], "]")
 						&& (
 							iPrevious < 0
 							|| umint(iPrevious) == Node.m_iFirstToken

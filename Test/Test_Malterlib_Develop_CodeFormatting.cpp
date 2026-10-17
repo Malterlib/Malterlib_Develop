@@ -1893,6 +1893,14 @@ namespace
 							"\tfg_Call\n\t\t(\n#if B\n\t\t\tfg_Wrap\n\t\t\t(\n#endif\n\t\t\t\tx\n#if B\n\t\t\t)\n#endif\n\t\t\t, y\n\t\t)\n\t;\n}\n"
 						)
 					;
+					// A directive inside an initializer's braces is part of its statement, not a stretch of the body.
+					fg_ExpectFormat
+						(
+							"OpaqueConditionalBodyInitializer"
+							, "extern \"C\"\n{\n#ifndef A\n\tstatic\n#endif\n\tint g_A[] =\n\t\t{\n#include \"B.h\"\n\t\t}\n\t;\n\n\tstruct CFoo\n\t{\n\t\tint m_A;\n\t};\n}\n"
+							, "extern \"C\"\n{\n#ifndef A\n\tstatic\n#endif\n\tint g_A[] =\n\t\t{\n#include \"B.h\"\n\t\t}\n\t;\n\n\tstruct CFoo\n\t{\n\t\tint m_A;\n\t};\n}\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(
