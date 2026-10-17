@@ -901,35 +901,43 @@ A file opted in with `malterlib_format = malterlib-buildsystem` is
 files; `.MRepo` is JSON, and `.MRepoState` and `.MGeneratorState` are written by
 the build system, so none of those is.
 
-Their rules change whitespace only, and every line keeps its breaks:
+Their rules change whitespace only:
 
 | Rule | Effect |
 | --- | --- |
-| `indentation` | A line stands at the level of the innermost bracket open at its start, and a line that starts by closing it one level out. Registry scopes and the objects, arrays and calls of a value count alike. |
+| `line-break` | A value is laid out by the rules C++ code is, with its openers ending their lines (see below). |
+| `indentation` | A line the value layout does not place stands at the level of the innermost bracket open at its start, and a line that starts by closing it one level out. |
 | `blank-line` | One blank line at most, none right inside a bracket, and none at the start or end of the file. |
 | `trailing-whitespace`, `line-ending`, `final-newline` | As for C++. |
-| `line-length` | Reported only. |
+| `line-length` | Reported only. A string ending a line counts for no width. |
 
-The brackets a line leaves open take one level more than that line, together:
+A statement is what stands from a line no value bracket is open at to the line
+its brackets close on; a `{` starting its line outside a value opens a scope of
+the registry, which keeps its lines. A value written across lines is brought
+back onto one where it fits, as a call is in C++, unless it holds an array or
+object written across lines, which keeps its lines with each element on a line
+of its own. A value too long for its line opens the widest bracket it holds
+whole, or the one holding what keeps its lines: the opener ends its line, the
+members stand one level in, split at their commas with each comma in front, or,
+without commas, in front of the operators that bind loosest, and the closer
+stands at the line's level. A member laid out the same way opens in turn:
 
 ```
-	Files: ["Main.cpp", Platform->Switch(
-		"macOS", "Main.mm"
-	)]
-```
-
-unless the outer one holds lines of its own behind the inner one's, where each
-takes a level:
-
-```
-	License =+ [{
+	SdkRoot_macOS: string = (
+		(MalterlibMaxSupportedMacOSVersion == "Latest")
+		? `@(Developer)/MacOSX.sdk`
+		: `@(Developer)/MacOSX@(MalterlibMaxSupportedMacOSVersion).sdk`
+	)
+	License =+ [
+		{
 			Path: "A"
 		}
-		, {
-			Path: "B"
-		}
+		, { Path: "B" }
 	]
 ```
+
+A statement holding a comment other than one ending it, or continued by a
+backslash, keeps its lines.
 
 A line a backslash continues aligns with the value it continues, the first string
 on the line the chain starts on, its tabs filled out with spaces up to that

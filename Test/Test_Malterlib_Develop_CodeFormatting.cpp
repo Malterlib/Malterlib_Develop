@@ -381,6 +381,24 @@ namespace
 
 				DMibTestCategory("Values")
 				{
+					// A line too long for its limit opens the outermost object, array or call it holds whole: the opener ends the
+					// line, each member stands one level in with its comma in front, and a member still too long opens in turn.
+					{
+						CStr Long;
+						for (umint i = 0; i < 90; ++i)
+							Long += "a";
+
+						fg_ExpectBuildSystemFormat
+							(
+								"LineBreaks"
+								, "P\n{\n\tA [\n\t\t{ Source: \"" + Long + "\"->MakeAbsolute(), Name: \"" + Long + "\" }\n\t\t, { B: 1 }\n\t]\n"
+								"\tC fg_Call(\"" + Long + "\", [\"x\", \"y\"], \"" + Long + "\")\n\tD [\"" + Long + "\", \"" + Long + "\"] // Comment\n}\n"
+								, "P\n{\n\tA [\n\t\t{\n\t\t\tSource: \"" + Long + "\"->MakeAbsolute()\n\t\t\t, Name: \"" + Long + "\"\n\t\t}\n\t\t, { B: 1 }\n\t]\n"
+								"\tC fg_Call(\n\t\t\"" + Long + "\"\n\t\t, [\"x\", \"y\"]\n\t\t, \"" + Long + "\"\n\t)\n"
+								"\tD [\n\t\t\"" + Long + "\"\n\t\t, \"" + Long + "\"\n\t] // Comment\n}\n"
+							)
+						;
+					}
 					fg_ExpectBuildSystemFormat
 						(
 							"Array"
@@ -388,27 +406,28 @@ namespace
 							, "P\n{\n\tPaths =+ [\n\t\t\"a\"\n\t\t, \"b\"\n\t]\n}\n"
 						)
 					;
-					// Brackets that open on one line and close together take one level between them.
+					// An array written across lines has an element on each line, and a call inside it that fits is joined;
+					// a bracket opening behind another on its line takes a line of its own.
 					fg_ExpectBuildSystemFormat
 						(
 							"SharedLevel"
 							, "P\n{\n\tFiles: [\"a\", F(\n\t\t\t\"b\"\n\t\t\t, \"c\"\n\t\t)]\n}\n"
-							, "P\n{\n\tFiles: [\"a\", F(\n\t\t\"b\"\n\t\t, \"c\"\n\t)]\n}\n"
+							, "P\n{\n\tFiles: [\n\t\t\"a\"\n\t\t, F(\"b\", \"c\")\n\t]\n}\n"
 						)
 					;
 					fg_ExpectBuildSystemFormat
 						(
 							"AdjacentClosers"
 							, "P\n{\n\tA !([\n\t\t\t\"a\"\n\t\t]->F(B\n\t\t))\n}\n"
-							, "P\n{\n\tA !([\n\t\t\"a\"\n\t]->F(B\n\t))\n}\n"
+							, "P\n{\n\tA !(\n\t\t[\n\t\t\t\"a\"\n\t\t]->F(B)\n\t)\n}\n"
 						)
 					;
-					// An outer bracket that holds more behind the inner one nests them.
+					// Objects written across lines in an array each start a line of their own.
 					fg_ExpectBuildSystemFormat
 						(
 							"ObjectsInArray"
 							, "P\n{\n\tL =+ [{\n\t\tA: 1\n\t}\n\t, {\n\t\tB: 2\n\t}\n\t]\n}\n"
-							, "P\n{\n\tL =+ [{\n\t\t\tA: 1\n\t\t}\n\t\t, {\n\t\t\tB: 2\n\t\t}\n\t]\n}\n"
+							, "P\n{\n\tL =+ [\n\t\t{\n\t\t\tA: 1\n\t\t}\n\t\t, {\n\t\t\tB: 2\n\t\t}\n\t]\n}\n"
 						)
 					;
 				};
@@ -4624,7 +4643,7 @@ namespace
 						;
 						DMibExpect(fLengthReports("Property\n{\n\tA \"" + Value + "\"\n\tB `" + Value + " @(A)`\n}\n"), ==, 0u);
 						DMibExpect(fLengthReports("Property\n{\n\tA \"a\" // " + Value + "\n}\n"), ==, 1u);
-						DMibExpect(fLengthReports("Property\n{\n\tA {Name: \"" + Value + "\"}\n\tB `" + Value + "`\\\n\t\t`b`\n}\n"), ==, 1u);
+						DMibExpect(fLengthReports("Property\n{\n\tA \"" + Value + "\"->F()\n\tB `" + Value + "`\\\n\t\t`b`\n}\n"), ==, 1u);
 					}
 
 					// One the layout breaks up is no violation of the result's making, so it

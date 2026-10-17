@@ -49,9 +49,12 @@ authoritative: the profile alone selects the language, and nothing in the engine
 or MTool may infer one from a file's name. It has rules of its own
 (`fp_PrepareBuildSystemLines` and the `fp_RuleBuildSystem*` rules), sharing the
 lexer, ranges, protected regions, disabled regions and verification with C++.
-Its rules read brackets and lines alone and never build a `CCodeStructure`; keep
-them whitespace-only, and settle a new rule against the whole tree's `.M*` files
-before enabling it, since nearly every line there already follows one convention.
+Its rules read tokens, brackets and lines and never build a `CCodeStructure`;
+values are laid out by the C++ layout's rules, reimplemented on brackets and
+operators in `fp_RuleBuildSystemLineBreaks`, with openers ending their lines.
+Keep them whitespace-only, and settle a new rule against the whole tree's `.M*`
+files before enabling it, checking with `./mib generate` that every changed file
+still parses.
 
 `fg_AnalyzeCodeFormatting` is pure: it takes immutable source bytes and returns
 an ordered, non-overlapping edit plan plus diagnostics. Introduce no filesystem

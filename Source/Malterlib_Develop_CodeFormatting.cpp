@@ -851,6 +851,7 @@ namespace
 		bool fp_PrepareBuildSystemLines(CStr &o_Explanation);
 		void fp_RuleBuildSystemIndentation();
 		void fp_RuleBuildSystemBlankLines();
+		void fp_RuleBuildSystemLineBreaks();
 
 		CCodeFormattingRequest const &m_Request;
 		CCodeTokenStream m_Tokens;
@@ -922,6 +923,7 @@ namespace
 			bool m_bContinued = false;
 		};
 		NContainer::TCVector<CBuildSystemLine> m_BuildSystemLines;
+		NContainer::TCVector<uint8> m_BuildSystemPlaced;			// Indexed by token: the value layout writes the gap in front of it.
 		bool m_bWholeFile = false;
 	};
 
@@ -3756,6 +3758,7 @@ namespace
 			fp_RuleFinalNewline();
 			if (bBuildSystem)
 			{
+				fp_RuleBuildSystemLineBreaks();
 				fp_RuleBuildSystemBlankLines();
 				fp_RuleBuildSystemIndentation();
 			}
@@ -4019,6 +4022,10 @@ namespace
 			if (Line.m_iFirst < 0 || m_bProtectedStart[iLine] || !fp_IsLineSelected(iLine))
 				continue;
 
+			// A line the value layout places has its indentation from it.
+			if (umint(Line.m_iFirst) < m_BuildSystemPlaced.f_GetLen() && m_BuildSystemPlaced[umint(Line.m_iFirst)])
+				continue;
+
 			auto iStart = m_Lines.f_GetLineStart(iLine);
 			if (!iLine)
 				iStart += fg_GetTextBomLength(Source);
@@ -4040,6 +4047,414 @@ namespace
 					, First.m_iOffset - iStart
 					, Canonical
 					, Line.m_bContinued ? "a continued value aligns with the value it continues" : "a line stands one level deeper than the bracket open around it"
+				)
+			;
+		}
+	}
+
+	// A value is laid out by the rules C++ code is, with its openers ending their lines: a value written across lines
+	// is brought back onto one where it fits, unless it holds an array or object written across lines, which keeps
+	// its lines with each element on one of its own. Otherwise the widest bracket the value holds whole opens, or
+	// the one holding what keeps its lines: the opener ends its line, the members stand one level in, split at
+	// their commas with each comma in front, or, without commas, in front of the operators that bind loosest, and
+	// the closer stands at the line's level. A member laid out the same way opens in turn where it does not fit. A
+	// string ending a line counts for no width, as for line-length. A statement holding a comment, other than one
+	// ending it, or continued by a backslash keeps its lines.
+	void CFormattingAnalyzer::fp_RuleBuildSystemLineBreaks()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Source = m_Request.m_Source;
+		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
+		m_BuildSystemPlaced.f_SetLen(Tokens.f_GetLen());
+		for (auto &bPlaced : m_BuildSystemPlaced)
+			bPlaced = 0;
+
+		auto fIsCode = [&](umint _iToken)
+			{
+				auto Kind = Tokens[_iToken].m_Kind;
+
+				return Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline && Kind != ECodeTokenKind::mc_ByteOrderMark;
+			}
+		;
+		auto fNext = [&](umint _iToken)
+			{
+				auto i = _iToken + 1;
+				while (i < Tokens.f_GetLen() && !fIsCode(i))
+					++i;
+
+				return i;
+			}
+		;
+		auto fPrevious = [&](umint _iToken) -> aint
+			{
+				aint i = aint(_iToken) - 1;
+				while (i >= 0 && !fIsCode(umint(i)))
+					--i;
+
+				return i;
+			}
+		;
+		auto fLine = [&](umint _iToken)
+			{
+				return m_Lines.f_FindLine(Tokens[_iToken].m_iOffset);
+			}
+		;
+		auto fIsText = [&](umint _iToken, ch8 const *_pText)
+			{
+				return m_Tokens.f_IsText(Tokens[_iToken], _pText);
+			}
+		;
+
+		// The closer of each opener, and whether a bracket is a scope of the registry rather than part of a value.
+		TCVector<umint> Closer;
+		Closer.f_SetLen(Tokens.f_GetLen());
+		TCVector<uint8> bScope;
+		bScope.f_SetLen(Tokens.f_GetLen());
+		{
+			TCVector<umint> Open;
+			umint nValueDepth = 0;
+			for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+			{
+				bScope[i] = 0;
+				Closer[i] = Tokens.f_GetLen();
+				if (!fIsCode(i))
+					continue;
+
+				if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]))
+				{
+					auto iBefore = fPrevious(i);
+					bool bFirstOnLine = iBefore < 0 || fLine(umint(iBefore)) != fLine(i);
+					bScope[i] = fIsText(i, "{") && bFirstOnLine && !nValueDepth;
+					nValueDepth += !bScope[i];
+					Open.f_Insert(i);
+				}
+				else if (fg_IsBuildSystemCloser(m_Tokens, Tokens[i]) && !Open.f_IsEmpty())
+				{
+					auto iOpener = Open.f_GetLast();
+					Open.f_Remove(Open.f_GetLen() - 1);
+					Closer[iOpener] = i;
+					bScope[i] = bScope[iOpener];
+					nValueDepth -= !bScope[iOpener];
+				}
+			}
+		}
+
+		auto fIsKept = [&](umint _iOpener)
+			{
+				return (fIsText(_iOpener, "[") || fIsText(_iOpener, "{")) && Closer[_iOpener] < Tokens.f_GetLen() && fLine(_iOpener) != fLine(Closer[_iOpener]);
+			}
+		;
+		// The spelling a gap takes on one line: the source's where it has no line break, and otherwise the one the
+		// tokens around it are written with.
+		auto fGapText = [&](umint _iLeft, umint _iRight) -> CStr
+			{
+				auto iGap = Tokens[_iLeft].f_GetEnd();
+				CStr Gap(Source.f_GetStr() + iGap, Tokens[_iRight].m_iOffset - iGap);
+				if (Gap.f_FindChar('\n') < 0 && Gap.f_FindChar('\r') < 0)
+					return Gap;
+
+				if (fIsText(_iLeft, "(") || fIsText(_iLeft, "[") || fIsText(_iRight, ")") || fIsText(_iRight, "]") || fIsText(_iRight, ","))
+					return {};
+
+				return " ";
+			}
+		;
+		auto fWidth = [&](umint _nIndent, umint _iFirst, umint _iLast, umint &o_nColumns)
+			{
+				CStr Text;
+				for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+				{
+					if (i != _iFirst)
+						Text += fGapText(umint(fPrevious(i)), i);
+
+					if (i == _iLast && Tokens[i].m_Kind == ECodeTokenKind::mc_StringLiteral && i != _iFirst)
+						break;
+
+					Text += m_Tokens.f_GetText(Tokens[i]);
+				}
+
+				umint nColumns = 0;
+				if (!fg_MeasureTextColumns(Text, nTab, nColumns))
+					return false;
+
+				o_nColumns = _nIndent + nColumns;
+
+				return true;
+			}
+		;
+		auto fFits = [&](umint _nIndent, umint _iFirst, umint _iLast)
+			{
+				umint nColumns = 0;
+
+				return fWidth(_nIndent, _iFirst, _iLast, nColumns) && (!nMaxColumns || nColumns <= nMaxColumns);
+			}
+		;
+		auto fHoldsKept = [&](umint _iFirst, umint _iLast)
+			{
+				for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+				{
+					if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && fIsKept(i))
+						return true;
+				}
+
+				return false;
+			}
+		;
+
+		struct CGap
+		{
+			bool m_bBreak = false;
+			umint m_nIndent = 0;
+		};
+		TCMap<umint, CGap> Gaps;
+		auto fJoin = [&](umint _iFirst, umint _iLast)
+			{
+				for (auto i = fNext(_iFirst); i <= _iLast; i = fNext(i))
+				{
+					if (fLine(umint(fPrevious(i))) != fLine(i))
+						Gaps[i] = CGap{false, 0};
+				}
+			}
+		;
+		auto fBreak = [&](umint _iToken, umint _nIndent)
+			{
+				Gaps[_iToken] = CGap{true, _nIndent};
+			}
+		;
+		// How loosely an operator binds where a group without commas splits, or zero for no operator.
+		auto fLooseness = [&](umint _iToken, bool _bTernary) -> umint
+			{
+				if (Tokens[_iToken].m_Kind != ECodeTokenKind::mc_Punctuator)
+					return 0;
+
+				if (fIsText(_iToken, "?") || (_bTernary && fIsText(_iToken, ":")))
+					return 7;
+
+				if (fIsText(_iToken, "||"))
+					return 6;
+
+				if (fIsText(_iToken, "&&"))
+					return 5;
+
+				if (fIsText(_iToken, "==") || fIsText(_iToken, "!=") || fIsText(_iToken, "<=") || fIsText(_iToken, ">="))
+					return 4;
+
+				// '<!=>' and '<==>' compare as well, their '<' starting them.
+				auto iNext = fNext(_iToken);
+				if (fIsText(_iToken, "<") && iNext < Tokens.f_GetLen() && Tokens[iNext].m_iOffset == Tokens[_iToken].f_GetEnd() && (fIsText(iNext, "!=") || fIsText(iNext, "==")))
+					return 4;
+
+				if (fIsText(_iToken, "+") || fIsText(_iToken, "/"))
+					return 3;
+
+				return 0;
+			}
+		;
+
+		auto fLayout = [&](auto &&_fLayout, umint _nIndent, umint _iFirst, umint _iLast) -> void
+			{
+				bool bKept = fHoldsKept(_iFirst, _iLast);
+				if (!bKept && fFits(_nIndent, _iFirst, _iLast))
+				{
+					fJoin(_iFirst, _iLast);
+
+					return;
+				}
+
+				// The bracket that opens: one holding what keeps its lines, and otherwise the widest.
+				aint iOpen = -1;
+				umint nWidest = 0;
+				for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+				{
+					if (!fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) || bScope[i] || Closer[i] > _iLast)
+						continue;
+
+					auto iClose = Closer[i];
+					bool bInnerKept = fIsKept(i) || fHoldsKept(i, iClose);
+					umint nColumns = 0;
+					fWidth(0, i, iClose, nColumns);
+					if (fNext(i) != iClose && ((bInnerKept && (iOpen < 0 || !fHoldsKept(umint(iOpen), Closer[umint(iOpen)]))) || (!bKept && nColumns > nWidest)))
+					{
+						iOpen = aint(i);
+						nWidest = nColumns;
+					}
+
+					i = iClose;
+				}
+
+				if (iOpen < 0)
+				{
+					if (!bKept)
+						fJoin(_iFirst, _iLast);
+
+					return;
+				}
+
+				auto iOpener = umint(iOpen);
+				auto iClose = Closer[iOpener];
+				if (iOpener != _iFirst)
+					fJoin(_iFirst, iOpener);
+
+				auto nInner = _nIndent + nTab;
+				auto iFirstMember = fNext(iOpener);
+				auto iLastMember = umint(fPrevious(iClose));
+
+				// The member separators at the bracket's own level: its commas, or the operators that bind loosest.
+				TCVector<umint> Splits;
+				bool bTernary = false;
+				for (auto i = iFirstMember; i <= iLastMember; i = fNext(i))
+				{
+					if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= iLastMember)
+						i = Closer[i];
+					else if (fIsText(i, "?"))
+						bTernary = true;
+					else if (fIsText(i, ","))
+						Splits.f_Insert(i);
+				}
+
+				if (Splits.f_IsEmpty() && !fIsText(iOpener, "{"))
+				{
+					umint nLoosest = 0;
+					for (auto i = iFirstMember; i <= iLastMember; i = fNext(i))
+					{
+						if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= iLastMember)
+							i = Closer[i];
+						else if (i != iFirstMember)
+							nLoosest = fg_Max(nLoosest, fLooseness(i, bTernary));
+					}
+
+					for (auto i = iFirstMember; nLoosest && i <= iLastMember; i = fNext(i))
+					{
+						if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= iLastMember)
+							i = Closer[i];
+						else if (i != iFirstMember && fLooseness(i, bTernary) == nLoosest)
+							Splits.f_Insert(i);
+					}
+				}
+
+				fBreak(iFirstMember, nInner);
+				auto iMember = iFirstMember;
+				for (auto iSplit : Splits)
+				{
+					_fLayout(_fLayout, nInner, iMember, umint(fPrevious(iSplit)));
+					fBreak(iSplit, nInner);
+					iMember = iSplit;
+				}
+
+				_fLayout(_fLayout, nInner, iMember, iLastMember);
+				fBreak(iClose, _nIndent);
+				if (iClose != _iLast)
+					fJoin(iClose, _iLast);
+			}
+		;
+
+		// The statements: what stands from a line no value is open at to the line all of its values close on.
+		for (umint iLine = 0; iLine < m_Lines.f_GetLineCount(); ++iLine)
+		{
+			auto const &Line = m_BuildSystemLines[iLine];
+			if (Line.m_iFirst < 0 || Line.m_bContinued)
+				continue;
+
+			auto iFirst = umint(Line.m_iFirst);
+			if (bScope[iFirst] || fg_IsBuildSystemCloser(m_Tokens, Tokens[iFirst]))
+				continue;
+
+			// The statement runs on while a bracket its lines open stays open.
+			umint iLast = iFirst;
+			umint nOpen = 0;
+			auto iEndLine = iLine;
+			bool bPlain = true;
+			for (auto i = iFirst; i < Tokens.f_GetLen(); ++i)
+			{
+				if (!fIsCode(i))
+				{
+					if (Tokens[i].m_Kind == ECodeTokenKind::mc_Newline && !nOpen)
+						break;
+
+					continue;
+				}
+
+				auto Kind = Tokens[i].m_Kind;
+				if (Kind == ECodeTokenKind::mc_LineSplice)
+					bPlain = false;
+
+				if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && !bScope[i])
+					++nOpen;
+				else if (fg_IsBuildSystemCloser(m_Tokens, Tokens[i]) && !bScope[i] && nOpen)
+					--nOpen;
+				else if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) || fg_IsBuildSystemCloser(m_Tokens, Tokens[i]))
+					break;
+
+				iLast = i;
+				iEndLine = fLine(i);
+			}
+
+			// A comment ending the statement is no part of its value; one inside it keeps its lines.
+			if (Tokens[iLast].m_Kind == ECodeTokenKind::mc_LineComment || Tokens[iLast].m_Kind == ECodeTokenKind::mc_BlockComment)
+			{
+				auto iBefore = fPrevious(iLast);
+				if (iBefore < 0 || umint(iBefore) < iFirst)
+				{
+					iLine = iEndLine;
+
+					continue;
+				}
+
+				iLast = umint(iBefore);
+			}
+
+			for (auto i = iFirst; bPlain && i <= iLast; ++i)
+			{
+				auto Kind = Tokens[i].m_Kind;
+				bPlain = Kind != ECodeTokenKind::mc_LineComment && Kind != ECodeTokenKind::mc_BlockComment && (!fIsCode(i) || !Tokens[i].m_bMultiLine);
+			}
+
+			bool bSelected = true;
+			for (auto iSelected = iLine; iSelected <= iEndLine && bSelected; ++iSelected)
+				bSelected = fp_IsLineSelected(iSelected) && !m_bProtectedStart[iSelected];
+
+			auto iStatementStart = m_Lines.f_GetLineStart(iLine);
+			auto iStatementEnd = m_Lines.f_GetLineStart(iEndLine) + m_Lines.f_GetLine(iEndLine).m_nLength;
+			if (bPlain && bSelected && !fp_IsFormatOff(iStatementStart, iStatementEnd - iStatementStart))
+				fLayout(fLayout, Line.m_Level * nTab, iFirst, iLast);
+
+			iLine = iEndLine;
+		}
+
+		for (auto iGap = Gaps.f_GetIterator(); iGap; ++iGap)
+		{
+			auto iToken = Gaps.fs_GetKey(*iGap);
+			auto const &Gap = *iGap;
+			auto iPrevious = umint(fPrevious(iToken));
+			auto iStart = Tokens[iPrevious].f_GetEnd();
+			CStr Current(Source.f_GetStr() + iStart, Tokens[iToken].m_iOffset - iStart);
+			CStr Replacement;
+			if (Gap.m_bBreak)
+			{
+				// A blank line between two members keeps setting them apart.
+				umint nNewlines = 0;
+				for (auto ch : Current)
+					nNewlines += ch == '\n';
+
+				bool bBlank = nNewlines > 1 && !fg_IsBuildSystemOpener(m_Tokens, Tokens[iPrevious]) && !fg_IsBuildSystemCloser(m_Tokens, Tokens[iToken]);
+				Replacement = (bBlank ? Ending + Ending : Ending) + fp_MakeIndent(Gap.m_nIndent);
+			}
+			else
+				Replacement = fGapText(iPrevious, iToken);
+
+			m_BuildSystemPlaced[iToken] = 1;
+			if (Replacement == Current)
+				continue;
+
+			fp_AddEdit
+				(
+					"line-break"
+					, iStart
+					, Current.f_GetLen()
+					, Replacement
+					, Gap.m_bBreak ? "a value split across lines opens its brackets" : "a value that fits on one line is written on one"
 				)
 			;
 		}
