@@ -3514,8 +3514,9 @@ namespace
 
 	// The limit applies to the lines the rules produce, not to the ones the source has: a
 	// line they break up is no violation, and only what they leave too long is reported,
-	// against the source line the result's line came from. In the build system's files the
-	// strings a line holds count for no width, since their values are what make its lines long.
+	// against the source line the result's line came from. In the build system's files a string
+	// ending a line counts for no width, since its value is what makes the line long and no break
+	// can shorten it; what stands in front of it counts.
 	void CFormattingAnalyzer::fp_DiagnoseLineLength(NContainer::TCVector<CCodeFormattingEdit> const &_Edits)
 	{
 		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
@@ -3529,31 +3530,27 @@ namespace
 		if (Language == ECodeLanguage::mc_BuildSystem)
 			pStringTokens = fg_Construct(Formatted, nullptr, Language);
 
-		// The line's text without the strings standing on it.
-		auto fWithoutStrings = [&](umint _iStart, umint _nLength)
+		// The line's text in front of the string that ends it, which only a splice may follow, or the whole line.
+		auto fWithoutEndingString = [&](umint _iStart, umint _nLength)
 			{
 				auto const &Tokens = pStringTokens->f_GetTokens();
-				CStr Text;
 				auto iEnd = _iStart + _nLength;
-				auto iCopied = _iStart;
+				aint iEnding = -1;
 				for (auto iToken = pStringTokens->f_FindToken(_iStart); iToken < Tokens.f_GetLen() && Tokens[iToken].m_iOffset < iEnd; ++iToken)
 				{
-					auto const &Token = Tokens[iToken];
-					if (Token.m_Kind != ECodeTokenKind::mc_StringLiteral)
-						continue;
-
-					auto iStringStart = fg_Max(Token.m_iOffset, _iStart);
-					auto iStringEnd = fg_Min(Token.f_GetEnd(), iEnd);
-					if (iStringStart > iCopied)
-						Text += CStr(Formatted.f_GetStr() + iCopied, iStringStart - iCopied);
-
-					iCopied = fg_Max(iCopied, iStringEnd);
+					auto Kind = Tokens[iToken].m_Kind;
+					if (Kind == ECodeTokenKind::mc_StringLiteral)
+						iEnding = aint(iToken);
+					else if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline && Kind != ECodeTokenKind::mc_LineSplice)
+						iEnding = -1;
 				}
 
-				if (iEnd > iCopied)
-					Text += CStr(Formatted.f_GetStr() + iCopied, iEnd - iCopied);
+				if (iEnding < 0)
+					return CStr(Formatted.f_GetStr() + _iStart, _nLength);
 
-				return Text;
+				auto iStringStart = fg_Max(Tokens[umint(iEnding)].m_iOffset, _iStart);
+
+				return CStr(Formatted.f_GetStr() + _iStart, iStringStart - _iStart);
 			}
 		;
 		auto iReported = TCLimitsInt<umint>::mc_Max;
@@ -3575,7 +3572,7 @@ namespace
 				continue;
 
 			umint nCodeColumns = 0;
-			if (pStringTokens && fg_MeasureTextColumns(fWithoutStrings(iStart, nLength), m_Request.m_Settings.m_nTabWidth, nCodeColumns) && nCodeColumns <= nMaxColumns)
+			if (pStringTokens && fg_MeasureTextColumns(fWithoutEndingString(iStart, nLength), m_Request.m_Settings.m_nTabWidth, nCodeColumns) && nCodeColumns <= nMaxColumns)
 				continue;
 
 			// Several lines of the result can come from one line of the source, which is

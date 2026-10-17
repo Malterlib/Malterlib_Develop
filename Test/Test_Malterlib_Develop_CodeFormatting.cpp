@@ -4606,7 +4606,8 @@ namespace
 					// An indivisible overlong line stays visible and is not rewritten.
 					DMibExpectTrue(Result.m_Edits.f_IsEmpty());
 
-					// In the build system's files a line's strings count for no width, its code and comments for theirs.
+					// In the build system's files a string ending a line counts for no width; one with more behind it, and the
+					// line's code and comments, count for theirs.
 					{
 						CStr Value;
 						for (umint i = 0; i < 200; ++i)
@@ -4623,6 +4624,7 @@ namespace
 						;
 						DMibExpect(fLengthReports("Property\n{\n\tA \"" + Value + "\"\n\tB `" + Value + " @(A)`\n}\n"), ==, 0u);
 						DMibExpect(fLengthReports("Property\n{\n\tA \"a\" // " + Value + "\n}\n"), ==, 1u);
+						DMibExpect(fLengthReports("Property\n{\n\tA {Name: \"" + Value + "\"}\n\tB `" + Value + "`\\\n\t\t`b`\n}\n"), ==, 1u);
 					}
 
 					// One the layout breaks up is no violation of the result's making, so it
