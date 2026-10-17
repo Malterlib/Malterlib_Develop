@@ -1882,6 +1882,17 @@ namespace
 							, "void f()\n{\n#if A\n\tg();\n#endif\n\n#if B\n\tif (a)\n\t\th();\n\telse\n#endif\n\t\tk();\n}\n"
 						)
 					;
+					// An alternative branch is placed by what stands in front of its conditional, and a stretch inside an argument
+					// list moves with the statement it is in.
+					fg_ExpectFormat
+						(
+							"OpaqueConditionalBodyAlternatives"
+							, "void f()\n{\n\tg();\n#ifdef A\n\t errno_t Errno = h();\n\t if (a)\n#else\n\tb = h();\n\tif (b)\n#endif\n\t{\n\t\tk();\n\t}\n"
+							"\tfg_Call\n\t\t(\n#if B\n\t\t\tfg_Wrap\n\t\t\t(\n#endif\n\t\t\t\tx\n#if B\n\t\t\t)\n#endif\n\t\t\t, y\n\t\t)\n\t;\n}\n"
+							, "void f()\n{\n\tg();\n#ifdef A\n\terrno_t Errno = h();\n\tif (a)\n#else\n\tb = h();\n\tif (b)\n#endif\n\t{\n\t\tk();\n\t}\n"
+							"\tfg_Call\n\t\t(\n#if B\n\t\t\tfg_Wrap\n\t\t\t(\n#endif\n\t\t\t\tx\n#if B\n\t\t\t)\n#endif\n\t\t\t, y\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(

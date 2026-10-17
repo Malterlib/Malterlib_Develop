@@ -7874,8 +7874,9 @@ namespace
 
 		// A block without depths of its own keeps its lines' depths relative to each other between the directives
 		// standing in it: each stretch moves as a whole, its first line one level in from the block's brace, or at the
-		// brace's level for a label. A stretch whose first line does not start a statement, such as the body of a
-		// guard a directive cuts, moves as far as the one in front of it.
+		// brace's level for a label. A stretch whose first line does not start a statement at the block's level, such as
+		// the body of a guard a directive cuts or an argument, moves as far as the one in front of it. An alternative
+		// branch starts where its conditional does, so what stands in front of the '#if' says whether it starts one.
 		if (bBraced && !bDepths)
 		{
 			auto fStartsLine = [&](umint _iToken)
@@ -7894,6 +7895,15 @@ namespace
 			aint nDelta = 0;
 			bool bNeedsReference = true;
 			umint iNestedEnd = 0;
+			auto nBodyDepth = m_TokenDepth[Node.m_iFirstToken] + 1;
+			struct CConditional
+			{
+				aint m_iBefore;
+				aint m_nDelta;
+			};
+			TCVector<CConditional> Conditionals;
+			aint iStretchBefore = -2;							// The code in front of the stretch when it opens an alternative branch.
+			aint nStretchDelta = 0;
 			TCVector<umint> PendingComments;
 			auto fMoveComment = [&](umint _iComment)
 				{
@@ -7914,8 +7924,21 @@ namespace
 				auto Kind = Tokens[i].m_Kind;
 				if (Kind == ECodeTokenKind::mc_Preprocessor)
 				{
-					if (!bNested)
-						bNeedsReference = true;
+					if (bNested)
+						continue;
+
+					bNeedsReference = true;
+					iStretchBefore = -2;
+					auto Keyword = fp_GetDirectiveKeyword(i);
+					if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
+						Conditionals.f_Insert(CConditional{fp_PreviousCode(i), nDelta});
+					else if (!Conditionals.f_IsEmpty() && (Keyword == "elif" || Keyword == "elifdef" || Keyword == "elifndef" || Keyword == "else"))
+					{
+						iStretchBefore = Conditionals.f_GetLast().m_iBefore;
+						nStretchDelta = Conditionals.f_GetLast().m_nDelta;
+					}
+					else if (!Conditionals.f_IsEmpty() && Keyword == "endif")
+						Conditionals.f_Remove(Conditionals.f_GetLen() - 1);
 
 					continue;
 				}
@@ -7937,12 +7960,18 @@ namespace
 				if (bNeedsReference && !bNested)
 				{
 					bNeedsReference = false;
-					auto iPrevious = fp_PreviousCode(i);
-					bool bStatement = iPrevious < 0
-						|| umint(iPrevious) == Node.m_iFirstToken
-						|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], ";")
-						|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], "{")
-						|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], "}")
+					auto iPrevious = iStretchBefore != -2 ? iStretchBefore : fp_PreviousCode(i);
+					if (iStretchBefore != -2)
+						nDelta = nStretchDelta;
+
+					bool bStatement = m_TokenDepth[i] == nBodyDepth
+						&& (
+							iPrevious < 0
+							|| umint(iPrevious) == Node.m_iFirstToken
+							|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], ";")
+							|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], "{")
+							|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], "}")
+						)
 					;
 					if (bStatement)
 					{
