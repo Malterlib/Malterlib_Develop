@@ -4388,6 +4388,28 @@ namespace
 				_fLayout(_fLayout, nInner, iMember, iLastMember);
 				fBreak(iClose, _nIndent);
 
+				// Two objects that both open meet on the line one closes on: '}, {'.
+				auto fOpens = [&](umint _iCloser)
+					{
+						auto pGap = Gaps.f_FindEqual(_iCloser);
+
+						return pGap && pGap->m_bBreak;
+					}
+				;
+				for (auto iSplit : Splits)
+				{
+					auto iBefore = fPrevious(iSplit);
+					auto iAfter = fNext(iSplit);
+					if (!fIsText(iSplit, ",") || iBefore < 0 || !fIsText(umint(iBefore), "}") || !fIsText(iAfter, "{") || Closer[iAfter] >= Tokens.f_GetLen())
+						continue;
+
+					if (fOpens(umint(iBefore)) && fOpens(Closer[iAfter]))
+					{
+						Gaps[iSplit] = CGap{false, 0};
+						Gaps[iAfter] = CGap{false, 0};
+					}
+				}
+
 				// What follows the closer on its line is laid out from there: '])->F(...)'.
 				if (iClose != _iLast)
 					_fLayout(_fLayout, _nIndent, iClose, _iLast);

@@ -432,12 +432,12 @@ namespace
 							, "P\n{\n\tA !(\n\t\t[\n\t\t\t\"a\"\n\t\t]->F(B)\n\t)\n}\n"
 						)
 					;
-					// Objects written across lines in an array each start a line of their own.
+					// Objects written across lines in an array meet on the line one closes on.
 					fg_ExpectBuildSystemFormat
 						(
 							"ObjectsInArray"
 							, "P\n{\n\tL =+ [{\n\t\tA: 1\n\t}\n\t, {\n\t\tB: 2\n\t}\n\t]\n}\n"
-							, "P\n{\n\tL =+ [\n\t\t{\n\t\t\tA: 1\n\t\t}\n\t\t, {\n\t\t\tB: 2\n\t\t}\n\t]\n}\n"
+							, "P\n{\n\tL =+ [\n\t\t{\n\t\t\tA: 1\n\t\t}, {\n\t\t\tB: 2\n\t\t}\n\t]\n}\n"
 						)
 					;
 				};
