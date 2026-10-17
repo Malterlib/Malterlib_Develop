@@ -4701,7 +4701,8 @@ namespace
 					bKeepLines = true;
 				else if (Kind == ECodeTokenKind::mc_Preprocessor)
 				{
-					if (m_bOpaqueDirective[iGap])
+					// Behind an opaque directive the line only takes the indentation a block it moves with gives it.
+					if (m_bOpaqueDirective[iGap] && State != EGap::mc_Indent)
 						bOwned = true;
 					else
 						bKeepLines = true;
@@ -7382,14 +7383,13 @@ namespace
 		return true;
 	}
 
-	// Whether the block's lines can follow a move. A multiline token spells its own lines
-	// and an opaque directive fixes the ones around it, so neither can be brought to a new
-	// depth. A directive keeps the column its own convention gives it either way.
+	// Whether the block's lines can follow a move. A multiline token spells its own lines, so
+	// they cannot be brought to a new depth. The lines around an opaque directive keep their
+	// depths relative to each other, which a move as a whole leaves them, and a directive is
+	// written by its own rule either way.
 	bool CFormattingAnalyzer::fp_CanPlaceBlock(umint _iBlock) const
 	{
-		auto const &Block = m_Structure.f_GetNodes()[_iBlock];
-
-		return !Block.m_bHasMultiLineToken && !fp_HasOpaqueDirective(Block.m_iFirstToken, Block.m_iLastToken);
+		return !m_Structure.f_GetNodes()[_iBlock].m_bHasMultiLineToken;
 	}
 
 	// Moves every line the block's tokens start by the given number of columns.
@@ -7429,10 +7429,19 @@ namespace
 				default: break;
 			}
 
-			if (fp_IsBreakGap(i) || !fp_IsFirstOnLine(i))
+			if (fp_IsBreakGap(i))
 				continue;
 
-			auto nIndent = aint(fp_GetStatementIndent(i)) + _nDelta;
+			// A line behind a directive starts with the token as well.
+			auto iLineStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[i].m_iOffset));
+			bool bStartsLine = true;
+			for (auto iByte = iLineStart; iByte < Tokens[i].m_iOffset && bStartsLine; ++iByte)
+				bStartsLine = fg_IsSpaceOrTab(m_Request.m_Source.f_GetStr()[iByte]);
+
+			if (!bStartsLine)
+				continue;
+
+			auto nIndent = aint(fp_GetSourceLineIndent(i)) + _nDelta;
 			if (nIndent >= 0)
 				fp_IndentBefore(i, umint(nIndent));
 		}

@@ -1855,6 +1855,15 @@ namespace
 							"#if B\n\tvoid g()\n\t{\n\t}\n#endif\n};\n"
 						)
 					;
+					// A body holding a conditional that cuts a construct moves under its head as a whole, the lines behind the
+					// directives included, keeping their depths relative to each other.
+					fg_ExpectFormat
+						(
+							"OpaqueConditionalBodyMoves"
+							, "struct CFoo\n{\n\tvoid f()\n\t\t{\n#if A\n\t\t\tif (a)\n\t\t\t\tg();\n\t\t\telse\n#endif\n\t\t\t\th();\n\t\t}\n};\n"
+							, "struct CFoo\n{\n\tvoid f()\n\t{\n#if A\n\t\tif (a)\n\t\t\tg();\n\t\telse\n#endif\n\t\t\th();\n\t}\n};\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(
