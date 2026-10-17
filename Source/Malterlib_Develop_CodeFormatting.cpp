@@ -4141,9 +4141,44 @@ namespace
 			}
 		}
 
+		// The arguments in front of the key and value pairs of a call to one of the language's switch functions, or -1
+		// for any other bracket: the value switched on, unless it is the object the function is called on, and the
+		// error or default.
+		auto fSwitchSingles = [&](umint _iOpener) -> aint
+			{
+				if (!fIsText(_iOpener, "("))
+					return -1;
+
+				auto iName = fPrevious(_iOpener);
+				if (iName < 0)
+					return -1;
+
+				auto nSingles = fIsText(umint(iName), "Switch") ? 1 : (fIsText(umint(iName), "SwitchWithError") || fIsText(umint(iName), "SwitchWithDefault")) ? 2 : 0;
+				if (!nSingles)
+					return -1;
+
+				// The build system's lexer spells '->' as '-' and '>'.
+				auto iBefore = fPrevious(umint(iName));
+				bool bMember = iBefore >= 0 && fIsText(umint(iBefore), "->");
+				if (iBefore >= 0 && fIsText(umint(iBefore), ">"))
+				{
+					auto iMinus = fPrevious(umint(iBefore));
+					bMember = iMinus >= 0 && fIsText(umint(iMinus), "-") && Tokens[umint(iMinus)].f_GetEnd() == Tokens[umint(iBefore)].m_iOffset;
+				}
+
+				return nSingles - (bMember ? 1 : 0);
+			}
+		;
+		// A switch's pairs always stand on lines of their own, and so does an array or object written across lines.
 		auto fIsKept = [&](umint _iOpener)
 			{
-				return (fIsText(_iOpener, "[") || fIsText(_iOpener, "{")) && Closer[_iOpener] < Tokens.f_GetLen() && fLine(_iOpener) != fLine(Closer[_iOpener]);
+				if (Closer[_iOpener] >= Tokens.f_GetLen())
+					return false;
+
+				if (fSwitchSingles(_iOpener) >= 0)
+					return fNext(_iOpener) != Closer[_iOpener];
+
+				return (fIsText(_iOpener, "[") || fIsText(_iOpener, "{")) && fLine(_iOpener) != fLine(Closer[_iOpener]);
 			}
 		;
 		// The spelling a gap takes on one line: the source's where it has no line break, and otherwise the one the
@@ -4304,6 +4339,8 @@ namespace
 				// The member separators at the bracket's own level: its commas, or the operators that bind loosest.
 				TCVector<umint> Splits;
 				bool bTernary = false;
+				auto nSingles = fSwitchSingles(iOpener);
+				umint iArgument = 0;
 				for (auto i = iFirstMember; i <= iLastMember; i = fNext(i))
 				{
 					if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && Closer[i] <= iLastMember)
@@ -4311,7 +4348,12 @@ namespace
 					else if (fIsText(i, "?"))
 						bTernary = true;
 					else if (fIsText(i, ","))
-						Splits.f_Insert(i);
+					{
+						// A switch's key and value share a line.
+						++iArgument;
+						if (nSingles < 0 || aint(iArgument) <= nSingles || (iArgument - umint(nSingles)) % 2 == 0)
+							Splits.f_Insert(i);
+					}
 				}
 
 				if (Splits.f_IsEmpty() && !fIsText(iOpener, "{"))

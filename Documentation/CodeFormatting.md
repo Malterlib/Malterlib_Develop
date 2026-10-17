@@ -936,6 +936,19 @@ stands at the line's level. A member laid out the same way opens in turn:
 	]
 ```
 
+A call to one of the language's switch functions always opens, whether or not
+it fits. The value switched on, unless the function is called on it with `->`,
+and the error or default of `SwitchWithError` and `SwitchWithDefault`, take a
+line each, and each key shares its line with its value:
+
+```
+	f_SourceLanguageFlag _Type->SwitchWithError(
+		"Unsupported compile type: "
+		, "C++", "/TP"
+		, "C", "/TC"
+	)
+```
+
 A statement holding a comment other than one ending it, or continued by a
 backslash, keeps its lines.
 

@@ -381,6 +381,16 @@ namespace
 
 				DMibTestCategory("Values")
 				{
+					// A switch always opens, its value, error or default each on a line and each key with its value.
+					fg_ExpectBuildSystemFormat
+						(
+							"Switch"
+							, "P\n{\n\tA _Type->SwitchWithError(\"Unsupported: \", \"C++\", \"/TP\", \"C\", \"/TC\")\n\tB SwitchWithDefault(Compile.Type, false, \"C++\", true)\n"
+							"\tC X->Switch(\"a\", 1, \"b\", 2)\n}\n"
+							, "P\n{\n\tA _Type->SwitchWithError(\n\t\t\"Unsupported: \"\n\t\t, \"C++\", \"/TP\"\n\t\t, \"C\", \"/TC\"\n\t)\n"
+							"\tB SwitchWithDefault(\n\t\tCompile.Type\n\t\t, false\n\t\t, \"C++\", true\n\t)\n\tC X->Switch(\n\t\t\"a\", 1\n\t\t, \"b\", 2\n\t)\n}\n"
+						)
+					;
 					// A line too long for its limit opens the outermost object, array or call it holds whole: the opener ends the
 					// line, each member stands one level in with its comma in front, and a member still too long opens in turn.
 					{
