@@ -7872,64 +7872,105 @@ namespace
 				fp_IndentBefore(Node.m_iLastToken, _iIndent);
 		}
 
-		// A block without depths of its own keeps its lines' depths relative to each other, its first statement one
-		// level in from its brace; a label stands at the brace's level.
+		// A block without depths of its own keeps its lines' depths relative to each other between the directives
+		// standing in it: each stretch moves as a whole, its first line one level in from the block's brace, or at the
+		// brace's level for a label. A stretch whose first line does not start a statement, such as the body of a
+		// guard a directive cuts, moves as far as the one in front of it.
 		if (bBraced && !bDepths)
 		{
-			TCVector<umint> LineStarts;
-			TCVector<umint> CommentLines;
-			aint iReference = -1;
+			auto fStartsLine = [&](umint _iToken)
+				{
+					auto iLine = m_Lines.f_FindLine(Tokens[_iToken].m_iOffset);
+					auto iLineStart = m_Lines.f_GetLineStart(iLine);
+					for (auto iByte = iLineStart; iByte < Tokens[_iToken].m_iOffset; ++iByte)
+					{
+						if (!fg_IsSpaceOrTab(m_Request.m_Source.f_GetStr()[iByte]))
+							return false;
+					}
+
+					return !m_bProtectedStart[iLine];
+				}
+			;
+			aint nDelta = 0;
+			bool bNeedsReference = true;
+			umint iNestedEnd = 0;
+			TCVector<umint> PendingComments;
+			auto fMoveComment = [&](umint _iComment)
+				{
+					auto nIndent = aint(m_bCommentMoved[_iComment] ? m_CommentIndent[_iComment] : fp_GetSourceLineIndent(_iComment)) + nDelta;
+					if (nDelta && nIndent >= 0)
+					{
+						m_bCommentMoved[_iComment] = 1;
+						m_CommentIndent[_iComment] = umint(nIndent);
+					}
+				}
+			;
 			for (auto i = Node.m_iFirstToken + 1; i < Node.m_iLastToken; ++i)
 			{
-				bool bComment = Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment || Tokens[i].m_Kind == ECodeTokenKind::mc_BlockComment;
-				if ((!bComment && !fg_IsCodeToken(Tokens[i])) || EGap(m_GapState[i]) == EGap::mc_Inline || m_bProtectedStart[m_Lines.f_FindLine(Tokens[i].m_iOffset)])
-					continue;
+				bool bNested = i <= iNestedEnd && iNestedEnd;
+				if (!bNested && m_iBlockEnd[i] < Node.m_iLastToken)
+					iNestedEnd = m_iBlockEnd[i];
 
-				auto iLineStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[i].m_iOffset));
-				bool bStartsLine = true;
-				for (auto iByte = iLineStart; iByte < Tokens[i].m_iOffset && bStartsLine; ++iByte)
-					bStartsLine = fg_IsSpaceOrTab(m_Request.m_Source.f_GetStr()[iByte]);
-
-				if (!bStartsLine)
-					continue;
-
-				if (bComment)
+				auto Kind = Tokens[i].m_Kind;
+				if (Kind == ECodeTokenKind::mc_Preprocessor)
 				{
-					CommentLines.f_Insert(i);
+					if (!bNested)
+						bNeedsReference = true;
 
 					continue;
 				}
 
-				LineStarts.f_Insert(i);
-				if (iReference >= 0)
+				bool bComment = Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment;
+				if ((!bComment && !fg_IsCodeToken(Tokens[i])) || EGap(m_GapState[i]) == EGap::mc_Inline || !fStartsLine(i))
 					continue;
 
-				auto iNext = fp_NextCode(i);
-				bool bAccess = (m_Tokens.f_IsText(Tokens[i], "public") || m_Tokens.f_IsText(Tokens[i], "private") || m_Tokens.f_IsText(Tokens[i], "protected"))
-					&& iNext >= 0
-					&& m_Tokens.f_IsText(Tokens[umint(iNext)], ":")
-				;
-				if (!bAccess && !m_Tokens.f_IsText(Tokens[i], "case") && !m_Tokens.f_IsText(Tokens[i], "default"))
-					iReference = aint(i);
-			}
+				if (bComment)
+				{
+					if (bNeedsReference && !bNested)
+						PendingComments.f_Insert(i);
+					else
+						fMoveComment(i);
 
-			auto nDelta = iReference < 0 ? aint(0) : aint(_iIndent + nTab) - aint(fp_GetStatementIndent(umint(iReference)));
-			for (auto i : LineStarts)
-			{
+					continue;
+				}
+
+				if (bNeedsReference && !bNested)
+				{
+					bNeedsReference = false;
+					auto iPrevious = fp_PreviousCode(i);
+					bool bStatement = iPrevious < 0
+						|| umint(iPrevious) == Node.m_iFirstToken
+						|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], ";")
+						|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], "{")
+						|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], "}")
+					;
+					if (bStatement)
+					{
+						auto iNext = fp_NextCode(i);
+						bool bLabel = m_Tokens.f_IsText(Tokens[i], "case")
+							|| m_Tokens.f_IsText(Tokens[i], "default")
+							|| (
+								(m_Tokens.f_IsText(Tokens[i], "public") || m_Tokens.f_IsText(Tokens[i], "private") || m_Tokens.f_IsText(Tokens[i], "protected"))
+								&& iNext >= 0
+								&& m_Tokens.f_IsText(Tokens[umint(iNext)], ":")
+							)
+						;
+						nDelta = aint(bLabel ? _iIndent : _iIndent + nTab) - aint(fp_GetStatementIndent(i));
+					}
+
+					for (auto iComment : PendingComments)
+						fMoveComment(iComment);
+
+					PendingComments.f_Clear();
+				}
+
 				auto nIndent = aint(fp_GetStatementIndent(i)) + nDelta;
 				if (nDelta && nIndent >= 0)
 					fp_IndentBefore(i, umint(nIndent));
 			}
 
-			for (auto i : CommentLines)
-			{
-				auto nIndent = aint(m_bCommentMoved[i] ? m_CommentIndent[i] : fp_GetSourceLineIndent(i)) + nDelta;
-				if (nDelta && nIndent >= 0)
-				{
-					m_bCommentMoved[i] = 1;
-					m_CommentIndent[i] = umint(nIndent);
-				}
-			}
+			for (auto iComment : PendingComments)
+				fMoveComment(iComment);
 		}
 
 		constexpr ch8 const *c_pStatementKeywords[] =

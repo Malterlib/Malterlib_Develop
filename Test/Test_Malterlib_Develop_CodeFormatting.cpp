@@ -1873,6 +1873,15 @@ namespace
 							, "struct CFoo\n{\n\tvoid f()\n\t{\n#if A\n\t\tif (a)\n\t\t\tg();\n\t\telse\n#endif\n\t\t\t// Comment\n\t\t\th();\n\t}\n};\n"
 						)
 					;
+					// Each stretch between such a body's directives moves on its own, so stretches written at different depths
+					// all come to the body's level.
+					fg_ExpectFormat
+						(
+							"OpaqueConditionalBodyStretches"
+							, "void f()\n{\n#if A\n\t\tg();\n#endif\n\n#if B\n\tif (a)\n\t\th();\n\telse\n#endif\n\t\tk();\n}\n"
+							, "void f()\n{\n#if A\n\tg();\n#endif\n\n#if B\n\tif (a)\n\t\th();\n\telse\n#endif\n\t\tk();\n}\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(
