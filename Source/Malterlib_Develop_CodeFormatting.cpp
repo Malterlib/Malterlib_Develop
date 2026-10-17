@@ -4208,10 +4208,13 @@ namespace
 				if (fIsText(_iLeft, "(") || fIsText(_iLeft, "[") || fIsText(_iRight, ")") || fIsText(_iRight, "]") || fIsText(_iRight, ","))
 					return {};
 
-				// A member is reached without blanks, '->' spelled as '-' and '>'.
+				// A member is reached without blanks, '->' spelled as '-' and '>', and so are a subscript, '<[1]>', and a
+				// named value, '<Name>'.
 				auto iAfterRight = fNext(_iRight);
-				bool bArrow = fIsText(_iRight, "-") && iAfterRight < Tokens.f_GetLen() && fIsText(iAfterRight, ">") && Tokens[_iRight].f_GetEnd() == Tokens[iAfterRight].m_iOffset;
-				if (bArrow || fIsText(_iRight, ".") || fIsText(_iLeft, "."))
+				bool bAttached = iAfterRight < Tokens.f_GetLen() && Tokens[_iRight].f_GetEnd() == Tokens[iAfterRight].m_iOffset;
+				bool bArrow = bAttached && fIsText(_iRight, "-") && fIsText(iAfterRight, ">");
+				bool bAccess = bAttached && fIsText(_iRight, "<") && (fIsText(iAfterRight, "[") || Tokens[iAfterRight].m_Kind == ECodeTokenKind::mc_Identifier);
+				if (bArrow || bAccess || fIsText(_iRight, ".") || fIsText(_iLeft, "."))
 					return {};
 
 				return " ";

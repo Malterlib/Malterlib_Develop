@@ -391,6 +391,7 @@ namespace
 					}
 					// A member reached across a line break is joined without a blank.
 					fg_ExpectBuildSystemFormat("JoinedMember", "P\n{\n\tA [\n\t\tF(\n\t\t\tB\n\t\t)\n\t\t->G()\n\t]\n}\n", "P\n{\n\tA [\n\t\tF(B)->G()\n\t]\n}\n");
+					fg_ExpectBuildSystemFormat("JoinedSubscript", "P\n{\n\tA (\n\t\tB->F()\n\t\t<[C - 1]>\n\t)->G()\n}\n", "P\n{\n\tA (B->F()<[C - 1]>)->G()\n}\n");
 					// A switch always opens, its value, error or default each on a line and each key with its value.
 					fg_ExpectBuildSystemFormat
 						(
