@@ -621,7 +621,8 @@ constructs are brought back to one line where they fit. Where its braces stand o
 lines of their own, the statement it ends is a split one: the braces stand one
 level in from the statement and its terminator on a line of its own,
 `CFoo Value =` over `{` over `}` over `;`. An opening brace written at the end of a line takes a line of
-its own there, and the list's lines move with it. Each element starting a line stands
+its own there, and the list's lines move with it. A parenthesis ending the statement, which keeps its lines for a list inside it,
+stands the same way, and every line inside such a list or parenthesis moves with it. Each element starting a line stands
 one level in from the opening brace, the first among them, and the closing brace under the opening
 one; an element holding a multiline token stays where it is. A braced list
 written across lines is not brought back onto one line, but is otherwise laid

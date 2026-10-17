@@ -6260,7 +6260,9 @@ namespace
 			bool bTrailingOpen = Node.m_Bracket == ECodeBracket::mc_Brace && !fp_IsFirstOnLine(Node.m_iFirstToken);
 
 			bool bOpened = Node.m_bHasMultiLineBrace && (bTrailingOpen || fp_IsFirstOnLine(Node.m_iFirstToken)) && fp_IsFirstOnLine(Node.m_iLastToken);
-			if (Node.m_Bracket == ECodeBracket::mc_Brace && Node.m_iParent < Nodes.f_GetLen() && bOpened)
+			// A parenthesis ending the statement whose lines it keeps for a list inside it stands the same way.
+			bool bMoves = Node.m_Bracket == ECodeBracket::mc_Brace || (Node.m_Bracket == ECodeBracket::mc_Paren && fp_IsFirstOnLine(Node.m_iFirstToken));
+			if (bMoves && Node.m_iParent < Nodes.f_GetLen() && bOpened)
 			{
 				auto const &Statement = Nodes[Node.m_iParent];
 				auto iTerminator = fp_NextCode(Node.m_iLastToken);
@@ -6276,8 +6278,8 @@ namespace
 				;
 				if (bEnds)
 				{
-					// The lines starting at the list's own depth move with its braces; deeper ones belong to what is
-					// nested in it, and are placed by it.
+					// Every line of the list moves with its braces; what is nested in it and places its own lines places
+					// them against the moved ones.
 					auto nStatementIndent = fp_GetStatementIndent(Statement.m_iFirstToken);
 					auto nBraceIndent = nStatementIndent + m_Request.m_Settings.m_nTabWidth;
 					auto nBraceWritten = fp_GetStatementIndent(bTrailingOpen ? Node.m_iLastToken : Node.m_iFirstToken);
@@ -6288,7 +6290,6 @@ namespace
 							fp_OwnLineBefore(Node.m_iFirstToken, nBraceIndent);
 						else
 							fp_IndentBefore(Node.m_iFirstToken, nBraceIndent);
-						auto nContentDepth = m_TokenDepth[Node.m_iFirstToken] + 1;
 						auto const &ListTokens = m_Tokens.f_GetTokens();
 						for (auto i = Node.m_iFirstToken + 1; i <= Node.m_iLastToken; ++i)
 						{
@@ -6297,8 +6298,11 @@ namespace
 								&& Kind != ECodeTokenKind::mc_BlockComment && Kind != ECodeTokenKind::mc_Preprocessor
 							;
 							auto const &Token = ListTokens[i];
-							bool bCloser = i != Node.m_iLastToken && (m_Tokens.f_IsText(Token, "}") || m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]"));
-							bool bLine = bCode && !bCloser && fp_IsFirstOnLine(i) && (m_TokenDepth[i] == nContentDepth || i == Node.m_iLastToken);
+							bool bLine = bCode
+								&& fp_IsFirstOnLine(i)
+								&& EGap(m_GapState[i]) != EGap::mc_Inline
+								&& !m_bProtectedStart[m_Lines.f_FindLine(Token.m_iOffset)]
+							;
 							auto nIndent = aint(fp_GetSourceLineIndent(i)) + nDelta;
 							if (bLine && nIndent >= 0)
 								fp_IndentBefore(i, umint(nIndent));

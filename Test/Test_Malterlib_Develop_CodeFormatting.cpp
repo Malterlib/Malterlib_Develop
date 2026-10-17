@@ -1825,6 +1825,17 @@ namespace
 							, "namespace N\n{\n\ttemplate <typename t_CType>\n\tconcept cFoo = true;\n\n\t[[maybe_unused]] static int g_A = 1;\n}\n"
 						)
 					;
+					// A call ending its statement keeps the lines a list inside it gives it, but its parenthesis stands one level
+					// in from the statement, and every line inside moves with it.
+					fg_ExpectFormat
+						(
+							"KeptCallMoves"
+							, "void f()\n{\n\tfg_Call\n\t\t\t(\n\t\t\t\ta\n\t\t\t\t, fg_Inner\n\t\t\t\t(\n\t\t\t\t\t{\n\t\t\t\t\t\t1\n"
+							"\t\t\t\t\t\t, 2\n\t\t\t\t\t}\n\t\t\t\t)\n\t\t\t)\n\t\t;\n}\n"
+							, "void f()\n{\n\tfg_Call\n\t\t(\n\t\t\ta\n\t\t\t, fg_Inner\n\t\t\t(\n\t\t\t\t{\n\t\t\t\t\t1\n"
+							"\t\t\t\t\t, 2\n\t\t\t\t}\n\t\t\t)\n\t\t)\n\t;\n}\n"
+						)
+					;
 					// The declaration under a template's header stands at the header's indentation.
 					fg_ExpectFormat
 						(
