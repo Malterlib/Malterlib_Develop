@@ -514,6 +514,13 @@ namespace NMib::NDevelop
 					Texts.f_Insert("{}:{}"_f << umint(Kind) << _Text);
 				}
 			;
+			// A comma in front of a closing bracket separates nothing in the build system's syntax.
+			if (!bCpp && Kind == ECodeTokenKind::mc_Punctuator && (Text == "]" || Text == "}" || Text == ")"))
+			{
+				if (!Texts.f_IsEmpty() && Texts.f_GetLast() == ("{}:,"_f << umint(ECodeTokenKind::mc_Punctuator)).f_GetStr())
+					Texts.f_Remove(Texts.f_GetLen() - 1);
+			}
+
 			if (bCpp && Kind == ECodeTokenKind::mc_Punctuator && (Text == ">>" || Text == ">>="))
 			{
 				fInsert(">");
@@ -649,6 +656,14 @@ namespace NMib::NDevelop
 				o_Views.f_Insert(CCodeTokenView{Kind, pText + 1, nLength - 1});
 
 				continue;
+			}
+
+			// A comma in front of a closing bracket separates nothing in the build system's syntax.
+			if (!bCpp && Kind == ECodeTokenKind::mc_Punctuator && nLength == 1 && (pText[0] == ']' || pText[0] == '}' || pText[0] == ')'))
+			{
+				auto const *pLast = o_Views.f_IsEmpty() ? nullptr : &o_Views.f_GetLast();
+				if (pLast && pLast->m_Kind == ECodeTokenKind::mc_Punctuator && pLast->m_nLength == 1 && pLast->m_pText && pLast->m_pText[0] == ',')
+					o_Views.f_Remove(o_Views.f_GetLen() - 1);
 			}
 
 			o_Views.f_Insert(CCodeTokenView{Kind, pText, nLength});
@@ -4341,6 +4356,15 @@ namespace
 				auto nInner = _nIndent + nTab;
 				auto iFirstMember = fNext(iOpener);
 				auto iLastMember = umint(fPrevious(iClose));
+
+				// A comma ending the list goes.
+				if (fIsText(iLastMember, ",") && iLastMember != iFirstMember)
+				{
+					auto iBefore = umint(fPrevious(iLastMember));
+					auto iRemove = Tokens[iBefore].f_GetEnd();
+					fp_AddEdit("line-break", iRemove, Tokens[iLastMember].f_GetEnd() - iRemove, {}, "no comma ends a list");
+					iLastMember = iBefore;
+				}
 
 				// The member separators at the bracket's own level: its commas, or the operators that bind loosest.
 				TCVector<umint> Splits;

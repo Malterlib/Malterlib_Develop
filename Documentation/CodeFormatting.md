@@ -921,7 +921,9 @@ whole, or the one holding what keeps its lines: the opener ends its line, the
 members stand one level in, split at their commas with each comma in front, or,
 without commas, in front of the operators that bind loosest, and the closer
 stands at the line's level. A member laid out the same way opens in turn, and
-two objects that both open meet on the line one closes on, `}, {`:
+two objects that both open meet on the line one closes on, `}, {`. A comma
+ending an opened list goes, the one change to the tokens these rules make, which
+verification allows for since such a comma separates nothing:
 
 ```
 	SdkRoot_macOS: string = (

@@ -381,6 +381,14 @@ namespace
 
 				DMibTestCategory("Values")
 				{
+					// Commas behind the elements of an opened list move in front of them, and the one ending it goes.
+					{
+						CStr Source = "P\n{\n\tA [\n\t\t{B: 1},\n\t\t{C: 2},\n\t]\n}\n";
+						CStr Expected = "P\n{\n\tA [\n\t\t{B: 1}\n\t\t, {C: 2}\n\t]\n}\n";
+						DMibTestPath("TrailingComma");
+						DMibExpect(fg_FormatBuildSystem(Source, "First"), ==, Expected);
+						DMibExpect(fg_FormatBuildSystem(Expected, "Second"), ==, Expected);
+					}
 					// A member reached across a line break is joined without a blank.
 					fg_ExpectBuildSystemFormat("JoinedMember", "P\n{\n\tA [\n\t\tF(\n\t\t\tB\n\t\t)\n\t\t->G()\n\t]\n}\n", "P\n{\n\tA [\n\t\tF(B)->G()\n\t]\n}\n");
 					// A switch always opens, its value, error or default each on a line and each key with its value.
