@@ -4202,7 +4202,9 @@ namespace
 			{
 				auto iGap = Tokens[_iLeft].f_GetEnd();
 				CStr Gap(Source.f_GetStr() + iGap, Tokens[_iRight].m_iOffset - iGap);
-				if (Gap.f_FindChar('\n') < 0 && Gap.f_FindChar('\r') < 0)
+				// What follows a '<' says whether it compares or reaches into its value: a blank makes it compare. The
+				// gap behind one is never rewritten.
+				if ((Gap.f_FindChar('\n') < 0 && Gap.f_FindChar('\r') < 0) || fIsText(_iLeft, "<"))
 					return Gap;
 
 				if (fIsText(_iLeft, "(") || fIsText(_iLeft, "[") || fIsText(_iRight, ")") || fIsText(_iRight, "]") || fIsText(_iRight, ","))
@@ -4279,7 +4281,9 @@ namespace
 		;
 		auto fBreak = [&](umint _iToken, umint _nIndent)
 			{
-				Gaps[_iToken] = CGap{true, _nIndent};
+				auto iBefore = fPrevious(_iToken);
+				if (iBefore < 0 || !fIsText(umint(iBefore), "<"))
+					Gaps[_iToken] = CGap{true, _nIndent};
 			}
 		;
 		// How loosely an operator binds where a group without commas splits, or zero for no operator.
