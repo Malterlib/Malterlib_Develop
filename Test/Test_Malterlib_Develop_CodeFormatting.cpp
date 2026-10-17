@@ -1816,6 +1816,15 @@ namespace
 					// braced initializer written across lines, and a block comment inside.
 					CStr Initializer = "void f()\n{\n\tCJsonSorted Json =\n\t\t{\n\t\t\t\"Name\"_j= \"John\"\n\t\t\t, \"Age\"_j= 30\n\t\t}\n\t;\n}\n";
 					fg_ExpectFormat("Initializer", Initializer, Initializer);
+					// A statement's lines its layout keeps move with its first, and a statement opening with an attribute moves
+					// like any other.
+					fg_ExpectFormat
+						(
+							"MovedStatementLines"
+							, "namespace N\n{\n\t\ttemplate <typename t_CType>\n\t\tconcept cFoo = true;\n\n\t\t[[maybe_unused]] static int g_A = 1;\n}\n"
+							, "namespace N\n{\n\ttemplate <typename t_CType>\n\tconcept cFoo = true;\n\n\t[[maybe_unused]] static int g_A = 1;\n}\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(

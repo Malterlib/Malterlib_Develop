@@ -8069,7 +8069,13 @@ namespace
 				}
 			}
 
-			bool bStays = (Child.m_Kind == ECodeNodeKind::mc_Unsupported && !bEnumerators) || bOnLabelLine || bElseIf || bAttribute || bJoinedToLabel || m_Tokens.f_IsText(First, ";");
+			bool bStays = (Child.m_Kind == ECodeNodeKind::mc_Unsupported && !bEnumerators)
+				|| bOnLabelLine
+				|| bElseIf
+				|| (bAttribute && !bFirstOnLine)
+				|| bJoinedToLabel
+				|| m_Tokens.f_IsText(First, ";")
+			;
 
 			// Each enumerator takes a line of its own, the comma in front of it: 'EA' over ', EB',
 			// or behind the one in front of it in an enum holding a directive. A comma with a
@@ -8157,6 +8163,26 @@ namespace
 			}
 			else if (!bStays && bDepths && nWritten != nPlace && !fp_KeepsOwnLines(iChild, true))
 			{
+				// The statement's other lines move with its first, where its layout keeps them; a block inside it
+				// places its own, and an enum's enumerators stand at the body's level each.
+				auto nDelta = aint(nPlace) - aint(nWritten);
+				for (auto i = iFirst + 1; !bEnumBody && i <= Child.m_iLastToken; ++i)
+				{
+					if (i < m_iBlockEnd.f_GetLen() && m_iBlockEnd[i] <= Child.m_iLastToken)
+					{
+						i = m_iBlockEnd[i];
+
+						continue;
+					}
+
+					if (!fg_IsCodeToken(Tokens[i]) || EGap(m_GapState[i]) != EGap::mc_Keep || !fp_IsFirstOnLine(i))
+						continue;
+
+					auto nIndent = aint(fp_GetSourceLineIndent(i)) + nDelta;
+					if (nIndent >= 0 && !m_bProtectedStart[m_Lines.f_FindLine(Tokens[i].m_iOffset)])
+						fp_IndentBefore(i, umint(nIndent));
+				}
+
 				fp_IndentBefore(iFirst, nPlace);
 				nWritten = nPlace;
 			}
