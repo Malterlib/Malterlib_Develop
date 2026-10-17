@@ -4387,8 +4387,10 @@ namespace
 
 				_fLayout(_fLayout, nInner, iMember, iLastMember);
 				fBreak(iClose, _nIndent);
+
+				// What follows the closer on its line is laid out from there: '])->F(...)'.
 				if (iClose != _iLast)
-					fJoin(iClose, _iLast);
+					_fLayout(_fLayout, _nIndent, iClose, _iLast);
 			}
 		;
 
