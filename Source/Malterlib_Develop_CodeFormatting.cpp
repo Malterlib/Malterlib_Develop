@@ -149,22 +149,33 @@ namespace
 		;
 		// A run of statement terminators reads as one, since the stage takes out the ones
 		// that end nothing: 'f_Call();;' reads as 'f_Call();'. A comma in front of a closing
-		// brace goes the same way: 'EA, }' reads as 'EA }'.
+		// brace goes the same way: 'EA, }' reads as 'EA }'. So does one beside a directive,
+		// which the stage moves across it into every branch.
 		CCodeTokenStream Tokens(_Source);
 		CStr Text;
 		umint nMoved[4] = {};
 		bool bTerminated = false;
 		bool bComma = false;
+		bool bAfterDirective = false;
 		for (auto const &Token : Tokens.f_GetTokens())
 		{
+			if (Token.m_Kind == ECodeTokenKind::mc_Preprocessor)
+			{
+				bComma = false;
+				bAfterDirective = true;
+
+				continue;
+			}
+
 			if (!fg_IsCodeToken(Token))
 				continue;
 
 			if (bComma && !Tokens.f_IsText(Token, "}"))
 				Text += ",";
 
-			bComma = Tokens.f_IsText(Token, ",");
-			if (bComma)
+			bComma = Tokens.f_IsText(Token, ",") && !bAfterDirective;
+			bAfterDirective = false;
+			if (Tokens.f_IsText(Token, ","))
 			{
 				bTerminated = false;
 

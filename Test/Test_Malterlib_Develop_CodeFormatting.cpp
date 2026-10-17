@@ -3416,6 +3416,17 @@ namespace
 							, "#define DPair(a)\t\\\n\tfg_First(a);\t\\\n\tfg_Second(a)\n"
 						)
 					;
+					// C++23's '#elifdef' and '#elifndef' are alternatives like '#elif'.
+					fg_ExpectFormat
+						(
+							"DirectiveIndentationElifdef"
+							, "int g_A;\n#ifdef A\n#define DValue 1\n#elifdef B\n#define DValue 2\n#elifndef C\n#define DValue 3\n#endif\n"
+							"enum EValue\n{\n\tEValue_A,\n#ifdef A\n\tEValue_B\n#elifdef B\n\tEValue_C\n#endif\n};\n"
+							, "int g_A;\n#ifdef A\n#\tdefine DValue 1\n#elifdef B\n#\tdefine DValue 2\n#elifndef C\n#\tdefine DValue 3\n#endif\n"
+							"enum EValue\n{\n\tEValue_A\n#ifdef A\n\t, EValue_B\n#elifdef B\n\t, EValue_C\n#endif\n};\n"
+							, false
+						)
+					;
 					// A conditional without alternatives around all of a file's code adds no depth; one with them does.
 					fg_ExpectFormat
 						(
