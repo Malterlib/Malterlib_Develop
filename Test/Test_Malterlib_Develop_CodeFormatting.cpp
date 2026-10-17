@@ -1909,6 +1909,15 @@ namespace
 							, "extern \"C\"\n{\n#ifndef A\n\tstatic\n#endif\n\tint g_A = 1;\n\n\tstruct CFoo\n\t{\n\t\tint m_A;\n\t};\n}\n"
 						)
 					;
+					// Alternative heads of one function each stand at the statement's depth, and the body under them, at file
+					// scope as well; the comments in front of a head stand at its depth.
+					fg_ExpectFormat
+						(
+							"OpaqueConditionalAlternativeHeads"
+							, "int g_A;\n\n#if A\n\t// First\nvoid fg_First(int _A)\n#else\nvoid fg_First(long _A)\n#endif\n\t{\n\t\tfg_Use(_A);\n\t}\n"
+							, "int g_A;\n\n#if A\n// First\nvoid fg_First(int _A)\n#else\nvoid fg_First(long _A)\n#endif\n{\n\tfg_Use(_A);\n}\n"
+						)
+					;
 					// The first code in a file stands at the file's depth as well, behind directives alone or nothing at all.
 					fg_ExpectFormat
 						(

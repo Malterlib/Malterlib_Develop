@@ -7855,10 +7855,12 @@ namespace
 		bool bDepths = !fp_HasOpaqueDirective(Node.m_iFirstToken, Node.m_iLastToken);
 		if (!bDepths)
 		{
+			// The file's scope ends with its last token, which can close a block of its own.
 			bDepths = true;
-			for (auto i = Node.m_iFirstToken + 1; bDepths && i < Node.m_iLastToken; ++i)
+			auto iScopeEnd = bBraced ? Node.m_iLastToken : fg_Min(Node.m_iLastToken + 1, Tokens.f_GetLen());
+			for (auto i = bBraced ? Node.m_iFirstToken + 1 : Node.m_iFirstToken; bDepths && i < iScopeEnd; ++i)
 			{
-				if (m_iBlockEnd[i] < Node.m_iLastToken)
+				if (m_iBlockEnd[i] < iScopeEnd)
 					i = m_iBlockEnd[i];
 				else
 					bDepths = Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor || !m_bOpaqueDirective[i];
@@ -7874,11 +7876,14 @@ namespace
 
 		// A block without depths of its own keeps its lines' depths relative to each other between the directives
 		// standing in it: each stretch moves as a whole, its first line one level in from the block's brace, or at the
-		// brace's level for a label. A stretch whose first line does not start a statement at the block's level, such as
-		// the body of a guard a directive cuts or an argument, moves as far as the one in front of it. An alternative
-		// branch starts where its conditional does, so what stands in front of the '#if' says whether it starts one.
-		if (bBraced && !bDepths)
+		// brace's level for a label, and at the file's depth outside any block. A stretch whose first line does not
+		// start a statement at the block's level, such as the body of a guard a directive cuts or an argument, moves as
+		// far as the one in front of it; one opening a body stands under the head of the statement it belongs to. An
+		// alternative branch starts where its conditional does, so what stands in front of the '#if' says whether it
+		// starts one. The comment lines in front of a stretch's first statement stand at its depth.
+		if (!bDepths)
 		{
+			auto nBase = bBraced ? _iIndent + nTab : _iIndent;
 			auto fStartsLine = [&](umint _iToken)
 				{
 					auto iLine = m_Lines.f_FindLine(Tokens[_iToken].m_iOffset);
@@ -7895,7 +7900,7 @@ namespace
 			aint nDelta = 0;
 			bool bNeedsReference = true;
 			umint iNestedEnd = 0;
-			auto nBodyDepth = m_TokenDepth[Node.m_iFirstToken] + 1;
+			auto nBodyDepth = bBraced ? m_TokenDepth[Node.m_iFirstToken] + 1 : umint(0);
 			struct CConditional
 			{
 				aint m_iBefore;
@@ -7905,20 +7910,32 @@ namespace
 			aint iStretchBefore = -2;							// The code in front of the stretch when it opens an alternative branch.
 			aint nStretchDelta = 0;
 			TCVector<umint> PendingComments;
-			auto fMoveComment = [&](umint _iComment)
+			auto fCommentIndent = [&](umint _iComment)
 				{
-					auto nIndent = aint(m_bCommentMoved[_iComment] ? m_CommentIndent[_iComment] : fp_GetSourceLineIndent(_iComment)) + nDelta;
-					if (nDelta && nIndent >= 0)
+					return m_bCommentMoved[_iComment] ? m_CommentIndent[_iComment] : fp_GetSourceLineIndent(_iComment);
+				}
+			;
+			auto fPlaceComment = [&](umint _iComment, aint _nIndent)
+				{
+					if (_nIndent >= 0 && umint(_nIndent) != fCommentIndent(_iComment))
 					{
 						m_bCommentMoved[_iComment] = 1;
-						m_CommentIndent[_iComment] = umint(nIndent);
+						m_CommentIndent[_iComment] = umint(_nIndent);
 					}
 				}
 			;
-			for (auto i = Node.m_iFirstToken + 1; i < Node.m_iLastToken; ++i)
+			auto fMoveComment = [&](umint _iComment)
+				{
+					if (nDelta)
+						fPlaceComment(_iComment, aint(fCommentIndent(_iComment)) + nDelta);
+				}
+			;
+			// The file's scope has no braces of its own.
+			auto iStretchesEnd = bBraced ? Node.m_iLastToken : fg_Min(Node.m_iLastToken + 1, Tokens.f_GetLen());
+			for (auto i = bBraced ? Node.m_iFirstToken + 1 : Node.m_iFirstToken; i < iStretchesEnd; ++i)
 			{
 				bool bNested = i <= iNestedEnd && iNestedEnd;
-				if (!bNested && m_iBlockEnd[i] < Node.m_iLastToken)
+				if (!bNested && m_iBlockEnd[i] < iStretchesEnd)
 					iNestedEnd = m_iBlockEnd[i];
 
 				auto Kind = Tokens[i].m_Kind;
@@ -7971,7 +7988,7 @@ namespace
 						&& !m_Tokens.f_IsText(Tokens[i], "]")
 						&& (
 							iPrevious < 0
-							|| umint(iPrevious) == Node.m_iFirstToken
+							|| (bBraced && umint(iPrevious) == Node.m_iFirstToken)
 							|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], ";")
 							|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], "{")
 							|| m_Tokens.f_IsText(Tokens[umint(iPrevious)], "}")
@@ -7988,7 +8005,31 @@ namespace
 								&& m_Tokens.f_IsText(Tokens[umint(iNext)], ":")
 							)
 						;
-						nDelta = aint(bLabel ? _iIndent : _iIndent + nTab) - aint(fp_GetStatementIndent(i));
+						auto nTarget = bLabel ? _iIndent : nBase;
+						nDelta = aint(nTarget) - aint(fp_GetStatementIndent(i));
+						for (auto iComment : PendingComments)
+							fPlaceComment(iComment, aint(nTarget));
+
+						PendingComments.f_Clear();
+					}
+					else if (m_Tokens.f_IsText(Tokens[i], "{") && m_iBlockEnd[i] < Tokens.f_GetLen())
+					{
+						// The head starts behind the last terminator or brace at the body's depth, in whichever branch.
+						auto iHead = i;
+						for (auto iBefore = fp_PreviousCode(i); iBefore >= 0; iBefore = fp_PreviousCode(umint(iBefore)))
+						{
+							auto const &Before = Tokens[umint(iBefore)];
+							if (m_TokenDepth[umint(iBefore)] < m_TokenDepth[i])
+								break;
+
+							if (m_TokenDepth[umint(iBefore)] == m_TokenDepth[i] && (m_Tokens.f_IsText(Before, ";") || m_Tokens.f_IsText(Before, "{") || m_Tokens.f_IsText(Before, "}")))
+								break;
+
+							iHead = umint(iBefore);
+						}
+
+						if (iHead != i)
+							nDelta = aint(fp_GetStatementIndent(iHead)) - aint(fp_GetStatementIndent(i));
 					}
 
 					for (auto iComment : PendingComments)
