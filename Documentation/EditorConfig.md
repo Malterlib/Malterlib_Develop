@@ -34,9 +34,18 @@ path by value. An empty optional means missing; an empty string means a present,
 empty document. An expired loader actor reports an error. This supports virtual
 projects and preloaded snapshots without introducing a Git dependency.
 
-The resolver caches both present and missing documents. Overlapping resolves
-share pending loads for the same configuration. Failures reach every waiting
-caller and are not cached, allowing a later call to retry.
+The resolver caches both present and missing documents, and the chain of
+documents that applies to a directory, so the files of one directory walk the
+directory tree once. `f_ResolveBelow` judges a directory for every file under
+it: a section whose pattern covers all of them settles its properties, one that
+may cover some leaves a property uncertain unless it would give it the value
+already settled, and a key no document above mentions is neither, since a
+document deeper down may still set it. A walk uses that to
+decide whether entering a directory can find anything. Loads run on the
+`CSharedRoundRobinBlockingActors` the resolver was constructed with, which
+resolvers may share, or on one of its own, however many resolves are in flight.
+Overlapping resolves share pending loads for the same configuration. Failures
+reach every waiting caller and are not cached, allowing a later call to retry.
 
 After the source changes, await `Resolver(&CEditorConfigResolver::f_ClearCache)`
 or create a resolver per immutable snapshot. Clearing starts a new cache
@@ -47,8 +56,10 @@ needs an atomic snapshot must supply immutable contents.
 
 Patterns support Unicode literals, `*`, `**`, `?`, character sets and ranges,
 negation, escapes, and nested brace alternatives. Matching is case-sensitive
-and uses slash-separated paths. Numeric brace ranges are currently rejected;
-this API does not claim full EditorConfig conformance. Patterns are limited
+and uses slash-separated paths. Numeric brace ranges are currently rejected,
+and a bracket holding a `/` is a set, which matches no `/`, where
+EditorConfig's core reads it as literal characters; this API does not claim
+full EditorConfig conformance. Patterns are limited
 to 1024 Unicode characters.
 
 This module resolves configuration. Consumers decide which properties to

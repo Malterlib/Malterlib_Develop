@@ -112,6 +112,160 @@ namespace
 					auto Outside = co_await Resolver(&CEditorConfigResolver::f_Resolve, CFile::fs_GetPath(RootPath) / "outside.cpp").f_Wrap();
 					DMibExpectFalse(Outside);
 
+					// '..' segments do not walk out of the boundary behind its prefix.
+					auto Climbing = co_await Resolver(&CEditorConfigResolver::f_Resolve, RootPath + "/src/../../outside.cpp").f_Wrap();
+					DMibExpectFalse(Climbing);
+
+					// A boundary spelled with '.' segments is the directory it names, as a requested path is.
+					{
+						DMibTestPath("DottedBoundary");
+						TCActor<CEditorConfigResolver> Dotted = fg_Construct
+							(
+								g_ActorFunctorWeak / [&](CStr _Path) -> TCFuture<TCOptional<CStr>>
+								{
+									if (auto pContents = Files.f_FindEqual(_Path))
+										co_return *pContents;
+
+									co_return {};
+								}
+								, RootPath + "/."
+							)
+						;
+						auto DestroyDotted = co_await fg_AsyncDestroy(Dotted);
+						auto Inside = co_await Dotted(&CEditorConfigResolver::f_Resolve, RootPath + "/./src/a.cpp").f_Wrap();
+						DMibAssertTrue(!!Inside);
+						DMibExpect((*Inside)["custom"], ==, "Updated");
+					}
+
+#ifdef DPlatformFamily_Windows
+					// A network share is part of its path's root, which '..' does not climb out of.
+					{
+						DMibTestPath("NetworkShareRoot");
+						TCActor<CEditorConfigResolver> Share = fg_Construct
+							(
+								g_ActorFunctorWeak / [](CStr _Path) -> TCFuture<TCOptional<CStr>>
+								{
+									co_return {};
+								}
+								, CStr("//server/project")
+							)
+						;
+						auto DestroyShare = co_await fg_AsyncDestroy(Share);
+						auto Climbed = co_await Share(&CEditorConfigResolver::f_Resolve, CStr("//server/project/../other/file.cpp")).f_Wrap();
+						DMibExpectTrue(!!Climbed);
+					}
+
+					// A path written with backslashes is the same path.
+					{
+						DMibTestPath("Backslashes");
+						auto Native = co_await Resolver(&CEditorConfigResolver::f_Resolve, (RootPath + "/src/a.cpp").f_Replace("/", "\\")).f_Wrap();
+						DMibAssertTrue(!!Native);
+						DMibExpect((*Native)["custom"], ==, "Updated");
+					}
+#endif
+
+					// A segment keeps its blanks, which name a directory of their own.
+					{
+						DMibTestPath("BlanksInSegment");
+						Files[RootPath / " src /.editorconfig"] = "[*]\ncustom = Spaced\n";
+						auto Spaced = co_await Resolver(&CEditorConfigResolver::f_Resolve, RootPath + "/ src /a.cpp").f_Wrap();
+						DMibAssertTrue(!!Spaced);
+						DMibExpect((*Spaced)["custom"], ==, "Spaced");
+					}
+
+#ifndef DPlatformFamily_Windows
+					// Without a boundary the file system's root is a directory like any other.
+					TCActor<CEditorConfigResolver> Unbounded = fg_Construct
+						(
+							g_ActorFunctorWeak / [](CStr _Path) -> TCFuture<TCOptional<CStr>>
+							{
+								co_return {};
+							}
+							, CStr()
+						)
+					;
+					auto DestroyUnbounded = co_await fg_AsyncDestroy(Unbounded);
+					auto RootBelow = co_await Unbounded(&CEditorConfigResolver::f_ResolveBelow, CStr("/")).f_Wrap();
+					DMibExpectTrue(!!RootBelow);
+
+					// Nor is a boundary at the root anything but the root.
+					TCActor<CEditorConfigResolver> RootBounded = fg_Construct
+						(
+							g_ActorFunctorWeak / [](CStr _Path) -> TCFuture<TCOptional<CStr>>
+							{
+								co_return {};
+							}
+							, CStr("/")
+						)
+					;
+					auto DestroyRootBounded = co_await fg_AsyncDestroy(RootBounded);
+					auto UnderRoot = co_await RootBounded(&CEditorConfigResolver::f_Resolve, CStr("/Directory/File.cpp")).f_Wrap();
+					DMibExpectTrue(!!UnderRoot);
+
+					// A path the root is the condensed form of stays at the root, within no boundary below it.
+					auto Escaped = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, RootPath + "/src/../../../../../../../../../..").f_Wrap();
+					DMibExpectFalse(!!Escaped);
+#endif
+
+					co_return {};
+				};
+
+				// A directory is judged for every file below it: a section that covers all of
+				// them settles a property, one that may cover some leaves it uncertain.
+				DMibTestCategory("Below") -> TCFuture<void>
+				{
+					auto Capture = co_await (g_CaptureExceptions % "Below");
+
+					TCMap<CStr, CStr> Files;
+					Files["/repo/.editorconfig"] = "root = true\n[*]\nindent_style = tab\n[*.cpp]\nmalterlib_format = malterlib\n[**/Cache/**]\nmalterlib_format = unset\n"
+						"[**/Cache/**.keep]\nmalterlib_format = malterlib\n[**/Build/**]\nmalterlib_format = unset\n"
+						"[**/{ImportCache,IC}/**]\nmalterlib_format = unset\nindent_style = unset\n[**/{ImportCache,IC}/**.MHeader]\nindent_style = tab\n"
+					;
+					Files["/repo/src/.editorconfig"] = "[*]\ncustom = value\n";
+					TCActor<CEditorConfigResolver> Resolver = fg_Construct
+						(
+							g_ActorFunctorWeak / [Files](CStr _Path) -> TCFuture<TCOptional<CStr>>
+							{
+								if (auto pContents = Files.f_FindEqual(_Path))
+									co_return *pContents;
+
+								co_return {};
+							}
+							, "/repo"
+						)
+					;
+					auto DestroyResolver = co_await fg_AsyncDestroy(Resolver);
+
+					auto Source = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo/src");
+					DMibExpectTrue(Source.m_Properties.f_FindEqual("malterlib_format") == nullptr);
+					DMibExpectTrue(Source.m_Uncertain.f_FindEqual("malterlib_format") != nullptr);
+					DMibExpect(Source.m_Properties["custom"], ==, "value");
+
+					auto Cache = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo/src/Cache");
+					DMibExpectTrue(Cache.m_Properties.f_FindEqual("malterlib_format") == nullptr);
+					// The later section may opt some files back in.
+					DMibExpectTrue(Cache.m_Uncertain.f_FindEqual("malterlib_format") != nullptr);
+
+					// Unset for everything below, with nothing that may opt files back in.
+					auto Build = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo/src/Build");
+					DMibExpectTrue(Build.m_Properties.f_FindEqual("malterlib_format") == nullptr);
+					DMibExpectTrue(Build.m_Settled.f_FindEqual("malterlib_format") != nullptr);
+					DMibExpectTrue(Build.m_Uncertain.f_FindEqual("malterlib_format") == nullptr);
+
+					// A directory at the document's own level, which the leading '**/' must match as nothing.
+					auto TopCache = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo/IC");
+					DMibExpectTrue(TopCache.m_Properties.f_FindEqual("malterlib_format") == nullptr);
+					DMibExpectTrue(TopCache.m_Settled.f_FindEqual("malterlib_format") != nullptr);
+					DMibExpectTrue(TopCache.m_Uncertain.f_FindEqual("malterlib_format") == nullptr);
+					DMibExpectTrue(TopCache.m_Uncertain.f_FindEqual("indent_style") != nullptr);
+
+					auto Root = co_await Resolver(&CEditorConfigResolver::f_ResolveBelow, "/repo");
+					DMibExpectTrue(Root.m_Uncertain.f_FindEqual("malterlib_format") != nullptr);
+					DMibExpectTrue(Root.m_Properties.f_FindEqual("custom") == nullptr);
+					// No document speaks of this key at all, so nothing is known about it.
+					DMibExpectTrue(Root.m_Settled.f_FindEqual("other") == nullptr);
+					DMibExpectTrue(Root.m_Uncertain.f_FindEqual("other") == nullptr);
+
 					co_return {};
 				};
 

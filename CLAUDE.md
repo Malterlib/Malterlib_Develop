@@ -19,10 +19,11 @@ See `Documentation/EditorConfig.md` for the loader, cache, and boundary semantic
 Keep configuration parsing and resolution independent of MTool and Git.
 Keep consumer-specific validation rules and diagnostic output in the consumer.
 The resolver is an actor and `f_Resolve` returns `TCFuture`. Dispatch filesystem
-operations through `fg_BlockingActor`. Custom loaders are `TCActorFunctorWeak`
-callbacks returning futures and taking their path by value. They support virtual
-projects and snapshots. Preserve custom property values and apply generic `unset`
-semantics.
+operations to the resolver's `CSharedRoundRobinBlockingActors`, which a host
+running many resolvers passes in so their loads share a bounded set of threads.
+Custom loaders are `TCActorFunctorWeak` callbacks returning futures and taking
+their path by value. They support virtual projects and snapshots. Preserve
+custom property values and apply generic `unset` semantics.
 
 Actor methods can be reentrant across awaits. Coalesce pending configuration
 loads and preserve the cache generation captured by each resolve. Cache clearing
