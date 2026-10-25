@@ -23,8 +23,14 @@ namespace NMib::NDevelop
 		while (iOffset < mp_nTextLength)
 		{
 			auto iContent = iOffset;
-			while (iOffset < mp_nTextLength && pStart[iOffset] != '\n' && pStart[iOffset] != '\r')
+			while (iOffset < mp_nTextLength)
+			{
+				auto Char = pStart[iOffset];
+				if (Char == '\n' || Char == '\r')
+					break;
+
 				++iOffset;
+			}
 
 			auto &Line = mp_Lines.f_Insert();
 			Line.m_iOffset = iContent;

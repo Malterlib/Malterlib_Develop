@@ -1,0 +1,131 @@
+// Copyright © Unbroken AB
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#pragma once
+
+#include "Malterlib_Develop_EditorConfig.h"
+#include "Malterlib_Develop_TextLayout.h"
+#include "Malterlib_Develop_CodeFormattingStyle.h"
+
+#include <Mib/Container/Vector>
+#include <Mib/Storage/Optional>
+#include <Mib/Storage/SharedPointer>
+
+namespace NMib::NDevelop
+{
+	// The opt-in property selects a formatter profile, and the profile the language it formats.
+	enum class ECodeFormattingProfile
+	{
+		mc_Disabled
+		, mc_Malterlib            // C, C++, Objective-C and Objective-C++.
+		, mc_MalterlibC           // C and Objective-C.
+		, mc_MalterlibBuildSystem // The build system's '.M*' syntax.
+	};
+
+	// Resolved and validated formatting configuration for one file. The constructor
+	// rejects invalid values; a missing opt-in property leaves formatting disabled.
+	struct CCodeFormattingSettings
+	{
+		CCodeFormattingSettings() = default;
+		explicit CCodeFormattingSettings(CEditorConfigProperties const &_Properties);
+
+		bool f_IsFormattingEnabled() const;
+		ECodeLanguage f_GetLanguage() const;
+
+		ECodeFormattingProfile m_Profile = ECodeFormattingProfile::mc_Disabled;
+		bool m_bIndentWithTabs = true;
+		umint m_nIndentSize = 4;
+		umint m_nTabWidth = 4;
+		umint m_nMaxColumns = 0;                           // Zero disables the column limit.
+		bool m_bHasExplicitMaxColumns = false;
+		bool m_bTrimTrailingWhitespace = true;
+		bool m_bInsertFinalNewline = true;
+		NStorage::TCOptional<ETextLineEnding> m_EndOfLine; // Unset preserves the file's representation.
+		NStr::CStr m_Charset;                              // Empty when unconstrained.
+	};
+
+	struct CCodeFormattingRange
+	{
+		umint f_GetEnd() const;
+
+		umint m_iOffset = 0;
+		umint m_nLength = 0;
+	};
+
+	enum class ECodeRangePolicy
+	{
+		mc_Expand   // Grow a selection to the formatting units it touches.
+		, mc_Strict // Never modify anything outside the requested range.
+	};
+
+	struct CCodeFormattingRequest
+	{
+		NStr::CStr m_Source;                                            // Immutable original bytes.
+		NStr::CStr m_Path;                                              // Diagnostics only; the engine performs no I/O.
+		CCodeFormattingSettings m_Settings;
+		NContainer::TCVector<CCodeFormattingRange> m_Ranges;            // Empty selects the whole file.
+		ECodeRangePolicy m_RangePolicy = ECodeRangePolicy::mc_Expand;
+		NStorage::TCSharedPointer<CCodeFormattingStyle const> m_pStyle; // The project's style; null reads no name as more than C++ does and sets no layout option.
+	};
+
+	struct CCodeFormattingEdit
+	{
+		umint f_GetEnd() const;
+
+		umint m_iOffset = 0; // Original byte coordinates.
+		umint m_nLength = 0;
+		NStr::CStr m_Replacement;
+		NStr::CStr m_Rule;
+	};
+
+	enum class ECodeFormattingSeverity
+	{
+		mc_Warning
+		, mc_Error
+	};
+
+	struct CCodeFormattingDiagnostic
+	{
+		NStr::CStr m_Rule;
+		ECodeFormattingSeverity m_Severity = ECodeFormattingSeverity::mc_Warning;
+		umint m_iOffset = 0; // Original byte coordinates.
+		umint m_nLength = 0;
+		umint m_iLine = 1;   // One-based original source line.
+		umint m_iColumn = 1; // One-based column, using the configured tab stops.
+		NStr::CStr m_Explanation;
+		bool m_bHasAutomaticFix = false;
+	};
+
+	enum class ECodeFormattingStatus
+	{
+		mc_Complete      // The edit plan is canonical for the requested ranges.
+		, mc_Unsupported // The language, encoding, or source structure is not handled.
+		, mc_Failed      // Analysis could not produce a usable plan.
+	};
+
+	struct CCodeFormattingResult
+	{
+		bool f_HasEdits() const;
+		bool f_HasUnfixableDiagnostics() const;
+
+		ECodeFormattingStatus m_Status = ECodeFormattingStatus::mc_Unsupported;
+		NContainer::TCVector<CCodeFormattingEdit> m_Edits; // Ordered by offset and non-overlapping.
+		NContainer::TCVector<CCodeFormattingRange> m_EffectiveRanges;
+		NContainer::TCVector<CCodeFormattingDiagnostic> m_Diagnostics;
+		NStr::CStr m_Explanation;                          // Set when the status is not complete.
+	};
+
+	// Pure analysis: produces a canonical edit plan plus residual diagnostics. No filesystem access.
+	CCodeFormattingResult fg_AnalyzeCodeFormatting(CCodeFormattingRequest const &_Request);
+
+	// Validates that the plan is ordered, non-overlapping, and inside the source, then applies it.
+	NStr::CStr fg_ApplyCodeFormattingEdits(NStr::CStr const &_Source, NContainer::TCVector<CCodeFormattingEdit> const &_Edits);
+
+	// True when the two sources have the same significant token sequence, ignoring layout.
+	// Every rule but the trailing return type conversion is whitespace-only, so this holds
+	// between a plan's result and the source with only those conversions applied.
+	bool fg_HasEquivalentCodeTokens(NStr::CStr const &_First, NStr::CStr const &_Second, ECodeLanguage _Language = ECodeLanguage::mc_Cpp);
+
+	// Describes the first token difference between two sources, for formatter diagnostics.
+	NStr::CStr fg_DescribeCodeTokenDifference(NStr::CStr const &_First, NStr::CStr const &_Second, ECodeLanguage _Language = ECodeLanguage::mc_Cpp);
+}
