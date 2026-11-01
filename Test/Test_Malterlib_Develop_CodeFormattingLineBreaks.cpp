@@ -195,7 +195,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					(
 						"RequiresClauseIndentation"
 						, "namespace n\n{\ntemplate <class T> requires true void f();\nvoid h()\n{\n[](auto) requires true { return 1; }(1);\n}\n}\n"
-						, "namespace n\n{\n\ttemplate <class T>\n\trequires true void f();\n\tvoid h()\n\t{\n\t\t[](auto) requires true\n\t\t{\n\t\t\treturn 1;\n\t\t}(1);\n\t}\n}\n"
+						, "namespace n\n{\n\ttemplate <class T>\n\t\trequires true\n\tvoid f();\n\tvoid h()\n\t{\n\t\t[](auto) requires true\n\t\t{\n\t\t\treturn 1;\n\t\t}(1);\n\t}\n}\n"
 					)
 				;
 				// A requires clause's '&&' and '||' join constraints, also behind a template-id or a parenthesis, and the
@@ -205,8 +205,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						"RequiresClauseOperators"
 						, "template <class T>\nrequires cA<T>\n\t&& cB<T>\nvoid g();\ntemplate <class T>\nrequires cB<T> && (cA<T>)\nvoid k(int _A, T &&_Other);\n"
 						"template <class T>\nrequires cA<T> TCFoo<T> &&fg_F(T &&_A);\n"
-						, "template <class T>\nrequires cA<T>\n\t&& cB<T>\nvoid g();\ntemplate <class T>\nrequires cB<T> && (cA<T>)\nvoid k(int _A, T &&_Other);\n"
-						"template <class T>\nrequires cA<T> TCFoo<T> &&fg_F(T &&_A);\n"
+						, "template <class T>\nrequires cA<T> && cB<T>\nvoid g();\ntemplate <class T>\nrequires cB<T> && (cA<T>)\nvoid k(int _A, T &&_Other);\n"
+						"template <class T>\nrequires cA<T>\nTCFoo<T> &&fg_F(T &&_A);\n"
 					)
 				;
 				// A body written on its label's line takes lines under the label where that line is too long.

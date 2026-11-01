@@ -1361,12 +1361,13 @@ namespace NMib::NDevelop::NPrivate
 
 		auto const &Tokens = m_Tokens.f_GetTokens();
 
-		// An attribute's parenthesis is no parameter list: 'struct __declspec(dllexport) CFoo {...};' declares no function.
+		// An attribute's parenthesis is no parameter list: 'struct __declspec(dllexport) CFoo {...};' declares no function. Nor
+		// is one in front of the declaration, as a requires clause's: 'requires (cA<T> || cB<T>) && cC<T>'.
 		umint iParen = TCLimitsInt<umint>::mc_Max;
 		for (auto iChild : Node.m_Children)
 		{
 			auto const &Child = Nodes[iChild];
-			if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_Bracket != ECodeBracket::mc_Paren)
+			if (Child.m_Kind != ECodeNodeKind::mc_Group || Child.m_Bracket != ECodeBracket::mc_Paren || Child.m_iFirstToken < _iDeclFirst)
 				continue;
 
 			auto iKeyword = fp_PreviousCode(Child.m_iFirstToken);

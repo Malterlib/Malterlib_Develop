@@ -1369,45 +1369,89 @@ namespace NMib::NDevelop::NPrivate
 			if (!m_Tokens.f_IsText(Tokens[iDeclFirst], "requires"))
 				break;
 
-			// A clause written across lines goes on where its line ends in a conjunction or the next starts with one.
-			auto nLevel = m_TokenDepth[iDeclFirst];
-			aint iClauseEnd = -1;
-			for (auto iNext = fp_NextCode(iDeclFirst); iNext >= 0 && umint(iNext) <= iSignatureLast; iNext = fp_NextCode(umint(iNext)))
+			// The clause's constraint is a parenthesis or a concept's name, with its scopes, template arguments and call, and
+			// those joined by '&&' and '||': 'requires cA<T> && (cB<T> || cC<T>)'.
+			aint iClauseLast = -1;
 			{
-				if (m_TokenDepth[umint(iNext)] != nLevel || !fp_IsFirstOnLine(umint(iNext)))
-					continue;
-
-				auto iBefore = fp_PreviousCode(umint(iNext));
-
-				auto fConjunction = [&](aint _iToken)
+				auto fSkipGroup = [&](aint _iToken) -> aint
 					{
-						auto const *pToken = _iToken >= 0 ? &Tokens[umint(_iToken)] : nullptr;
-
-						return pToken && (m_Tokens.f_IsText(*pToken, "&&") || m_Tokens.f_IsText(*pToken, "||"));
+						auto iGroup = m_Structure.f_FindNodeOpeningAt(umint(_iToken));
+						return iGroup < Nodes.f_GetLen() ? aint(Nodes[iGroup].m_iLastToken) : aint(-1);
 					}
 				;
 
-				if (fConjunction(iBefore) || fConjunction(iNext))
-					continue;
+				auto iToken = fp_NextCode(iDeclFirst);
+				while (iToken >= 0 && umint(iToken) <= iSignatureLast)
+				{
+					auto const &Token = Tokens[umint(iToken)];
+					aint iPrimaryLast = -1;
+					if (m_Tokens.f_IsText(Token, "("))
+						iPrimaryLast = fSkipGroup(iToken);
+					else if (Token.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Token, "::"))
+					{
+						iPrimaryLast = iToken;
+						for (auto iNext = fp_NextCode(umint(iToken)); iNext >= 0 && umint(iNext) <= iSignatureLast; iNext = fp_NextCode(umint(iPrimaryLast)))
+						{
+							auto const &Next = Tokens[umint(iNext)];
+							bool bOpens = (m_Tokens.f_IsText(Next, "<") && m_Structure.f_IsAngleBracket(umint(iNext))) || m_Tokens.f_IsText(Next, "(");
+							bool bScope = m_Tokens.f_IsText(Next, "::") || (Next.m_Kind == ECodeTokenKind::mc_Identifier && m_Tokens.f_IsText(Tokens[umint(iPrimaryLast)], "::"));
+							if (bOpens)
+								iPrimaryLast = fSkipGroup(iNext);
+							else if (bScope)
+								iPrimaryLast = iNext;
+							else
+								break;
 
-				iClauseEnd = iNext;
+							if (iPrimaryLast < 0)
+								break;
+						}
+					}
 
-				break;
+					if (iPrimaryLast < 0 || umint(iPrimaryLast) > iSignatureLast)
+					{
+						iClauseLast = -1;
+
+						break;
+					}
+
+					iClauseLast = iPrimaryLast;
+					auto iBehind = fp_NextCode(umint(iPrimaryLast));
+					if (iBehind < 0 || (!m_Tokens.f_IsText(Tokens[umint(iBehind)], "&&") && !m_Tokens.f_IsText(Tokens[umint(iBehind)], "||")))
+						break;
+
+					iToken = fp_NextCode(umint(iBehind));
+				}
 			}
 
-			if (iClauseEnd < 0)
+			aint iClauseEnd = iClauseLast >= 0 ? fp_NextCode(umint(iClauseLast)) : aint(-1);
+			if (iClauseEnd < 0 || umint(iClauseEnd) > iSignatureLast)
 				break;
 
 			// A clause on its own line behind a template header stands at the header's level or one level in, as the source
-			// has it in or not.
+			// has it in or not, and one on the header's line takes a line of its own one level in.
 			auto DeclGap = EGap(m_GapState[iDeclFirst]);
-			bool bUndecided = DeclGap == EGap::mc_Keep || DeclGap == EGap::mc_Indent;
+			bool bOwnLine = fp_IsFirstOnLine(iDeclFirst);
+			bool bUndecided = DeclGap == EGap::mc_Keep || DeclGap == EGap::mc_Indent || !bOwnLine;
 			bool bProtected = m_ProtectedStart[m_Lines.f_FindLine(Tokens[iDeclFirst].m_iOffset)];
-			if (!m_bProbing && bUndecided && !bProtected && fp_IsFirstOnLine(iDeclFirst) && iDeclFirst != Node.m_iFirstToken)
+			if (!m_bProbing && bUndecided && !bProtected && iDeclFirst != Node.m_iFirstToken)
 			{
-				auto nClause = fp_GetSourceLineIndent(iDeclFirst) > fp_GetSourceLineIndent(Node.m_iFirstToken) ? _iIndent + nTab : _iIndent;
-				if (fp_GetStatementIndent(iDeclFirst) != nClause)
+				bool bSourceDeeper = fp_GetSourceLineIndent(iDeclFirst) > fp_GetSourceLineIndent(Node.m_iFirstToken);
+				auto nClause = !bOwnLine || bSourceDeeper ? _iIndent + nTab : _iIndent;
+				if (!bOwnLine)
+					fp_BreakBefore(iDeclFirst, nClause);
+				else if (fp_GetStatementIndent(iDeclFirst) != nClause)
 					fp_IndentBefore(iDeclFirst, nClause);
+
+				// The clause is laid out as a clause's condition is: on its line where it fits, and otherwise opened at its
+				// outermost break, 'requires' over '(' over the constraints.
+				if (fp_IsRangeJoinable(_iNode, iDeclFirst, umint(iClauseLast)) && fp_FitsInline(iDeclFirst, umint(iClauseLast), nClause))
+					fp_MarkInline(iDeclFirst, umint(iClauseLast));
+				else
+					fp_LayoutRange(_iNode, iDeclFirst, umint(iClauseLast), nClause, true, true, false);
+
+				// What the clause constrains starts a line of its own at the statement's level: 'requires true' over 'void f();'.
+				if (!fp_IsFirstOnLine(umint(iClauseEnd)))
+					fp_BreakBefore(umint(iClauseEnd), _iIndent);
 			}
 
 			iDeclFirst = umint(iClauseEnd);

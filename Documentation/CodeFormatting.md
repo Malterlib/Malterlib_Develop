@@ -815,10 +815,14 @@ at the header's own level, since nothing extends the header behind its `>`. A
 class's own template argument list, behind the name its definition or
 specialization declares, opens at the head's level the same way, `struct TCFoo`
 over `<` and `>`, while a base clause behind it continues the head one level in,
-`: public CBase`. A requires clause behind a header keeps the lines it was
-written on as well, and so does a member template's header behind the clause;
-the declaration behind them starts its own line and is laid out as usual. Only a
-requires clause elsewhere in a declaration keeps the whole statement's lines.
+`: public CBase`. A requires clause behind a header is laid out as a clause's
+condition is: on one line where it fits, at the header's level or one level in
+as the source has it, and otherwise opened at its outermost break, `requires`
+over `(` over the constraints, or each `&&` and `||` starting a line one level
+in. One on the header's line takes a line of its own one level in. A member
+template's header behind the clause keeps its line, and the declaration behind
+them starts its own line and is laid out as usual. Only a requires clause
+elsewhere in a declaration keeps the whole statement's lines.
 
 A line that is still too long after all of that is broken again, so the layout
 does not depend on where the source happened to break: an element the source

@@ -219,13 +219,18 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				)
 			;
 			// A constraint in parentheses behind a template header holds an expression, whose
-			// '&&' behind a template argument list is no declarator; a requires expression's
-			// parentheses declare its parameters.
-			CStr Constraint = "template <typename t_C>\nrequires\n(\n\tcA<TCFoo<TCBar<t_C>>>\n\t&& cB\n\t<\n\t\tTCBar<TCFoo<TCBar<t_C>>>\n\t\t, TCFoo<t_C>\n\t>\n)\n"
-				"void f(t_C _Value)\n{\n}\n\ntemplate <typename t_C>\nrequires (cA<t_C> && cB<t_C>)\nvoid g()\n{\n}\n\ntemplate <typename t_C>\n"
+			// '&&' behind a template argument list is no declarator, and the clause joins where it fits; a requires
+			// expression's parentheses declare its parameters.
+			CStr Constraint = "void f(t_C _Value)\n{\n}\n\ntemplate <typename t_C>\nrequires (cA<t_C> && cB<t_C>)\nvoid g()\n{\n}\n\ntemplate <typename t_C>\n"
 				"concept cC = requires (t_C &&_Value)\n\t{\n\t\t_Value.f_Get();\n\t}\n;\n"
 			;
-			fg_ExpectFormat("ConstraintBehindHeader", Constraint, Constraint);
+			fg_ExpectFormat
+				(
+					"ConstraintBehindHeader"
+					, "template <typename t_C>\nrequires\n(\n\tcA<TCFoo<TCBar<t_C>>>\n\t&& cB\n\t<\n\t\tTCBar<TCFoo<TCBar<t_C>>>\n\t\t, TCFoo<t_C>\n\t>\n)\n" + Constraint
+					, "template <typename t_C>\nrequires (cA<TCFoo<TCBar<t_C>>> && cB<TCBar<TCFoo<TCBar<t_C>>>, TCFoo<t_C>>)\n" + Constraint
+				)
+			;
 			// Its operators are settled, so one written tight is spaced.
 			fg_ExpectFormat
 				(
@@ -412,11 +417,12 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					(
 						"RequiresAcrossLinesAttribute"
 						, "template <typename t_C>\n\trequires (cA<t_C> || cB<t_C>) &&\n\t\tcC<t_C>\n[[nodiscard]] bool fg_F(int _" + Parameter + ", int _B" + Parameter + ");\n"
-						, "template <typename t_C>\n\trequires (cA<t_C> || cB<t_C>) &&\n\t\tcC<t_C>\n[[nodiscard]] bool fg_F\n\t(\n\t\tint _"
+						, "template <typename t_C>\n\trequires (cA<t_C> || cB<t_C>) && cC<t_C>\n[[nodiscard]] auto fg_F\n\t(\n\t\tint _"
 						+ Parameter
 						+ "\n\t\t, int _B"
 						+ Parameter
-						+ "\n\t)\n;\n"
+						+ "\n\t)\n\t-> bool\n;\n"
+						, false
 					)
 				;
 			}
