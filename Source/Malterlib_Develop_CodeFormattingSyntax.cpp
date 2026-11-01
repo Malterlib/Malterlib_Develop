@@ -328,10 +328,13 @@ namespace
 		auto iBeforeOpen = fg_PreviousCode(_Tokens, umint(iOpen));
 		if (iBeforeOpen >= 0)
 		{
+			// A keyword whose operand is an expression starts one with the parenthesis: 'return (void *)p', 'delete (CFoo *)p'.
+			constexpr ch8 const *c_pExpressionStarts[] = {"return", "co_return", "co_await", "co_yield", "throw", "delete", "case", "else", "do"};
+
 			// A cast converts what another cast yields: '(umint)(void *)*pBuffer'.
 			auto const &BeforeOpen = Tokens[umint(iBeforeOpen)];
 			bool bOperand
-				= BeforeOpen.m_Kind == ECodeTokenKind::mc_Identifier
+				= (BeforeOpen.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, BeforeOpen, c_pExpressionStarts))
 				|| (_Tokens.f_IsText(BeforeOpen, ")") && !fg_IsCast(_Tokens, _Structure, umint(iBeforeOpen)))
 				|| _Tokens.f_IsText(BeforeOpen, "]")
 				|| (_Structure.f_IsAngleBracket(umint(iBeforeOpen)) && _Tokens.f_IsText(BeforeOpen, ">"))
@@ -340,8 +343,39 @@ namespace
 				return false;
 		}
 
+		// An operator function's name ends in its symbol, which spells no declarator, and a conversion function's in the type it
+		// converts to: '(b ? nullptr : &C::operator *)', '(&C::operator int *)'.
 		auto const &Inner = Tokens[umint(iInner)];
-		if (fg_IsDeclaratorText(_Tokens, Inner) || _Tokens.f_IsText(Inner, "const") || _Tokens.f_IsText(Inner, "volatile"))
+		auto iInFront = fg_PreviousCode(_Tokens, umint(iInner));
+		while
+		(
+			iInFront >= 0
+			&& umint(iInFront) > iOpen
+			&&
+			(
+				(Tokens[umint(iInFront)].m_Kind == ECodeTokenKind::mc_Identifier && !_Tokens.f_IsText(Tokens[umint(iInFront)], "operator"))
+				|| fg_IsDeclaratorText(_Tokens, Tokens[umint(iInFront)])
+				|| _Tokens.f_IsText(Tokens[umint(iInFront)], "::")
+				|| (_Structure.f_IsAngleBracket(umint(iInFront)) && _Tokens.f_IsText(Tokens[umint(iInFront)], ">"))
+			)
+		)
+		{
+			// A template argument list of the type is stepped over whole: 'operator TCBox<int> *'.
+			if (_Structure.f_IsAngleBracket(umint(iInFront)) && _Tokens.f_IsText(Tokens[umint(iInFront)], ">"))
+			{
+				auto iArguments = fg_FindGroupClosingAt(_Structure, umint(iInFront), ECodeBracket::mc_Angle);
+				if (iArguments < 0)
+					break;
+
+				iInFront = aint(_Structure.f_GetNodes()[umint(iArguments)].m_iFirstToken);
+			}
+
+			iInFront = fg_PreviousCode(_Tokens, umint(iInFront));
+		}
+
+		bool bOperatorName = iInFront >= 0 && umint(iInFront) > iOpen && _Tokens.f_IsText(Tokens[umint(iInFront)], "operator");
+		bool bQualifier = _Tokens.f_IsText(Inner, "const") || _Tokens.f_IsText(Inner, "volatile");
+		if ((fg_IsDeclaratorText(_Tokens, Inner) || bQualifier) && !bOperatorName)
 			return !fg_ClosesParameterList(_Tokens, _Structure, _iClose);
 
 		return fg_PreviousCode(_Tokens, umint(iInner)) == iOpen && fg_NamesType(_Tokens, Inner);

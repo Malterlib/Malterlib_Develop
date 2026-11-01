@@ -1944,6 +1944,17 @@ namespace
 							, "struct C\n{\n\tvoid f_A() &;\n};\n\nvoid f()\n{\n\tauto a = (ch8 const *)&Data;\n\tauto b = (CFoo &&)*pFoo;\n\tauto c = (x) & y;\n}\n"
 						)
 					;
+					// A keyword whose operand is an expression starts it with the parenthesis, which is the cast's, where it ends in a
+					// declarator rather than an operator function's symbol or a conversion function's type.
+					fg_ExpectFormat
+						(
+							"CastBehindKeyword"
+							, "void *f(void *p)\n{\n\tdelete (CFoo *) p;\n\treturn (void *) p;\n}\nbool g()\n{\n\treturn (a ? nullptr : &C::operator *) && b;\n}\n"
+							"bool h()\n{\n\treturn (a ? nullptr : &C::operator int *) && b;\n}\n"
+							, "void *f(void *p)\n{\n\tdelete (CFoo *)p;\n\treturn (void *)p;\n}\n\nbool g()\n{\n\treturn (a ? nullptr : &C::operator *) && b;\n}\n\n"
+							"bool h()\n{\n\treturn (a ? nullptr : &C::operator int *) && b;\n}\n"
+						)
+					;
 					// 'if constexpr' holds a condition like any other 'if', whose operators are
 					// operators, and a 'new' hugs its placement arguments, which stand apart from
 					// the type and are never the scope a statement is opened at.
