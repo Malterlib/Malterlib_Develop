@@ -482,8 +482,10 @@ named or not. What stands in front of that `:` is the name a type declares,
 which no other colon at a declaration's level has: a label ends its statement
 there, a base clause follows a definition's keyword, an initializer list follows
 a parameter list however many qualifiers stand between, and a conditional's
-colon answers a `?`. An unnamed bit-field, `uint32 : 3`, is spelled like a label
-and is none; the width behind the colon is what tells the two apart.
+colon answers a `?`. An unnamed bit-field, `uint32:3`, is spelled like a label
+and is none: a numeric width, a fundamental type, or in a class's body a type the
+naming lists tells it apart, `unsigned:NumBits`, and the label ends its statement
+at the colon where the bit-field goes on.
 
 Plain `=` assigns and initializes, and stands apart from both sides. Two
 spellings in the sources are not that: a capture default, which the markers

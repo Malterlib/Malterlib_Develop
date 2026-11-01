@@ -1177,14 +1177,10 @@ namespace NMib::NDevelop::NPrivate
 		if (iKey >= 0 && fg_IsAnyText(_Tokens, Tokens[umint(iKey)], c_pClassKeys))
 			return false;
 
-		// Without a name in front of it the type itself stands there, and only the width
-		// behind the ':' tells the declaration from a label.
-		if (umint(iName) <= Statement.m_iFirstToken)
-		{
-			auto iWidth = fg_NextCode(_Tokens, _iColon);
-			if (iWidth < 0 || Tokens[umint(iWidth)].m_Kind != ECodeTokenKind::mc_Number)
-				return false;
-		}
+		// Without a name in front of it the type itself stands there, and the structure tells the declaration from a label,
+		// which ends its statement at the ':': 'unsigned : Width;' over 'Label:'.
+		if (umint(iName) <= Statement.m_iFirstToken && Statement.m_iLastToken <= _iColon)
+			return false;
 
 		// A parameter list in front of the ':' makes it the one that opens an initializer
 		// list, whatever stands between the two: 'C(int _A) noexcept : m_A(_A)'.

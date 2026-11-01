@@ -735,8 +735,9 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					)
 				;
 			}
-			// A fundamental type in front of a ':' is an unnamed bit-field, also with a named width, and no label.
-			fg_ExpectFormat("UnnamedBitFieldNamedWidth", "struct CA\n{\n\tunsigned : NumBits;\n\tint m_A;\n};\n", "struct CA\n{\n\tunsigned : NumBits;\n\tint m_A;\n};\n");
+			// A fundamental type in front of a ':' is an unnamed bit-field, also with a named width, and no label, and its width hugs
+			// the ':' as a named one's does.
+			fg_ExpectFormat("UnnamedBitFieldNamedWidth", "struct CA\n{\n\tunsigned : NumBits;\n\tint m_A;\n};\n", "struct CA\n{\n\tunsigned:NumBits;\n\tint m_A;\n};\n");
 			// A template argument list spaced inside its markers alike is one.
 			fg_ExpectFormat("AngleSpacedInside", "using CA = enable_if_t< cA<int> && cB<int> >;\n", "using CA = enable_if_t<cA<int> && cB<int>>;\n");
 			// An argument list starting with 'typename' is one however it is spaced, and so is one behind the name a

@@ -1091,7 +1091,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						"AttributedBitField"
 						, "struct C\n{\n\t[[maybe_unused]] int : 3;\n\t[[maybe_unused]] unsigned : Width;\n\tCField : Width;\n\t[[maybe_unused]] CField : Width;\n};\n"
 						"void f()\n{\nERROR:\n\treturn;\n}\nstruct CResult fg_F()\n{\nERROR:\n\treturn {};\n}\n"
-						, "struct C\n{\n\t[[maybe_unused]] int:3;\n\t[[maybe_unused]] unsigned:Width;\n\tCField : Width;\n\t[[maybe_unused]] CField:Width;\n};\n\n"
+						, "struct C\n{\n\t[[maybe_unused]] int:3;\n\t[[maybe_unused]] unsigned:Width;\n\tCField:Width;\n\t[[maybe_unused]] CField:Width;\n};\n\n"
 						"void f()\n{\nERROR:\n\treturn;\n}\n\nstruct CResult fg_F()\n{\nERROR:\n\treturn {};\n}\n"
 					)
 				;
