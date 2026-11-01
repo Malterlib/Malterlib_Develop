@@ -272,7 +272,7 @@ namespace NMib::NDevelop::NPrivate
 		bool fp_MultiLineTrailingCommentLines(umint _iComment, CStr &o_Replacement) const;
 		void fp_ConvertSeparatedCommas(CCodeNode const &_Body, bool _bEnum);
 		bool fp_MayBeMacroArgument(CCodeNode const &_Node) const;
-		bool fp_IsInMacroArgument(umint _iToken);
+		bool fp_IsInMacroArgument(umint _iToken, bool _bDirect = false);
 		bool fp_DropBraces(umint _iStatement, umint _iGuard);
 		bool fp_AddBraces(umint _iStatement, umint _iGuard);
 		bool fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const;

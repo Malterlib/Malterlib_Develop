@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "Malterlib_Develop_CodeFormattingAnalyzer.h"
+#include "Malterlib_Develop_CodeFormattingStructurePrivate.h"
 
 namespace NMib::NDevelop::NPrivate
 {
@@ -114,7 +115,14 @@ namespace NMib::NDevelop::NPrivate
 	// it or turn it into a string, and so is a call behind a chain of calls one of which is a macro's, which can expand to
 	// another macro's name: 'DGet()(const int)'. Out of scope by decision: the layout changes the whitespace in an argument
 	// as anywhere else, which a stringizing macro writes into its string where it adds or takes out a blank between two tokens.
-	bool CFormattingAnalyzer::fp_IsInMacroArgument(umint _iToken)
+	// A macro's name behind a type the naming lists calls nothing: it is a calling convention in front of a parameter list,
+	// 'void DMibCrossmoduleAPI (int _A)', where no call stands. A '*' or '&' in front of it is as readily an operator,
+	// 'EFlag_A & DLog(const int)', and a calling convention behind one names the function: 'void *DCall fg_Get(int _A)'. A
+	// macro that expands to a declarator behind a type instead, 'CStr DName(const int)' for 'fg_Name() { return #x; }', is out
+	// of scope by decision. With _bDirect only the innermost parenthesis counts, so a token in one nested in the argument, a cast's,
+	// 'DTrace("{}", (const char *)p)', stands in no macro's argument; a macro that turns such an argument into a string or
+	// pastes to it, 'DStr((const int))', is out of scope by decision.
+	bool CFormattingAnalyzer::fp_IsInMacroArgument(umint _iToken, bool _bDirect)
 	{
 		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto const &Nodes = m_Structure.f_GetNodes();
@@ -125,6 +133,10 @@ namespace NMib::NDevelop::NPrivate
 					return false;
 
 				auto const &Callee = Tokens[umint(iCallee)];
+				auto iInFront = fp_PreviousCode(umint(iCallee));
+				if (iInFront >= 0 && fg_NamesType(m_Tokens, Tokens[umint(iInFront)]))
+					return false;
+
 				return m_Tokens.f_HasRole(Callee, ECodeNameRole::mc_Macro) || m_Tokens.f_HasRole(Callee, ECodeNameRole::mc_SpecifierMacro);
 			}
 		;
@@ -151,6 +163,9 @@ namespace NMib::NDevelop::NPrivate
 
 				iOpen = Nodes[iCall].m_iFirstToken;
 			}
+
+			if (_bDirect)
+				return false;
 		}
 
 		return false;
@@ -1140,22 +1155,61 @@ namespace NMib::NDevelop::NPrivate
 			if (iBefore >= 0 && fIsQualifier(umint(iBefore)))
 				continue;
 
-			// Behind a parameter list it qualifies the member function, whatever follows it: 'f() const DNoexcept'.
+			// Behind a parameter list it qualifies the member function, whatever follows it: 'f() const DNoexcept'. Behind an
+			// alignment or an attribute's parenthesis it leads the type, as behind an attribute: 'alignas(8) const int x'.
+			bool bBehindAttribute = false;
 			if (iBefore >= 0 && m_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
-				continue;
+			{
+				// The attributes stand in a run, which the qualifier leads a type behind only where nothing in front of the run
+				// is a type or a declarator it could qualify already: 'int * __attribute__((unused)) const p' and
+				// 'int __attribute__((unused)) const x' keep their qualifier.
+				auto iInFront = aint(iBefore);
+				while (iInFront >= 0 && (m_Tokens.f_IsText(Tokens[umint(iInFront)], ")") || m_Tokens.f_IsText(Tokens[umint(iInFront)], "]")))
+				{
+					// A standard attribute in the run is stepped over the same way: 'int *[[]] __attribute__((unused)) const p'.
+					if (m_Tokens.f_IsText(Tokens[umint(iInFront)], "]"))
+					{
+						auto iOuter = m_Structure.f_FindNodeClosingAt(umint(iInFront));
+						auto iInner = iOuter < Nodes.f_GetLen() ? fp_NextCode(Nodes[iOuter].m_iFirstToken) : aint(-1);
+						if (iInner < 0 || !m_Tokens.f_IsText(Tokens[umint(iInner)], "["))
+							break;
+
+						bBehindAttribute = true;
+						iInFront = fp_PreviousCode(Nodes[iOuter].m_iFirstToken);
+
+						continue;
+					}
+
+					auto iGroup = m_Structure.f_FindNodeClosingAt(umint(iInFront));
+					auto iKeyword = iGroup < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iGroup].m_iFirstToken) : aint(-1);
+					bool bAttribute = false;
+					for (auto pAttribute : {"alignas", "_Alignas", "__declspec", "__attribute__", "__attribute"})
+						bAttribute = bAttribute || (iKeyword >= 0 && m_Tokens.f_IsText(Tokens[umint(iKeyword)], pAttribute));
+
+					if (!bAttribute)
+						break;
+
+					bBehindAttribute = true;
+					iInFront = fp_PreviousCode(umint(iKeyword));
+				}
+
+				bool bAtStart = iInFront < 0 || fIsAny(umint(iInFront), c_pOpeners) || fIsAny(umint(iInFront), c_pSpecifiers);
+				if (!bBehindAttribute || (iInFront >= 0 && m_Tokens.f_IsText(Tokens[umint(iInFront)], ")")) || !bAtStart)
+					continue;
+			}
 
 			// A C array parameter's bracket qualifies the pointer it stands for, and its bound is no type: 'int a[static const N]'.
 			auto iEnclosing = m_Structure.f_FindEnclosingNode(i);
 			if (iEnclosing && iEnclosing < m_Structure.f_GetNodes().f_GetLen())
 			{
 				auto const &Enclosing = m_Structure.f_GetNodes()[iEnclosing];
-				if (m_Tokens.f_IsText(Tokens[Enclosing.m_iFirstToken], "["))
+				if (Enclosing.m_Kind == ECodeNodeKind::mc_Group && m_Tokens.f_IsText(Tokens[Enclosing.m_iFirstToken], "["))
 					continue;
 			}
 
 			// A macro's argument is text the macro places, which can paste to it or name no type: 'DType(const int)' with
 			// 'T##32', 'DDeclare(const a)'.
-			if (fp_IsInMacroArgument(i))
+			if (fp_IsInMacroArgument(i, true))
 				continue;
 
 			umint iRunLast = i;
@@ -1167,7 +1221,7 @@ namespace NMib::NDevelop::NPrivate
 			while (iBeforeSpecifiers >= 0 && fIsAny(umint(iBeforeSpecifiers), c_pSpecifiers))
 				iBeforeSpecifiers = fp_PreviousCode(umint(iBeforeSpecifiers));
 
-			bool bLeads = iBeforeSpecifiers < 0 || fIsAny(umint(iBeforeSpecifiers), c_pOpeners);
+			bool bLeads = iBeforeSpecifiers < 0 || fIsAny(umint(iBeforeSpecifiers), c_pOpeners) || (bBehindAttribute && iBeforeSpecifiers == iBefore);
 
 			// Attributes behind a declarator's '*' or '&' belong to it, and so does the qualifier behind them:
 			// 'int *[[]] [[]] const p'.
@@ -1231,14 +1285,9 @@ namespace NMib::NDevelop::NPrivate
 			if (iEnd == c_NoType)
 				continue;
 
-			// A type a macro the naming lists names, 'DPointer' or 'N::DPointer', may expand to more than a name, 'int *',
-			// which the qualifier would change sides of.
-			bool bMacro = false;
-			for (auto iName = umint(iType); iName <= iEnd && !bMacro; ++iName)
-				bMacro = m_Tokens.f_HasRole(Tokens[iName], ECodeNameRole::mc_Macro);
-
-			if (bMacro)
-				continue;
+			// A type a macro names that expands to more than a name, 'DPointer' with 'int *', which the qualifier would change
+			// sides of, is out of scope by decision: a type is no macro, and the naming's macro patterns take in types as well,
+			// 'DWORD'.
 
 			auto iAfter = fp_NextCode(iEnd);
 			if (iAfter >= 0 && fIsQualifier(umint(iAfter)))

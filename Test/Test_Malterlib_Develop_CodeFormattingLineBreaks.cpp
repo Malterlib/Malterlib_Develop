@@ -1989,8 +1989,36 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				// qualifier leads in turn, and the next pass would move it again.
 				CStr Macro = "DExtern const CFoo DFar *fg_F();\nstatic const CFoo DFar *gs_pA;\n";
 				fg_ExpectFormat("Macro", Macro, Macro);
-				// So does a type that is a macro, which may expand to more than a name: 'DPtr' as 'int *'.
-				fg_ExpectFormat("MacroType", "const DPtr g_pA = nullptr;\nconst N::DPtr g_pB = nullptr;\n", "const DPtr g_pA = nullptr;\nconst N::DPtr g_pB = nullptr;\n");
+				// A type whose name a macro pattern takes in moves its qualifier as any other type: a type is no macro. Behind an
+				// attribute it leads the type, unless the attribute stands behind a declarator.
+				fg_ExpectFormat
+					(
+						"TypeMatchingMacroNames"
+						, "const DWORD g_A = 0;\nconst N::DWORD g_B = 0;\n[[maybe_unused]] const int g_C = 0;\nalignas(8) const int g_D = 0;\n"
+						"void f(int *__attribute__((unused)) __attribute__((aligned(8))) const p);\nvoid g(int __attribute__((unused)) const x);\n"
+						"void h(int *[[]] __attribute__((unused)) const p);\n"
+						, "DWORD const g_A = 0;\nN::DWORD const g_B = 0;\n[[maybe_unused]] int const g_C = 0;\nalignas(8) int const g_D = 0;\n"
+						"void f(int *__attribute__((unused)) __attribute__((aligned(8))) const p);\nvoid g(int __attribute__((unused)) const x);\n"
+						"void h(int *[[]] __attribute__((unused)) const p);\n"
+						, false
+					)
+				;
+				// A qualifier in a parenthesis nested in a macro's argument, a cast's, moves, and so does one in a parameter list
+				// behind a calling convention, which a type or a declarator stands in front of, while a call written apart from its
+				// name or behind an operator keeps it.
+				fg_ExpectFormat
+					(
+						"NestedInMacroArgument"
+						, "void f()\n{\n\tDTrace(\"{}\", (const char *)pName);\n\tDType(const int);\n\tDType (const int) Value;\n"
+						"\tbool b = c && DType(const int) && *DName(const int);\n\tbool d = c and not DName(const int);\n\tvolatile DType(const int) e = 0;\n"
+						"\tbool g = EFlag_A && DName(const int);\n\tbool h = EFlag_A & DName(const int);\n}\nusing FCall = void DCall (const char *_pA);\nvoid *DCall fg_G(const int _A);\n"
+						, "void f()\n{\n\tDTrace(\"{}\", (char const *)pName);\n\tDType(const int);\n\tDType(const int) Value;\n"
+						"\tbool b = c && DType(const int) && *DName(const int);\n\tbool d = c and not DName(const int);\n\tvolatile DType(const int) e = 0;\n"
+						"\tbool g = EFlag_A && DName(const int);\n\tbool h = EFlag_A & DName(const int);\n}\n\n"
+						"using FCall = void DCall (char const *_pA);\nvoid * DCall fg_G(int const _A);\n"
+						, false
+					)
+				;
 				// A disabled region keeps the qualifier where it is.
 				fMoves
 					(
