@@ -1048,40 +1048,41 @@ namespace NMib::NDevelop::NPrivate
 		return pShared;
 	}
 
-	// Whether the run's shared blanks are written as one space. What the lines keep behind them places their text relative
-	// to each other only at the columns the source has them where it starts with a tab on one line and a space on another,
-	// so those keep their blanks.
-	bool fg_ConvertsCommentBlanks(TCVector<CStr> const &_Texts, umint _nShared)
+	// Whether the lines of the run go on behind the shared blanks with a tab on one line and a space on another, which
+	// places their text relative to each other only at the columns the source has it.
+	bool fg_MixesCommentBlanks(TCVector<CStr> const &_Texts, umint _nShared)
 	{
-		if (!_nShared)
-			return false;
-
-		bool bFirst = true;
-		bool bOneSpace = false;
 		bool bTabsKept = false;
 		bool bSpacesKept = false;
 
 		for (auto const &Text : _Texts)
 		{
 			auto nBlanks = fg_CommentBlanks(Text);
-			if (2 + nBlanks >= Text.f_GetLen())
+			if (2 + nBlanks >= Text.f_GetLen() || _nShared >= nBlanks)
 				continue;
 
 			auto pText = Text.f_GetStr();
-			if (bFirst)
-			{
-				bOneSpace = _nShared == 1 && pText[2] == ' ';
-				bFirst = false;
-			}
-
-			if (_nShared < nBlanks)
-			{
-				bTabsKept = bTabsKept || pText[2 + _nShared] == '\t';
-				bSpacesKept = bSpacesKept || pText[2 + _nShared] == ' ';
-			}
+			bTabsKept = bTabsKept || pText[2 + _nShared] == '\t';
+			bSpacesKept = bSpacesKept || pText[2 + _nShared] == ' ';
 		}
 
-		return !bOneSpace && !(bTabsKept && bSpacesKept);
+		return bTabsKept && bSpacesKept;
+	}
+
+	// Whether the run's shared blanks are written as one space, with what the lines keep behind them kept as written. A run
+	// that mixes its blanks behind them is measured in columns instead.
+	bool fg_ConvertsCommentBlanks(TCVector<CStr> const &_Texts, umint _nShared)
+	{
+		if (!_nShared || fg_MixesCommentBlanks(_Texts, _nShared))
+			return false;
+
+		for (auto const &Text : _Texts)
+		{
+			if (2 + fg_CommentBlanks(Text) < Text.f_GetLen())
+				return !(_nShared == 1 && Text.f_GetStr()[2] == ' ');
+		}
+
+		return false;
 	}
 
 	// GCC's -Wimplicit-fallthrough reads a comment as the annotation only behind the statement that falls through, so it

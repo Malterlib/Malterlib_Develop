@@ -33,6 +33,7 @@ namespace NMib::NDevelop::NPrivate
 	bool fg_IsSameText(CStr const &_Text, ch8 const *_pOther, umint _nOther);
 	umint fg_CommentBlanks(CStr const &_Text);
 	bool fg_SharedCommentBlanks(TCVector<CStr> const &_Texts, umint &o_nShared);
+	bool fg_MixesCommentBlanks(TCVector<CStr> const &_Texts, umint _nShared);
 	bool fg_ConvertsCommentBlanks(TCVector<CStr> const &_Texts, umint _nShared);
 	CStr fg_TrailingLineComment(CStr const &_Text);
 	bool fg_IsFallthroughComment(CStr const &_Text);

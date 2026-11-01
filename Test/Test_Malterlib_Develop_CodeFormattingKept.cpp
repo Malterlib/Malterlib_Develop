@@ -923,12 +923,22 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					, false
 				)
 			;
-			// Lines whose blanks go on with a tab on one and a space on another keep them.
+			// Lines sharing no blanks, one with a tab and another with a space behind its '//', keep them.
 			fg_ExpectFormat
 				(
 					"LineCommentPrefixMixedBlanks"
 					, "void f()\n{\n\tg();\n\t//\t\tA\n\t//\t      B\n\t// C\n\t//\tD\n\th();\n}\n"
 					, "void f()\n{\n\tg();\n\t//\t\tA\n\t//\t      B\n\t// C\n\t//\tD\n\th();\n}\n"
+				)
+			;
+			// Lines going on behind their shared blanks with a tab on one and a space on another lose the shared blanks and
+			// keep where their text stands relative to each other's, measured with the tab width and written as spaces.
+			fg_ExpectFormat
+				(
+					"LineCommentPrefixSharedMixedBlanks"
+					, "void f()\n{\n\tg();\n\t//\t\t\t\t\t\tA();\n\t//\t\t\t\t\t      B();\n\th();\n}\n"
+					, "void f()\n{\n\tg();\n\t// A();\n\t//   B();\n\th();\n}\n"
+					, false
 				)
 			;
 			// A block comment's text written further in than one space behind its marker starts below the marker, at its column,

@@ -1936,25 +1936,33 @@ namespace NMib::NDevelop::NPrivate
 			for (auto iComment : Run)
 				bSameColumn = bSameColumn && fp_GetSourceLineIndent(iComment) == fp_GetSourceLineIndent(Run[0]);
 
-			if (!bSameColumn)
+			// Lines going on behind the shared blanks with a tab on one and a space on another keep where their text stands
+			// relative to each other's, measured with the tab width: '//\t\tA' over '//\t      B' is '// A' over '//   B'.
+			// A run sharing no blanks keeps its lines, as text without a blank behind its '//' does.
+			bool bMixed = bSameColumn && nShared && fg_MixesCommentBlanks(Texts, nShared);
+			if (!bSameColumn || bMixed)
 			{
-				aint iCode = fp_FindCodeBelowComments(Run.f_GetLast());
+				if (!bSameColumn)
+				{
+					aint iCode = fp_FindCodeBelowComments(Run.f_GetLast());
 
-				// As the run rule levels it: the comment lines in front of a list's or a call's closing marker stand among its
-				// elements.
-				auto iClosedGroup = iCode >= 0 ? m_Structure.f_FindNodeClosingAt(umint(iCode)) : m_Structure.f_GetNodes().f_GetLen();
-				bool bGroupCloser = iClosedGroup < m_Structure.f_GetNodes().f_GetLen() && m_Structure.f_GetNodes()[iClosedGroup].m_Kind == ECodeNodeKind::mc_Group;
-				if (iCode < 0 || bGroupCloser)
-					continue;
+					// As the run rule levels it: the comment lines in front of a list's or a call's closing marker stand among its
+					// elements.
+					auto iClosedGroup = iCode >= 0 ? m_Structure.f_FindNodeClosingAt(umint(iCode)) : m_Structure.f_GetNodes().f_GetLen();
+					bool bGroupCloser = iClosedGroup < m_Structure.f_GetNodes().f_GetLen() && m_Structure.f_GetNodes()[iClosedGroup].m_Kind == ECodeNodeKind::mc_Group;
+					if (iCode < 0 || bGroupCloser)
+						continue;
+				}
 
 				auto nTab = m_Request.m_Settings.m_nTabWidth;
 
 				// A line's code stands where its text does behind a tab, as a toggle at the line's start leaves it, and where the
-				// marker does otherwise, as one at the code's indentation leaves it.
+				// marker does otherwise, as one at the code's indentation leaves it. Markers at one column leave the text where
+				// it stands.
 				auto fTextColumn = [&](umint _iComment, umint _nBlanks) -> umint
 					{
 						auto iOffset = Tokens[_iComment].m_iOffset;
-						bool bTab = false;
+						bool bTab = bMixed;
 						for (umint iBlank = 0; iBlank < _nBlanks; ++iBlank)
 							bTab = bTab || m_pSource[iOffset + 2 + iBlank] == '\t';
 
@@ -1988,10 +1996,16 @@ namespace NMib::NDevelop::NPrivate
 					if (2 + nBlanks >= Comment.m_nLength || fp_IsDisabled(Comment.m_iOffset, Comment.m_nLength) || !fp_IsSelected(Comment.m_iOffset, Comment.m_nLength))
 						continue;
 
+					// Behind the space a tab reaches only the next tab stop, so mixed blanks are measured out in spaces.
 					auto nExtra = fTextColumn(iComment, nBlanks) - nMinColumn;
 					CStr Replacement = " ";
-					Replacement.f_AddChars('\t', aint(nExtra / nTab));
-					Replacement.f_AddChars(' ', aint(nExtra % nTab));
+					if (bMixed)
+						Replacement.f_AddChars(' ', aint(nExtra));
+					else
+					{
+						Replacement.f_AddChars('\t', aint(nExtra / nTab));
+						Replacement.f_AddChars(' ', aint(nExtra % nTab));
+					}
 					if (fg_IsSameText(Replacement, m_pSource + Comment.m_iOffset + 2, nBlanks))
 						continue;
 
