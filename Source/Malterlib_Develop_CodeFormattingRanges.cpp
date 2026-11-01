@@ -1364,6 +1364,38 @@ namespace NMib::NDevelop::NPrivate
 		return true;
 	}
 
+	// Gives each operator binding loosest in the range a line of its own, behind the operator it starts with, and lays each
+	// operand out from there, and says whether it found one. A range with none is left to the caller: '() : fg_F()', whose
+	// ':' answers no '?' in the range, and '&& cB<int>', whose last operand's scopes need not open.
+	bool CFormattingAnalyzer::fp_LayoutAtLooseOperators(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent)
+	{
+		TCVector<umint> Operators;
+		fp_FindLooseOperators(_iFirst, _iLast, Operators);
+		if (Operators.f_IsEmpty())
+			return false;
+
+		umint iOperandFirst = _iFirst;
+		for (umint iIndex = 0; iIndex <= Operators.f_GetLen(); ++iIndex)
+		{
+			auto iOperandLast = iIndex < Operators.f_GetLen() ? fp_PreviousCode(Operators[iIndex]) : aint(_iLast);
+			if (iOperandLast >= aint(iOperandFirst))
+			{
+				if (fp_IsRangeJoinable(_iNode, iOperandFirst, umint(iOperandLast)) && fp_FitsInline(iOperandFirst, umint(iOperandLast), _iIndent))
+					fp_MarkInline(iOperandFirst, umint(iOperandLast));
+				else
+					fp_LayoutRange(_iNode, iOperandFirst, umint(iOperandLast), _iIndent, false, false);
+			}
+
+			if (iIndex < Operators.f_GetLen())
+			{
+				fp_BreakBefore(Operators[iIndex], _iIndent);
+				iOperandFirst = Operators[iIndex];
+			}
+		}
+
+		return true;
+	}
+
 	// Lays a range out on as few levels as the column limit allows: the outermost breaks
 	// first, and a resulting line is only broken further when it is still too long.
 	bool CFormattingAnalyzer::fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations, bool _bMustSplit)
@@ -1396,6 +1428,7 @@ namespace NMib::NDevelop::NPrivate
 
 			auto iBrace = Child.m_iFirstToken;
 			auto nReference = fp_GetSourceLineIndent(_iFirst);
+			bool bSplitAll = false;
 			// A body whose lines cannot follow a move keeps the head it opens under where it
 			// is too. Moving the head alone would leave the two at depths that disagree, and
 			// the next pass would read that as a layout still to be made.
@@ -1418,8 +1451,24 @@ namespace NMib::NDevelop::NPrivate
 						bOperandTakesBody = fp_IsLambdaIntroducer(i);
 				}
 
+				// Two or more operators at the expression's loosest level, in front of the body and behind it, split it at every
+				// one, the one taking the body included: '(' over 'cA<T>' over '&& cB<T>' over '&& requires ()' over '{'. Behind
+				// one alone the body trails on its line.
+				TCVector<umint> AllOperators;
+				fp_FindLooseOperators(_iFirst, _iLast, AllOperators);
+				bSplitAll = AllOperators.f_GetLen() >= 2;
+				if (bSplitAll)
+				{
+					Operators.f_Clear();
+					for (auto iOperator : AllOperators)
+					{
+						if (iOperator < iBrace)
+							Operators.f_Insert(iOperator);
+					}
+				}
+
 				umint iOperandFirst = _iFirst;
-				if (bOperandTakesBody)
+				if (bOperandTakesBody || bSplitAll)
 				{
 					for (auto iOperator : Operators)
 					{
@@ -1439,7 +1488,7 @@ namespace NMib::NDevelop::NPrivate
 
 				auto iPreviousBody = m_iRangeBody;
 				m_iRangeBody = iBrace;
-				fp_LayoutRange(_iNode, iOperandFirst, umint(iHeadLast), _iIndent, _bClause && iOperandFirst == _iFirst, _bIndentContinuations && !bOperandTakesBody);
+				fp_LayoutRange(_iNode, iOperandFirst, umint(iHeadLast), _iIndent, _bClause && iOperandFirst == _iFirst, _bIndentContinuations && !bOperandTakesBody && !bSplitAll);
 				m_iRangeBody = iPreviousBody;
 			}
 
@@ -1458,7 +1507,7 @@ namespace NMib::NDevelop::NPrivate
 			if (iTail >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], "("))
 			{
 				auto iCall = m_Structure.f_FindNodeOpeningAt(umint(iTail));
-				if (iCall < Nodes.f_GetLen() && Nodes[iCall].m_iParent == _iNode)
+				if (iCall < Nodes.f_GetLen() && Nodes[iCall].m_iLastToken <= _iLast)
 					iTail = fp_NextCode(Nodes[iCall].m_iLastToken);
 			}
 
@@ -1497,7 +1546,8 @@ namespace NMib::NDevelop::NPrivate
 			if (bTailOperator)
 			{
 				fp_BreakBefore(umint(iTail), _iIndent);
-				fp_LayoutRange(_iNode, umint(iTail), _iLast, _iIndent, false, false);
+				if (!bSplitAll || !fp_LayoutAtLooseOperators(_iNode, umint(iTail), _iLast, _iIndent))
+					fp_LayoutRange(_iNode, umint(iTail), _iLast, _iIndent, false, false);
 			}
 			else if
 			(

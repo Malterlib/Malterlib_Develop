@@ -2196,6 +2196,20 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
+		// A lambda's body in an expression with two or more operators at its loosest level, in front of the body and behind
+		// it, splits the expression at every one of them, the one taking the body included, and a value split so gives at
+		// its '=': 'bool bTest' over '= cA' over '&& [&]()' over '{'. Behind one operator alone the body trails on the
+		// head's line: 'auto Cleanup = g_OnScopeExit / [&]'.
+		TCVector<umint> BodyOperators;
+		if (bBodyIn && iBlock != TCLimitsInt<umint>::mc_Max && Node.m_iLastToken > iDeclFirst)
+		{
+			auto iValueLast = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") ? fp_PreviousCode(Node.m_iLastToken) : aint(Node.m_iLastToken);
+			if (iValueLast > aint(iDeclFirst))
+				fp_FindLooseOperators(iDeclFirst, umint(iValueLast), BodyOperators);
+		}
+
+		bool bSplitAtBody = BodyOperators.f_GetLen() >= 2;
+
 		// The handlers of a function-try-block follow its body, each 'catch (...)' on a line of its own where the body opens
 		// and its block a body like the first.
 		auto fLayoutHandlers = [&]
@@ -2316,15 +2330,84 @@ namespace NMib::NDevelop::NPrivate
 					return;
 
 				fp_BreakBefore(umint(iTail), _iIndent + nTab);
-				fp_LayoutRange(_iNode, umint(iTail), umint(iTailLast), _iIndent + nTab, false, false);
+				bool bTailOperators = false;
+				for (auto iOperator : BodyOperators)
+					bTailOperators = bTailOperators || iOperator > Nodes[iBlock].m_iLastToken;
+
+				if (!bSplitAtBody || !bTailOperators || !fp_LayoutAtLooseOperators(_iNode, umint(iTail), umint(iTailLast), _iIndent + nTab))
+					fp_LayoutRange(_iNode, umint(iTail), umint(iTailLast), _iIndent + nTab, false, false);
 				if (bTerminated)
 					fp_BreakBefore(Node.m_iLastToken, _iIndent);
 			}
 		;
 
-		if (bFits)
+		// The head in front of the body, split at each operator in front of it.
+		auto fSplitHeadAtBody = [&]
+			{
+				auto nContinuation = _iIndent + nTab;
+				auto iBrace = Nodes[iBlock].m_iFirstToken;
+				TCVector<umint> Front;
+				for (auto iOperator : BodyOperators)
+				{
+					if (iOperator < iBrace)
+						Front.f_Insert(iOperator);
+				}
+
+				umint iOperandFirst = iDeclFirst;
+				umint iFront = 0;
+				if (!Front.f_IsEmpty() && fp_BreakAtAssign(iDeclFirst, Front[0], _iIndent, nContinuation))
+				{
+					fp_BreakBefore(Front[0], nContinuation);
+					iOperandFirst = Front[0];
+					iFront = 1;
+				}
+				else if (Front.f_IsEmpty())
+				{
+					// A value whose operators all stand behind the body gives at its '=' as well: 'bool bA' over '= [&]()'.
+					for (auto iAssign = iDeclFirst + 1; iAssign < iBrace; ++iAssign)
+					{
+						if (m_TokenDepth[iAssign] != m_TokenDepth[iDeclFirst] || !fp_IsAssignment(iAssign))
+							continue;
+
+						auto iHeadEnd = fp_PreviousCode(iAssign);
+						if (iHeadEnd >= aint(iDeclFirst) && fp_FitsInline(iDeclFirst, umint(iHeadEnd), _iIndent))
+						{
+							fp_MarkInline(iDeclFirst, umint(iHeadEnd));
+							fp_BreakBefore(iAssign, nContinuation);
+							iOperandFirst = iAssign;
+						}
+
+						break;
+					}
+				}
+
+				for (; iFront <= Front.f_GetLen(); ++iFront)
+				{
+					auto iOperandLast = iFront < Front.f_GetLen() ? fp_PreviousCode(Front[iFront]) : aint(iHeadLast);
+					auto nOperandIndent = iOperandFirst == iDeclFirst ? _iIndent : nContinuation;
+					if (iOperandLast >= aint(iOperandFirst))
+					{
+						if (fp_IsRangeJoinable(_iNode, iOperandFirst, umint(iOperandLast)) && fp_FitsInline(iOperandFirst, umint(iOperandLast), nOperandIndent))
+							fp_MarkInline(iOperandFirst, umint(iOperandLast));
+						else
+							fp_LayoutRange(_iNode, iOperandFirst, umint(iOperandLast), nOperandIndent, false, iOperandFirst == iDeclFirst);
+					}
+
+					if (iFront < Front.f_GetLen())
+					{
+						fp_BreakBefore(Front[iFront], nContinuation);
+						iOperandFirst = Front[iFront];
+					}
+				}
+			}
+		;
+
+		if (bFits || (bSplitAtBody && bJoinable && !m_bProbing))
 		{
-			fp_MarkInline(iDeclFirst, iHeadLast);
+			if (bSplitAtBody && !m_bProbing)
+				fSplitHeadAtBody();
+			else
+				fp_MarkInline(iDeclFirst, iHeadLast);
 
 			if (iInitializerList != TCLimitsInt<umint>::mc_Max)
 				fp_LayoutInitializerList(_iNode, iInitializerList, iHeadLastWithInitializers, _iIndent + nTab);

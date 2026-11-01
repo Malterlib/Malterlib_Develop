@@ -739,7 +739,13 @@ A lambda body splits the expression it ends. Each operator binding loosest in
 front of the body starts a line of its own at the body's level, and so does a
 binary operator behind the body's closing brace: `pState->m_Launch(...)` over
 `+ g_Dispatch(Actor) / [=]`, the body, and `+ fg_Other()` under its brace. The
-operator that takes the lambda stays on the line, `g_Dispatch(Actor) / [=]`.
+operator that takes the lambda stays on the line, `g_Dispatch(Actor) / [=]`,
+where it is the only one at the expression's loosest level; with two or more
+there, in front of the body and behind it, every one of them starts a line, the
+one taking the body included, and a value split so gives at its `=`: `bool b`
+over `= cA` over `&& [&]()` over the body over `()` over `&& cB`, and
+`g_Dispatch(Actor)` over `/ [=]` over the body over `% "Error"`. A requires
+expression's body counts the same, in a clause's parenthesis too.
 Every body in an expression opens, a later one standing under what goes on
 behind the first: `}` over `() && []` over `{`. A requires expression's body
 opens the same way wherever it stands, under the line its `requires` ends up on,

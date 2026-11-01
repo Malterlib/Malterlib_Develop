@@ -227,6 +227,7 @@ namespace NMib::NDevelop::NPrivate
 		void fp_LayoutElementRange(umint _iNode, umint _iFirst, umint _iEnd, NContainer::TCVector<umint> const &_Splits, umint _iIndent);
 		void fp_LayoutFileElements(umint _iNode);
 		bool fp_LayoutRange(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent, bool _bClause, bool _bIndentContinuations, bool _bMustSplit = false);
+		bool fp_LayoutAtLooseOperators(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent);
 		bool fp_BreakAtAssign(umint _iFirst, umint _iOperator, umint _iIndent, umint _nContinuation);
 		bool fp_IsLambdaIntroducer(umint _iToken) const;
 		bool fp_FollowsScope(umint _iToken) const;

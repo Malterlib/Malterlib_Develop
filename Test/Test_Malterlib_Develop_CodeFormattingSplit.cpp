@@ -49,7 +49,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				(
 					"AssignBody"
 					, CStr("void f()\n{\n\tauto Test = g_OnScopeExit / []\n\t\t{\n\t\t}\n\t\t% \"a_@\" % \"b_@\" % \"c_@\" % \"d_@\"\n\t;\n}\n").f_Replace("@", Name)
-					, CStr("void f()\n{\n\tauto Test = g_OnScopeExit / []\n\t\t{\n\t\t}\n\t\t% \"a_@\"\n\t\t% \"b_@\"\n\t\t% \"c_@\"\n\t\t% \"d_@\"\n\t;\n}\n").f_Replace("@", Name)
+					, CStr("void f()\n{\n\tauto Test\n\t\t= g_OnScopeExit\n\t\t/ []\n\t\t{\n\t\t}\n\t\t% \"a_@\"\n\t\t% \"b_@\"\n\t\t% \"c_@\"\n\t\t% \"d_@\"\n\t;\n}\n").f_Replace("@", Name)
 				)
 			;
 			// What stands in front of the '=' is the last thing to give: the value behind it
@@ -553,6 +553,125 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						"PrefixMeasuredWithParameters"
 						, "template <typename T>\n\trequires cA<T> || requires (T _" + Long + ") { _A.f(); }\nvoid fg_F();\n"
 						, "template <typename T>\n\trequires cA<T>\n\t|| requires (T _" + Long + ")\n\t{\n\t\t_A.f();\n\t}\nvoid fg_F();\n"
+					)
+				;
+			}
+			// Two or more operators at the loosest level of an expression a body is in split it at every one, and a value split so
+			// gives at its '='; behind one alone the body trails on its line.
+			fg_ExpectFormat
+				(
+					"BodySplitsLoosestLevel"
+					, "void f()\n{\n\tbool bA = c && [&]() { g(); }();\n\tbool bB = c && [&]() { g(); }() && d;\n\tbool bC = [&]() { g(); }() && d && e;\n}\n"
+					"template <typename T>\nvoid fg_F()\n\trequires (cA<T> >= 0 && cB<T> != -1 && requires () { g(); })\n{\n}\n"
+					, "void f()\n{\n\tbool bA = c && [&]()\n\t\t{\n\t\t\tg();\n\t\t}\n\t\t()\n\t;\n"
+					"\tbool bB\n\t\t= c\n\t\t&& [&]()\n\t\t{\n\t\t\tg();\n\t\t}\n\t\t()\n\t\t&& d\n\t;\n"
+					"\tbool bC\n\t\t= [&]()\n\t\t{\n\t\t\tg();\n\t\t}\n\t\t()\n\t\t&& d\n\t\t&& e\n\t;\n}\n\n"
+					"template <typename T>\nvoid fg_F()\n\trequires\n\t(\n\t\tcA<T> >= 0\n\t\t&& cB<T> != -1\n\t\t&& requires ()\n\t\t{\n\t\t\tg();\n\t\t}\n\t)\n{\n}\n"
+				)
+			;
+			// A call behind a trailing lambda is no part of the expression's operators and stays closed, a tail of bodies behind a
+			// lambda a statement opens with is laid out with its bodies opened, and a defaulted definition's suffix is measured
+			// with the constraint it stands behind.
+			fg_ExpectFormat
+				(
+					"TrailingLambdaCall"
+					, "template <typename T>\nvoid f()\n{\n\tauto Value = requires { 1; } ? 1 : [](int _A) { return _A; }(1);\n}\n"
+					, "template <typename T>\nvoid f()\n{\n\tauto Value = requires\n\t\t{\n\t\t\t1;\n\t\t} ? 1 : [](int _A)\n\t\t{\n\t\t\treturn _A;\n\t\t}\n\t\t(1)\n\t;\n}\n"
+				)
+			;
+			{
+				CStr Long;
+				for (umint i = 0; i < 140; ++i)
+					Long += "A";
+
+				fg_ExpectFormat
+					(
+						"LambdaStatementBodyTail"
+						, "template <typename T>\nvoid f()\n{\n\t[] { return true; }() && requires (T _" + Long + ") { _A + 1; } || requires { sizeof(T); };\n}\n"
+						, "template <typename T>\nvoid f()\n{\n\t[]\n\t{\n\t\treturn true;\n\t}() && requires (T _" + Long + ")\n\t{\n\t\t_A + 1;\n\t}\n"
+						"\t|| requires\n\t{\n\t\tsizeof(T);\n\t}\n\t;\n}\n"
+					)
+				;
+
+				CStr Concepts;
+				for (umint i = 0; i < 3; ++i)
+					Concepts += CStr::CFormat("{}c{}{}<T>\n") << (i ? "\t\t\t&& " : "\t\t\t") << i << Long.f_Left(50);
+
+				fg_ExpectFormat
+					(
+						"DefaultedSuffixMeasured"
+						, "template <typename T>\nstruct C\n{\n\tC(C const &_Other)\n\t\trequires // Constraint\n" + Concepts.f_Left(Concepts.f_GetLen() - 1) + " = default;\n};\n"
+						, "template <typename T>\nstruct C\n{\n\tC(C const &_Other)\n\t\trequires // Constraint\n" + Concepts.f_Left(Concepts.f_GetLen() - 1) + " = default;\n};\n"
+					)
+				;
+			}
+			// A function type's parameter names in a template argument list hide no name of the return type.
+			fg_ExpectFormat
+				(
+					"FunctionTypeParameterNames"
+					, "TCFunction<bool (CStr const &_FileName, EFileAttrib _Attribs, bool _bPreRecurse, bool _bFollowLinks, bool _bHidden)> fg_DefaultFindFilter"
+					"(CFile::CFindFilesOptions const *_pOptions, TCFunction<void (CStr const &_Path, EFileAttrib _Attribs)> const *_pOnAdd)\n{\n}\n"
+					, "auto fg_DefaultFindFilter(CFile::CFindFilesOptions const *_pOptions, TCFunction<void (CStr const &_Path, EFileAttrib _Attribs)> const *_pOnAdd)\n"
+					"\t-> TCFunction<bool (CStr const &_FileName, EFileAttrib _Attribs, bool _bPreRecurse, bool _bFollowLinks, bool _bHidden)>\n{\n}\n"
+					, false
+				)
+			;
+			// The call operator's parentheses are its name, and the parameter list behind them proves the declaration a function's.
+			fg_ExpectFormat
+				(
+					"CallOperatorTrailingReturn"
+					, "COrdering_Partial CAppManagerActor::CVersionManagerVersion::CCompareApplication::operator ()(CVersionManager::CVersionIDAndPlatform const &_Left, "
+					"CVersionManagerVersion const &_RightWWWWWWWWWW) const\n{\n}\n"
+					, "auto CAppManagerActor::CVersionManagerVersion::CCompareApplication::operator () (CVersionManager::CVersionIDAndPlatform const &_Left, "
+					"CVersionManagerVersion const &_RightWWWWWWWWWW) const\n\t-> COrdering_Partial\n{\n}\n"
+					, false
+				)
+			;
+			// A tail behind a body splits only at operators that bind loosest in it, so what has none, a conditional's ':' without
+			// its '?' or an operand's own scopes, is left to the layout and reaches a stable result.
+			fg_ExpectFormat
+				(
+					"BodyTailWithoutOperators"
+					, "void f()\n{\n\tauto x = requires { sizeof(int); } ? [] { return true; }() : fg_F(1, 2);\n"
+					"\tauto Value = requires { int{}; } ? [] { return true; }() : requires { int{}; } && (true);\n}\n"
+					, "void f()\n{\n\tauto x = requires\n\t\t{\n\t\t\tsizeof(int);\n\t\t} ? []\n\t\t{\n\t\t\treturn true;\n\t\t}\n\t\t() : fg_F(1, 2)\n\t;\n"
+					"\tauto Value = requires\n\t\t{\n\t\t\tint{};\n\t\t} ? []\n\t\t{\n\t\t\treturn true;\n\t\t}\n\t\t() : requires\n\t\t{\n\t\t\tint{};\n\t\t}\n"
+					"\t\t&& (true)\n\t;\n}\n"
+				)
+			;
+			fg_ExpectFormat
+				(
+					"BodyTailAcrossDirective"
+					, "constexpr bool g_bTest = true && requires (int\n#if 1\n_A) { _A; } && cB<int>\n#endif\n;\n"
+					, "constexpr bool g_bTest = true && requires (int\n#if 1\n_A)\n\t{\n\t\t_A;\n\t}\n\t&& cB<int>\n#endif\n;\n"
+				)
+			;
+			// A block comment leading a clause is measured with it.
+			{
+				CStr Long;
+				for (umint i = 0; i < 165; ++i)
+					Long += "A";
+
+				fg_ExpectFormat
+					(
+						"ClauseLeadingCommentMeasured"
+						, "template <typename T>\nvoid fg_F()\n\t/* " + Long + " */ requires cA<T>\n\t&& cB<T>;\n"
+						, "template <typename T>\nvoid fg_F()\n\t/* " + Long + " */ requires cA<T>\n\t\t&& cB<T>\n;\n"
+					)
+				;
+			}
+			// A body nested in the parenthesis behind a clause's operator opens that parenthesis.
+			{
+				CStr Long;
+				for (umint i = 0; i < 150; ++i)
+					Long += "A";
+
+				fg_ExpectFormat
+					(
+						"ClauseTailParenthesisBody"
+						, "template <typename T>\n\trequires requires { sizeof(T); } or (c" + Long + "<T> && requires { sizeof(T); } && true)\nvoid fg_F();\n"
+						, "template <typename T>\n\trequires requires\n\t{\n\t\tsizeof(T);\n\t}\n\tor\n\t(\n\t\tc" + Long + "<T>\n\t\t&& requires\n\t\t{\n\t\t\tsizeof(T);\n\t\t}\n"
+						"\t\t&& true\n\t)\nvoid fg_F();\n"
 					)
 				;
 			}

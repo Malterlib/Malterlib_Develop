@@ -68,6 +68,9 @@ namespace NMib::NDevelop
 #if defined(DMibSanitizerEnabled_Address) && defined(DPlatformFamily_Windows)
 		// AddressSanitizer's frames take about 40 KB a level of the layout, of a Windows thread's 1 MB.
 		static constexpr umint mc_MaxBracketDepth = 16;
+#elif defined(DMibDebug) && defined(DPlatformFamily_Windows)
+		// A Debug build's frames take about 5 KB a level of the layout, of a Windows thread's 1 MB.
+		static constexpr umint mc_MaxBracketDepth = 128;
 #else
 		static constexpr umint mc_MaxBracketDepth = 256; // Clang's default '-fbracket-depth'.
 #endif
