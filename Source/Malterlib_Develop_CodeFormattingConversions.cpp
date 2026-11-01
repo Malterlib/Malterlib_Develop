@@ -2353,54 +2353,36 @@ namespace NMib::NDevelop::NPrivate
 		if (m_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], "{") || !m_Tokens.f_IsText(Tokens[Inner.m_iLastToken], ";"))
 			return false;
 
-		// A lone name is a statement only as a macro, which may expand to more than one, or to an 'if' that would take an
-		// 'else' behind, so it keeps the braces. A macro called as a statement is one statement: the code standard writes a
-		// statement macro as one, 'do { ... } while (false)'.
-		auto iBehindFirst = fp_NextCode(Inner.m_iFirstToken);
-		auto const &FirstToken = Tokens[Inner.m_iFirstToken];
-		bool bJump
-			= m_Tokens.f_IsText(FirstToken, "return")
-			|| m_Tokens.f_IsText(FirstToken, "break")
-			|| m_Tokens.f_IsText(FirstToken, "continue")
-			|| m_Tokens.f_IsText(FirstToken, "throw")
-			|| m_Tokens.f_IsText(FirstToken, "co_return")
-		;
-		bool bLoneName = FirstToken.m_Kind == ECodeTokenKind::mc_Identifier && !bJump && iBehindFirst >= 0 && umint(iBehindFirst) == Inner.m_iLastToken;
-		if (bLoneName)
-			return false;
+		// A macro statement is one statement: the code standard writes a statement macro as one, 'do { ... } while (false)'.
+		// A macro that expands to a clause, 'IF(b) f_Call();' or 'GUARD f_Call();', would take an 'else' behind the braces;
+		// such a macro is out of scope.
 
-		// Nor is a call with a name behind it, which a macro makes a clause, as an 'if' that would take an 'else' behind, or a
-		// declaration's start: 'IF(b) f_Call();', 'DAlign(16) int x;'. A placement 'new' names the type it makes behind its
-		// parenthesis: 'new (pMemory) CFoo(1);'.
-		bool bCallFirst
-			= FirstToken.m_Kind == ECodeTokenKind::mc_Identifier && !m_Tokens.f_IsText(FirstToken, "new") && iBehindFirst >= 0 && m_Tokens.f_IsText(Tokens[umint(iBehindFirst)], "(")
-		;
-		// A name in front of another is a declaration or a macro, which can be a clause too: 'GUARD f_Call();'.
-		bool bNameFirst
-			= FirstToken.m_Kind == ECodeTokenKind::mc_Identifier
-			&& !bJump
-			&& !m_Tokens.f_IsText(FirstToken, "delete")
-			&& !m_Tokens.f_IsText(FirstToken, "goto")
-			&& !m_Tokens.f_IsText(FirstToken, "co_await")
-			&& !m_Tokens.f_IsText(FirstToken, "co_yield")
-			&& iBehindFirst >= 0
-			&& Tokens[umint(iBehindFirst)].m_Kind == ECodeTokenKind::mc_Identifier
-		;
-		if (bNameFirst)
-			return false;
-
-		if (bCallFirst)
+		// An attribute in front of a clause hides that the clause would take an 'else' behind the braces:
+		// '[[likely]] if (b) ...'. In C '[[maybe_unused]] int x' declares. An Objective-C message starts with a single '['.
+		if (auto iBehindOpen = fp_NextCode(Inner.m_iFirstToken); m_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], "[") && iBehindOpen >= 0)
 		{
-			auto iCall = m_Structure.f_FindNodeOpeningAt(umint(iBehindFirst));
-			auto iBehindCall = iCall < Nodes.f_GetLen() ? fp_NextCode(Nodes[iCall].m_iLastToken) : aint(-1);
-			if (iBehindCall >= 0 && umint(iBehindCall) < Inner.m_iLastToken && Tokens[umint(iBehindCall)].m_Kind == ECodeTokenKind::mc_Identifier)
-				return false;
-		}
+			auto iAttribute = m_Structure.f_FindNodeOpeningAt(Inner.m_iFirstToken);
+			if (m_Tokens.f_IsText(Tokens[umint(iBehindOpen)], "["))
+			{
+				if (m_Tokens.f_IsC(Tokens[Inner.m_iFirstToken]) || iAttribute >= Nodes.f_GetLen())
+					return false;
 
-		// An attribute in front hides what the statement is: '[[likely]] if (b) ...' would take an 'else' behind the braces,
-		// and in C '[[maybe_unused]] int x' declares.
-		if (m_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], "["))
-			return false;
+				auto iBehindAttribute = fp_NextCode(Nodes[iAttribute].m_iLastToken);
+				if (iBehindAttribute < 0)
+					return false;
+
+				for (auto pClause : {"if", "for", "while", "switch", "do", "case", "default", "[", "__extension__", "_Pragma", "__pragma", "__attribute__", "__attribute"})
+				{
+					if (m_Tokens.f_IsText(Tokens[umint(iBehindAttribute)], pClause))
+						return false;
+				}
+
+				// So does a label, which can stand in front of a clause: '[[maybe_unused]] L: if (b) ...', a case label too.
+				auto iColon = fp_NextCode(umint(iBehindAttribute));
+				if (iColon >= 0 && m_Tokens.f_IsText(Tokens[umint(iColon)], ":"))
+					return false;
+			}
+		}
 
 		// So does GNU's '__extension__', which a declaration starts with as readily as an expression: '__extension__ int a', and
 		// a pragma or a GNU attribute in front of an 'if' that would take an 'else' behind. GNU's '__label__' only starts a block.
@@ -2503,7 +2485,12 @@ namespace NMib::NDevelop::NPrivate
 					return false;
 			}
 
+			// A name alone can be a macro expanding to a declaration: 'DLocal;' for 'int Value = 0'.
+			bool bKeyword = m_Tokens.f_IsText(First, "break") || m_Tokens.f_IsText(First, "continue") || m_Tokens.f_IsText(First, "return");
 			auto iSecond = fp_NextCode(Inner.m_iFirstToken);
+			if (iSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSecond)], ";") && !bKeyword)
+				return false;
+
 			if (iSecond >= 0)
 			{
 				// Objective-C's protocols and generics qualify a type with angle brackets, 'id<P> value;', where an expression
@@ -2614,13 +2601,6 @@ namespace NMib::NDevelop::NPrivate
 		bool bLastOnLine = fp_IsLastOnLine(Block.m_iLastToken);
 		bool bElseFollows = iAfter >= 0 && m_Tokens.f_IsText(Tokens[umint(iAfter)], "else");
 
-		// A comment in front of the 'else' keeps the braces wherever it stands, as the layout moves it onto the 'else''s
-		// line, from where the gap the braces go from holds it as well: '} /* note */ else'.
-		for (auto i = Block.m_iLastToken + 1; bElseFollows && i < umint(iAfter); ++i)
-		{
-			if (Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment || Tokens[i].m_Kind == ECodeTokenKind::mc_BlockComment)
-				return false;
-		}
 		auto iOuter = Statement.m_iParent;
 		auto const *pOuter = iOuter < Nodes.f_GetLen() ? &Nodes[iOuter] : nullptr;
 		bool bOuterCloses = iAfter >= 0 && pOuter && pOuter->m_Kind == ECodeNodeKind::mc_Block && pOuter->m_iLastToken == umint(iAfter);

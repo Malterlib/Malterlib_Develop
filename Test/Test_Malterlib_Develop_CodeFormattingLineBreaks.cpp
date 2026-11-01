@@ -1039,7 +1039,64 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						, "void f()\n{\n\tif (a)\n\t{\n\t\t[[likely]] if (b) x = 1;\n\t}\n\telse\n\t\tx = 2;\n}\n"
 					)
 				;
-				fg_ExpectFormat("KeptAroundLoneName", "void f()\n{\n\tif (a)\n\t{\n\t\tDAct;\n\t}\n}\n", "void f()\n{\n\tif (a)\n\t{\n\t\tDAct;\n\t}\n}\n");
+				// A macro statement is one statement, as the standard writes a statement macro.
+				fg_ExpectFormat
+					(
+						"DroppedAroundMacroStatement"
+						, "void f()\n{\n\tif (a)\n\t{\n\t\tDAct;\n\t}\n\tif (b)\n\t{\n\t\t__leave;\n\t}\n}\n"
+						, "void f()\n{\n\tif (a)\n\t\tDAct;\n\tif (b)\n\t\t__leave;\n}\n"
+						, false
+					)
+				;
+				// A label behind an attribute, a case label too, can stand in front of a clause that would take the 'else' behind the
+				// braces.
+				fg_ExpectFormat
+					(
+						"KeptAroundAttributedLabel"
+						, "void f()\n{\n\tif (a)\n\t{\n\t\t[[maybe_unused]] L:if (b) g();\n\t}\n\telse\n\t\th();\n\tswitch (x)\n\t{\n\t\tif (a)\n\t\t{\n"
+						"\t\t\t[[likely]] case 1: if (b) g();\n\t\t}\n\t\telse\n\t\t\th();\n\t}\n}\n"
+						, "void f()\n{\n\tif (a)\n\t{\n\t[[maybe_unused]] L:\n\t\tif (b)\n\t\t\tg();\n\t}\n\telse\n\t\th();\n\tswitch (x)\n\t{\n\t\tif (a)\n\t\t{\n"
+						"\t\t[[likely]] case 1:\n\t\t\tif (b)\n\t\t\t\tg();\n\t\t}\n\t\telse\n\t\t\th();\n\t}\n}\n"
+					)
+				;
+				// An unnamed bit-field behind an attribute is a member, no label, and in a class's body so is one of a type the naming
+				// lists, which in a function's body is a label's name.
+				fg_ExpectFormat
+					(
+						"AttributedBitField"
+						, "struct C\n{\n\t[[maybe_unused]] int : 3;\n\t[[maybe_unused]] unsigned : Width;\n\tCField : Width;\n\t[[maybe_unused]] CField : Width;\n};\n"
+						"void f()\n{\nERROR:\n\treturn;\n}\nstruct CResult fg_F()\n{\nERROR:\n\treturn {};\n}\n"
+						, "struct C\n{\n\t[[maybe_unused]] int:3;\n\t[[maybe_unused]] unsigned:Width;\n\tCField : Width;\n\t[[maybe_unused]] CField:Width;\n};\n\n"
+						"void f()\n{\nERROR:\n\treturn;\n}\n\nstruct CResult fg_F()\n{\nERROR:\n\treturn {};\n}\n"
+					)
+				;
+				// A declaration is a statement the braces go from as well, an attributed one too.
+				fg_ExpectFormat
+					(
+						"DroppedAroundDeclaration"
+						, "void f()\n{\n\tif (a)\n\t{\n\t\tint y = 0;\n\t}\n\tfor (;;)\n\t{\n\t\t[[maybe_unused]] auto p = g();\n\t}\n}\n"
+						, "void f()\n{\n\tif (a)\n\t\tint y = 0;\n\tfor (;;)\n\t\t[[maybe_unused]] auto p = g();\n}\n"
+						, false
+					)
+				;
+				// So is a return of a cast, and an Objective-C message.
+				fg_ExpectFormat
+					(
+						"DroppedAroundCastAndMessage"
+						, "int f()\n{\n\tif (a)\n\t{\n\t\treturn (int)g();\n\t}\n\tif (b)\n\t{\n\t\t[pObject send: 1];\n\t}\n\treturn 0;\n}\n"
+						, "int f()\n{\n\tif (a)\n\t\treturn (int)g();\n\tif (b)\n\t\t[pObject send: 1];\n\treturn 0;\n}\n"
+						, false
+					)
+				;
+				// A comment line in front of the next 'else' describes that branch, and keeps no braces in front of it.
+				fg_ExpectFormat
+					(
+						"DroppedBeforeCommentedElse"
+						, "int f()\n{\n\tif (a)\n\t{\n\t\treturn 0;\n\t}\n\t// B\n\telse if (b)\n\t{\n\t\treturn 1;\n\t}\n\treturn 2;\n}\n"
+						, "int f()\n{\n\tif (a)\n\t\treturn 0;\n\t// B\n\telse if (b)\n\t\treturn 1;\n\treturn 2;\n}\n"
+						, false
+					)
+				;
 				fg_ExpectFormat("DroppedAroundJump", "void f()\n{\n\twhile (a)\n\t{\n\t\tbreak;\n\t}\n}\n", "void f()\n{\n\twhile (a)\n\t\tbreak;\n}\n", false);
 				// A statement behind the closing brace on its line goes to a line of its own, and the braces go.
 				fg_ExpectFormat

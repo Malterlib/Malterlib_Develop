@@ -58,6 +58,7 @@ namespace NMib::NDevelop
 		bool m_bClauseMacro = false;       // A macro standing where an 'if' does, the 'else' behind its block telling it: 'BOOST_IF_CONSTEXPR(c)'.
 		bool m_bObjectiveCMethod = false;  // An Objective-C method's declaration or definition: '- (void)f_Set: (int)_Value;'.
 		bool m_bFileElements = false;      // A file of a list's elements, which another file includes inside its braces.
+		bool m_bClassBody = false;         // A class's body, whose members a name and a colon declare bit-fields of.
 	};
 
 	// Builds the layout tree for a lexed source. Anything the builder cannot classify becomes

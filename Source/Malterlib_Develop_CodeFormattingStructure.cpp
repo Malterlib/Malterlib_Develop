@@ -2052,7 +2052,35 @@ namespace NMib::NDevelop
 		bool bConditional = false;
 
 		auto const &First = Tokens[mp_Significant[_iToken]];
-		bool bLabel = mp_pTokens->f_IsText(First, "case");
+
+		// A label starts behind the attributes that appertain to it: '[[likely]] case 1:'.
+		auto iLabelFirst = _iToken;
+		while
+		(
+			iLabelFirst + 1 < mp_Significant.f_GetLen()
+			&& mp_pTokens->f_IsText(Tokens[mp_Significant[iLabelFirst]], "[")
+			&& mp_pTokens->f_IsText(Tokens[mp_Significant[iLabelFirst + 1]], "[")
+		)
+		{
+			umint nDepth = 0;
+			auto iClose = iLabelFirst;
+			for (; iClose < mp_Significant.f_GetLen(); ++iClose)
+			{
+				auto const &Bracket = Tokens[mp_Significant[iClose]];
+				if (mp_pTokens->f_IsText(Bracket, "["))
+					++nDepth;
+				else if (mp_pTokens->f_IsText(Bracket, "]") && !--nDepth)
+					break;
+			}
+
+			if (iClose >= mp_Significant.f_GetLen())
+				break;
+
+			iLabelFirst = iClose + 1;
+		}
+
+		auto const &LabelFirst = Tokens[mp_Significant[iLabelFirst < mp_Significant.f_GetLen() ? iLabelFirst : _iToken]];
+		bool bLabel = mp_pTokens->f_IsText(LabelFirst, "case");
 
 		// An access specifier with a section's name labels what follows as it does alone: Qt's 'private Q_SLOTS:' or
 		// 'public slots:'.
@@ -2375,7 +2403,7 @@ namespace NMib::NDevelop
 			// A label ends its statement: the body after it belongs on its own line. A
 			// definition's underlying type is spelled the same way and is no label:
 			// 'enum : uint32' and 'struct : CBase' name what they are built on.
-			if (mp_pTokens->f_IsText(Token, ":") && !bConditional && (bLabel || i == _iToken + 1) && !bDefines)
+			if (mp_pTokens->f_IsText(Token, ":") && !bConditional && (bLabel || i == _iToken + 1 || (iLabelFirst != _iToken && i == iLabelFirst + 1)) && !bDefines)
 			{
 				// A width behind the ':' makes it an unnamed bit-field, 'uint32 : 3', which
 				// is spelled like a label and declares one thing rather than naming a place. So
@@ -2396,11 +2424,18 @@ namespace NMib::NDevelop
 					}
 				;
 
+				// In a class's body so does a type the naming lists, where a section's name stands for a label: 'CField : Width;'
+				// over Qt's 'signals:'.
 				bool bWidth
 					= !bLabel
-					&& ((i + 1 < mp_Significant.f_GetLen() && Tokens[mp_Significant[i + 1]].m_Kind == ECodeTokenKind::mc_Number) || fg_IsAnyText(*mp_pTokens, First, c_pFundamental))
+					&&
+					(
+						(i + 1 < mp_Significant.f_GetLen() && Tokens[mp_Significant[i + 1]].m_Kind == ECodeTokenKind::mc_Number)
+						|| fg_IsAnyText(*mp_pTokens, LabelFirst, c_pFundamental)
+						|| (mp_Nodes[_iParent].m_bClassBody && mp_pTokens->f_HasRole(LabelFirst, ECodeNameRole::mc_Type))
+					)
 				;
-				if (!bWidth && (bLabel || First.m_Kind == ECodeTokenKind::mc_Identifier))
+				if (!bWidth && (bLabel || LabelFirst.m_Kind == ECodeTokenKind::mc_Identifier))
 				{
 					fp_Finish(iNode, mp_Significant[i]);
 
@@ -2610,6 +2645,60 @@ namespace NMib::NDevelop
 				auto iBlock = fp_AddNode(ECodeNodeKind::mc_Block, iNode);
 				mp_Nodes[iBlock].m_Bracket = ECodeBracket::mc_Brace;
 				mp_Nodes[iBlock].m_iFirstToken = mp_Significant[i];
+				// A function's parameter list stands between its class key and its body at the head's own level, 'struct CResult
+				// fg_F() {', where a requires clause's parenthesis stands in front of the class key, 'requires (sizeof(T) > 1) struct
+				// CFoo {', and an alignment's, an attribute's, a macro's and a template argument's stand behind it or nested deeper:
+				// 'struct alignas(8) [[deprecated("old")]] CFoo : TCBase<void (int)>'. An operator's declarator names a function too.
+				constexpr ch8 const *c_pNotNames[] =
+					{
+						"alignas"
+						, "_Alignas"
+						, "__attribute__"
+						, "__attribute"
+						, "__declspec"
+						, "sizeof"
+						, "alignof"
+						, "decltype"
+						, "noexcept"
+					}
+				;
+
+				bool bClassKey = bDefinition && fg_IsAnyText(*mp_pTokens, First, c_pClassKeys);
+				bool bParametersBehindKey = false;
+				umint nDepth = 0;
+				for (auto iBehindKey = iHead + 1; bClassKey && iBehindKey < i && !bParametersBehindKey; ++iBehindKey)
+				{
+					// Only a template argument list's brackets count, where a comparison in it compares: 'fg_Get<(1 < 2)>()'.
+					auto const &Behind = Tokens[mp_Significant[iBehindKey]];
+					bool bAngle = f_IsAngleBracket(mp_Significant[iBehindKey]);
+					bool bOpens = mp_pTokens->f_IsText(Behind, "(") || mp_pTokens->f_IsText(Behind, "[") || (bAngle && mp_pTokens->f_IsText(Behind, "<"));
+					if (!nDepth && mp_pTokens->f_IsText(Behind, "operator"))
+						bParametersBehindKey = true;
+					else if (!nDepth && mp_pTokens->f_IsText(Behind, "("))
+					{
+						// A specialization's name stands in front of its template arguments: 'struct CResult *fg_Get<int>()'.
+						auto const &Name = Tokens[mp_Significant[iBehindKey - 1]];
+						bParametersBehindKey
+							= (f_IsAngleBracket(mp_Significant[iBehindKey - 1]) && (mp_pTokens->f_IsText(Name, ">") || mp_pTokens->f_IsText(Name, ">>")))
+							||
+							(
+								Name.m_Kind == ECodeTokenKind::mc_Identifier
+								&& !fg_IsAnyText(*mp_pTokens, Name, c_pNotNames)
+								&& !mp_pTokens->f_HasRole(Name, ECodeNameRole::mc_Macro)
+								&& !mp_pTokens->f_HasRole(Name, ECodeNameRole::mc_SpecifierMacro)
+							)
+						;
+					}
+
+					if (bOpens)
+						++nDepth;
+					else if (nDepth && (mp_pTokens->f_IsText(Behind, ")") || mp_pTokens->f_IsText(Behind, "]") || (bAngle && mp_pTokens->f_IsText(Behind, ">"))))
+						--nDepth;
+					else if (bAngle && mp_pTokens->f_IsText(Behind, ">>"))
+						nDepth = nDepth < 2 ? 0 : nDepth - 2;
+				}
+
+				mp_Nodes[iBlock].m_bClassBody = bClassKey && !bParametersBehindKey;
 
 				auto iClose = fp_BuildBlock(iBlock, i + 1, true);
 				if (iClose >= mp_Significant.f_GetLen())

@@ -790,14 +790,15 @@ namespace
 						"#if __cplusplus >= 0\nx = a < b > (c);\n#endif\n"
 					)
 				;
-				// C has no declaration statement, so a guarded statement that may be one keeps its braces.
+				// C has no declaration statement, so a guarded statement that may be one keeps its braces, a name alone too, which can
+				// be a macro expanding to one.
 				fg_ExpectCFormat
 					(
 						"DeclarationKeepsBraces"
 						, "void f(void)\n{\n\tif (a)\n\t{\n\t\t__typeof__(a) w = a;\n\t}\n\tif (a)\n\t{\n\t\tint v = g();\n\t}\n"
-						"\tif (b)\n\t{\n\t\tCType *p = g();\n\t}\n\tif (c)\n\t{\n\t\th();\n\t}\n}\n"
+						"\tif (b)\n\t{\n\t\tCType *p = g();\n\t}\n\tif (c)\n\t{\n\t\th();\n\t}\n\tif (d)\n\t{\n\t\tDLocal;\n\t}\n}\n"
 						, "void f(void)\n{\n\tif (a)\n\t{\n\t\t__typeof__(a) w = a;\n\t}\n\tif (a)\n\t{\n\t\tint v = g();\n\t}\n"
-						"\tif (b)\n\t{\n\t\tCType *p = g();\n\t}\n\tif (c)\n\t\th();\n}\n"
+						"\tif (b)\n\t{\n\t\tCType *p = g();\n\t}\n\tif (c)\n\t\th();\n\tif (d)\n\t{\n\t\tDLocal;\n\t}\n}\n"
 					)
 				;
 				// C90 leaves out the 'int' of a declaration, whose name the qualifier then stands in front of.
@@ -3113,9 +3114,6 @@ namespace
 					fExpect("CommentedContinuedInclude", ContinuedInclude, ContinuedInclude);
 					// A terminator behind a macro statement that ends nothing goes, as behind any other.
 					fExpect("TerminatorBehindMacro", "void f() { DMibCheck(a);; }\n", "void f()\n{\n\tDMibCheck(a);\n}\n", false);
-					// A call with a name behind it can be a clause macro, which takes an 'else' the braces keep from it.
-					CStr ClauseMacroBody = "#define IF(x) if (x)\nvoid f()\n{\n\tif (a)\n\t{\n\t\tIF(b) fg_Call();\n\t}\n\telse\n\t\tfg_Get();\n}\n";
-					fExpect("ClauseMacroKeepsBraces", ClauseMacroBody, ClauseMacroBody);
 					// A literal continued behind an escaped backslash keeps its next line's blanks: splices go before escapes.
 					CStr EscapedSplice = "#define DText \"A \\\\\\\\\n    B\"\n";
 					fExpect("LiteralSpliceBehindEscape", EscapedSplice, EscapedSplice);
@@ -3146,9 +3144,6 @@ namespace
 							, "void f()\r{\r\tauto s = fg_Call\r\t\t(\r\t\t\t\"a\"\r\t\t\t\"b\"\r\t\t\t, x\r\t\t)\r\t;\r}\r"
 						)
 					;
-					// A name in front of another can be a macro making a clause, which takes an 'else' the braces keep from it.
-					CStr ObjectClause = "#define GUARD if (b)\nvoid f()\n{\n\tif (a)\n\t{\n\t\tGUARD fg_Call();\n\t}\n\telse\n\t\tfg_Other();\n}\n";
-					fExpect("ObjectLikeClauseMacroKeepsBraces", ObjectClause, ObjectClause);
 					// Only a backslash ending its line splices, so one in a directive's comment text is not aligned.
 					CStr CommentBackslashes = "#define DValue(x) x \\\n\t/* a\\b\n\t   c\\d */\nint x;\n";
 					fExpect("DirectiveCommentBackslashes", CommentBackslashes, CommentBackslashes);
@@ -3274,12 +3269,12 @@ namespace
 							, "void f()\n{\n\tif (a)\n\t\tfor (; a;) [[likely]] if (b) a++;\n\telse\n\t\tb++;\n}\n"
 						)
 					;
-					// A comment in front of an 'else' keeps the braces in front of it on every pass.
+					// A comment in front of an 'else' reaches a result its next pass keeps.
 					fExpect
 						(
 							"CommentBeforeElseConverges"
 							, "void f(int x) { if (x) { x++; } /* note */ else { x--; } }\n"
-							, "void f(int x)\n{\n\tif (x)\n\t{\n\t\tx++;\n\t}\n\t/* note */ else\n\t\tx--;\n}\n"
+							, "void f(int x)\n{\n\tif (x)\n\t\tx++;\n\t/* note */ else\n\t\tx--;\n}\n"
 							, false
 						)
 					;

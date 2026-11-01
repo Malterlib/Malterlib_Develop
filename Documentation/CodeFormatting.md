@@ -392,8 +392,12 @@ by a clause that is split across lines, stands within them. Braces are dropped
 only where the change cannot alter what the source says: the block holds
 exactly one statement, which ends in `;` and is not itself a block, nothing
 but whitespace stands between the braces and that statement, and no directive
-is inside. A comment trailing the statement on its line follows it out of the
-block; any other comment inside keeps the braces. They are added only around a
+is inside. A macro statement, a declaration and an Objective-C message are
+statements like any other: the standard writes a statement macro as one
+statement, and a macro expanding to a clause, `IF(b) f_Call();`, is out of
+scope. A comment trailing the statement on its line follows it out of the
+block; any other comment inside keeps the braces, while a comment line in
+front of the next `else` describes that branch and keeps none. They are added only around a
 statement ending in `;` with nothing but whitespace between the guard and it,
 behind an attribute on the clause's line, and behind a comment trailing the
 statement's last line. A guarded clause, `if (a)` under a `for`, owns only its
