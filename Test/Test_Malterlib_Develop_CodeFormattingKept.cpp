@@ -81,8 +81,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			fg_ExpectFormat
 				(
 					"DeclarationHeadCut"
-					, "bool // Comment\n\tCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n{\n}\n\nint\n#ifdef _MSC_VER\n\t__cdecl\n#endif\n\tmain()\n{\n}\n"
-					, "bool // Comment\nCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n{\n}\n\nint\n#ifdef _MSC_VER\n__cdecl\n#endif\nmain()\n{\n}\n"
+					, "auto // Comment\n\tCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n\t-> bool\n{\n}\n\nint\n#ifdef _MSC_VER\n\t__cdecl\n#endif\n\tmain()\n{\n}\n"
+					, "auto // Comment\nCFoo::f_Process\n\t(\n\t\tint _A\n\t\t, int _B // Second\n\t)\n\t-> bool\n{\n}\n\nint\n#ifdef _MSC_VER\n__cdecl\n#endif\nmain()\n{\n}\n"
 				)
 			;
 			// Behind an operator or a compound assignment no declaration starts, so '*' and '&' are binary there.
@@ -427,7 +427,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			;
 			// A comment continuing the one trailing an element stays with it, in front of a closing marker too.
 			{
-				CStr Continued = "struct C\n{\n\tvoid g\n\t\t(\n\t\t\tint _A // Leave empty\n\t\t\t\t   // applications.\n\t\t)\n\t;\n};\n";
+				CStr Continued = "struct C\n{\n\tauto g\n\t\t(\n\t\t\tint _A // Leave empty\n\t\t\t\t   // applications.\n\t\t)\n\t\t-> void\n\t;\n};\n";
 				fg_ExpectFormat("TrailingCommentContinuedBeforeCloser", Continued, Continued);
 			}
 			// The rows of a list a block comment names, in a block a conditional cuts, are laid out with their names in
@@ -1575,7 +1575,13 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					"\t, EStatus_Longer = 2 // Second\n\t// Own comment\n\t, EStatus_C = 3\n};\n"
 				)
 			;
-			fg_ExpectFormat("CommentParameter", "void fg_F\n\t(\n\t\t\tint _A // why\n\t\t, int _B\n\t)\n;\n", "void fg_F\n\t(\n\t\tint _A // why\n\t\t, int _B\n\t)\n;\n");
+			fg_ExpectFormat
+				(
+					"CommentParameter"
+					, "auto fg_F\n\t(\n\t\t\tint _A // why\n\t\t, int _B\n\t)\n\t-> void\n;\n"
+					, "auto fg_F\n\t(\n\t\tint _A // why\n\t\t, int _B\n\t)\n\t-> void\n;\n"
+				)
+			;
 			fg_ExpectFormat
 				(
 					"Directive"

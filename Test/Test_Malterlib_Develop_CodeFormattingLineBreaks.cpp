@@ -1670,8 +1670,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				fSplit
 					(
 						"NameAfterParameters"
-						, "template void fg_Delete<TCVector<@, @>, CAllocator &>(CAllocator &, TCVector<@, @> *);\n"
-						, "template void fg_Delete\n\t<\n\t\tTCVector<@, @>\n\t\t, CAllocator &\n\t>\n\t(\n\t\tCAllocator &\n\t\t, TCVector<@, @> *\n\t)\n;\n"
+						, "template auto fg_Delete<TCVector<@, @>, CAllocator &>(CAllocator &, TCVector<@, @> *) -> void;\n"
+						, "template auto fg_Delete\n\t<\n\t\tTCVector<@, @>\n\t\t, CAllocator &\n\t>\n\t(\n\t\tCAllocator &\n\t\t, TCVector<@, @> *\n\t)\n\t-> void\n;\n"
 					)
 				;
 				// An operator behind a '>>' is still at the statement's own level.
@@ -2142,7 +2142,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					DMibTestPath("LambdaInNoexcept");
 					CStr Source = CStr("CLongResultType f@() noexcept([] { return true; }());\n").f_Replace("@", Name);
 					auto Formatted = fg_FormatSource(Source);
-					DMibExpect(Formatted, ==, CStr("CLongResultType f@()\n\tnoexcept\n\t(\n\t\t[]\n\t\t{\n\t\t\treturn true;\n\t\t}()\n\t)\n;\n").f_Replace("@", Name));
+					DMibExpect(Formatted, ==, CStr("auto f@()\n\tnoexcept\n\t(\n\t\t[]\n\t\t{\n\t\t\treturn true;\n\t\t}()\n\t)\n\t-> CLongResultType\n;\n").f_Replace("@", Name));
 				}
 				// A name in front of a 'typename' or a class key is a specifier, or a macro expanding to one, which a
 				// return type moved behind the parameter list would take along.
@@ -2180,12 +2180,16 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					fg_ExpectFormat
 						(
 							"DefaultArgumentBelow"
-							, "struct C\n{\n\tstatic C fs_Launch\n\t\t(\n\t\t\tint _Operation\n\t\t\t, " + Type + " const &_fDispatcherWithALongName = " + Type + "()\n\t\t)\n\t;\n};\n"
-							, "struct C\n{\n\tstatic C fs_Launch\n\t\t(\n\t\t\tint _Operation\n\t\t\t, "
+							, "struct C\n{\n\tstatic auto fs_Launch\n\t\t(\n\t\t\tint _Operation\n\t\t\t, "
+							+ Type
+							+ " const &_fDispatcherWithALongName = "
+							+ Type
+							+ "()\n\t\t)\n\t\t-> C\n\t;\n};\n"
+							, "struct C\n{\n\tstatic auto fs_Launch\n\t\t(\n\t\t\tint _Operation\n\t\t\t, "
 							+ Type
 							+ " const &_fDispatcherWithALongName\n\t\t\t= "
 							+ Type
-							+ "()\n\t\t)\n\t;\n};\n"
+							+ "()\n\t\t)\n\t\t-> C\n\t;\n};\n"
 						)
 					;
 				}
@@ -2202,8 +2206,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					fg_ExpectFormat
 						(
 							"LinkageSpecification"
-							, "extern \"C\"\n{\n\tvoid fg_Function(" + Params + ")\n\t{\n\t}\n}\n"
-							, "extern \"C\"\n{\n\tvoid fg_Function\n\t\t(\n\t\t\t" + CStr(Params).f_Replace(", ", "\n\t\t\t, ") + "\n\t\t)\n\t{\n\t}\n}\n"
+							, "extern \"C\"\n{\n\tauto fg_Function(" + Params + ") -> void\n\t{\n\t}\n}\n"
+							, "extern \"C\"\n{\n\tauto fg_Function\n\t\t(\n\t\t\t" + CStr(Params).f_Replace(", ", "\n\t\t\t, ") + "\n\t\t)\n\t\t-> void\n\t{\n\t}\n}\n"
 						)
 					;
 					// A requires clause on a line of its own behind the declaration keeps that line,
@@ -2211,8 +2215,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					fg_ExpectFormat
 						(
 							"TrailingRequiresClause"
-							, "template <typename t_C>\nvoid fg_Function(" + Params + ")\n\trequires (cFoo<t_C>)\n{\n}\n"
-							, "template <typename t_C>\nvoid fg_Function\n\t(\n\t\t" + Split + "\n\t)\n\trequires (cFoo<t_C>)\n{\n}\n"
+							, "template <typename t_C>\nauto fg_Function(" + Params + ") -> void\n\trequires (cFoo<t_C>)\n{\n}\n"
+							, "template <typename t_C>\nauto fg_Function\n\t(\n\t\t" + Split + "\n\t)\n\t-> void\n\trequires (cFoo<t_C>)\n{\n}\n"
 						)
 					;
 					// A requires expression's body stands under the line its 'requires' is on, like a
@@ -2303,22 +2307,6 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						)
 					;
 				}
-				// The specifiers in front of the return type stay in front of 'auto' and take
-				// their columns on its line, so they count when the converted signature is
-				// measured: without them this one looks as if it would fit on one line.
-				{
-					CStr Name;
-					for (umint i = 0; i < 130; ++i)
-						Name += "W";
-
-					fg_ExpectFormat
-						(
-							"SpecifiersCounted"
-							, CStr("template <typename t_C>\ninline_small void TCFoo<t_C>::f_@(t_C &&_Functor, umint _Start) const\n{\n}\n").f_Replace("@", Name)
-							, CStr("template <typename t_C>\ninline_small void TCFoo<t_C>::f_@\n\t(\n\t\tt_C &&_Functor\n\t\t, umint _Start\n\t)\n\tconst\n{\n}\n").f_Replace("@", Name)
-						)
-					;
-				}
 
 				// The name before the parameter list must itself exceed the limit.
 				CStr Wide;
@@ -2379,6 +2367,14 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				// An existing trailing return type is only relaid out, and moving it to its
 				// own line already makes the signature fit.
 				fSplit("AlreadyTrailing", "auto fg_F(int _A, int _B) -> TCLongTemplate<@>;\n", "auto fg_F(int _A, int _B)\n\t-> TCLongTemplate<@>\n;\n", true);
+				// An unnamed parameter's type is no name a parameter declares, so it hides nothing of the return type it shares.
+				fSplit
+					(
+						"UnnamedParameterSharesType"
+						, "extern template TCValue<CSorted> CValue::fs_From<COrdered@>(TCValue<COrdered> const &);\n"
+						, "extern template auto CValue::fs_From\n\t<\n\t\tCOrdered@\n\t>\n\t(TCValue<COrdered> const &)\n\t-> TCValue<CSorted>\n;\n"
+					)
+				;
 			};
 
 			DMibTestCategory("TooLong")
@@ -2389,10 +2385,10 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					Name += "A";
 
 				// An empty parameter list is nothing to split, so the terminator stays put
-				// rather than being stranded while the line is still too long.
+				// rather than being stranded while the line is still too long. A deduced return type has nothing to move.
 				DMibTestCategory("EmptyParameterList")
 				{
-					CStr Long = "extern template void NMib::NConcurrency::fg_Delete";
+					CStr Long = "extern template auto NMib::NConcurrency::fg_Delete";
 					for (umint i = 0; i < 30; ++i)
 						Long += "VeryLongName";
 
@@ -2409,13 +2405,13 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				// be one column too long with it stays open.
 				DMibTestCategory("FunctionTypeSpace")
 				{
-					CStr Split = "\tvoid CClient::f_SetLazyStartApp\n\t\t(\n\t\t\tNFunction::TCFunction"
+					CStr Split = "\tauto CClient::f_SetLazyStartApp\n\t\t(\n\t\t\tNFunction::TCFunction"
 						"<FStopApp (NEncoding::CEJsonSorted const &_Params, EDistributedAppCommandFlag _Flags)> const &_fLazyStartApp"
 					;
 					for (umint i = Split.f_GetLen(); i < 208; ++i)
 						Split += "X";
 
-					Split = "namespace N\n{\n" + Split + "\n\t\t)\n\t{\n\t}\n}\n";
+					Split = "namespace N\n{\n" + Split + "\n\t\t)\n\t\t-> void\n\t{\n\t}\n}\n";
 					DMibExpect(fg_FormatSource(Split), ==, Split);
 					// A fundamental type's keyword written tight against its parenthesis is the function type it is
 					// written apart as, and a declarator behind that stands apart too.

@@ -3237,16 +3237,16 @@ namespace
 					fExpect
 						(
 							"MacroAsParameterName"
-							, "using CReturnType = int;\n#define NAME CReturnType\nCReturnType f_Function@@(int NAME, int @);\n"
-							, "using CReturnType = int;\n#define NAME CReturnType\nCReturnType f_Function@@\n\t(\n\t\tint NAME\n\t\t, int @\n\t)\n;\n"
+							, "using CReturnType = int;\n#define DName CReturnType\nCReturnType f_Function@@(int DName, int @);\n"
+							, "using CReturnType = int;\n#define DName CReturnType\nCReturnType f_Function@@\n\t(\n\t\tint DName\n\t\t, int @\n\t)\n;\n"
 						)
 					;
 					// So can one naming a parameter through a nested declarator.
 					fExpect
 						(
 							"MacroAsNestedParameterName"
-							, "using CReturnType = int;\n#define NAME CReturnType\nCReturnType f_Function@@(int (*NAME)(int), int @);\n"
-							, "using CReturnType = int;\n#define NAME CReturnType\nCReturnType f_Function@@\n\t(\n\t\tint (*NAME)(int)\n\t\t, int @\n\t)\n;\n"
+							, "using CReturnType = int;\n#define DName CReturnType\nCReturnType f_Function@@(int (*DName)(int), int @);\n"
+							, "using CReturnType = int;\n#define DName CReturnType\nCReturnType f_Function@@\n\t(\n\t\tint (*DName)(int)\n\t\t, int @\n\t)\n;\n"
 						)
 					;
 					// 'import' is a name where no declaration starts.

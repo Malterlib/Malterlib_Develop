@@ -1339,10 +1339,9 @@ namespace NMib::NDevelop::NPrivate
 		}
 	}
 
-	// Moves a declaration's return type behind its parameter list when the name would not
-	// otherwise fit. Converting alone is always eight columns longer, so it is only ever
-	// worth doing together with putting the trailing type on its own line. The conversion is
-	// recorded as text; the layout of the converted declaration is made on the result.
+	// Moves the return type of a declaration that does not fit on its line behind its parameter list, the first step of
+	// splitting it, as the code standard writes a split declaration. The trailing type takes a line of its own. The
+	// conversion is recorded as text; the layout of the converted declaration is made on the result.
 	bool CFormattingAnalyzer::fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent)
 	{
 		auto const &Nodes = m_Structure.f_GetNodes();
@@ -1350,7 +1349,9 @@ namespace NMib::NDevelop::NPrivate
 
 		// Out of scope by decision: a function template's types are substituted in lexical order, so behind the parameters
 		// a dependent return type can turn a substitution failure into a hard error; the standard's trailing return type is
-		// taken to be the form such a template is written in. C has no trailing return type.
+		// taken to be the form such a template is written in. So is a member's definition outside its class, where the type
+		// behind the parameters is looked up in the class's scope and a member shadowing the type the leading return type names,
+		// 'CFoo::CResult' over '::CResult', would change it. C has no trailing return type.
 		if (m_Tokens.f_IsC(m_Tokens.f_GetTokens()[Node.m_iFirstToken]))
 			return false;
 
@@ -1373,7 +1374,9 @@ namespace NMib::NDevelop::NPrivate
 			for (auto pKeyword : {"__attribute__", "__attribute", "__declspec", "alignas", "_Alignas"})
 				bAttribute |= iKeyword >= 0 && m_Tokens.f_IsText(Tokens[umint(iKeyword)], pKeyword);
 
-			if (bAttribute)
+			// The call operator's parentheses are its name, and its parameter list stands behind them: 'operator () (int _A)'.
+			bool bCallOperatorName = iKeyword >= 0 && m_Tokens.f_IsText(Tokens[umint(iKeyword)], "operator") && fp_NextCode(Child.m_iFirstToken) == aint(Child.m_iLastToken);
+			if (bAttribute || bCallOperatorName)
 				continue;
 
 			iParen = iChild;
@@ -1438,6 +1441,162 @@ namespace NMib::NDevelop::NPrivate
 		if (!bDefinition && !fg_HoldsParameters(m_Tokens, m_Structure, iParen))
 			return false;
 
+		// A name the naming lists as a type is an enumerator's as readily, 'CValue Value(N::EFlag_A, EFlag_B * g_Scale);', so
+		// outside a class's body, where no member is initialized with a parenthesis, and for a name the naming does not list as
+		// a function's, one parameter has to prove the list: by a word only a type is spelled with, by the name it declares
+		// behind its type, one the naming does not list as a type's, across a declarator only behind a template argument list,
+		// by a declarator nothing follows, '(CAllocator &)', or by an ellipsis alone. A variable template named as the naming
+		// names a type, 'EFlag_A<int> * g_Scale', is out of scope by decision.
+		bool bInClassBody = Node.m_iParent < Nodes.f_GetLen() && Nodes[Node.m_iParent].m_bClassBody;
+		// An operator's declarator names a function whatever it overloads, and a specialization's name stands in front of its
+		// template argument list: 'operator +(CFoo)', 'fg_Get<int>(CFoo)'.
+		auto iDeclared = fp_PreviousCode(iOpen);
+		if (iDeclared >= 0 && m_Tokens.f_IsText(Tokens[umint(iDeclared)], ">") && m_Structure.f_IsAngleBracket(umint(iDeclared)))
+		{
+			auto iArguments = m_Structure.f_FindNodeClosingAt(umint(iDeclared));
+			iDeclared = iArguments < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iArguments].m_iFirstToken) : aint(-1);
+		}
+
+		bool bNamedFunction = iDeclared >= 0 && m_Tokens.f_HasRole(Tokens[umint(iDeclared)], ECodeNameRole::mc_Function);
+		// The operator stands at the declarator's level, where one in the type names its argument: 'TCValue<&CFoo::operator +> g_Value(...)'.
+		for (auto iOperator = _iDeclFirst; iOperator < iOpen && !bNamedFunction; ++iOperator)
+			bNamedFunction = m_Tokens.f_IsText(Tokens[iOperator], "operator") && m_Structure.f_FindEnclosingNode(iOperator) == _iNode;
+		if (!bDefinition && !bInClassBody && !bNamedFunction)
+		{
+			constexpr ch8 const *c_pTypeWords[] =
+				{
+					"void"
+					, "bool"
+					, "char"
+					, "char8_t"
+					, "char16_t"
+					, "char32_t"
+					, "wchar_t"
+					, "short"
+					, "int"
+					, "long"
+					, "signed"
+					, "unsigned"
+					, "float"
+					, "double"
+					, "auto"
+					, "const"
+					, "volatile"
+					, "struct"
+					, "class"
+					, "union"
+					, "enum"
+					, "typename"
+					, "decltype"
+				}
+			;
+
+			bool bProven = false;
+			bool bTypeWord = false;
+			umint nNames = 0;
+			aint iLastName = -1;
+			aint iFirstInParameter = -1;
+			aint iLastInParameter = -1;
+			bool bAcrossOperator = false; // An operator stands between the names, a '*', '&' or '&&' as readily as any other.
+			bool bTemplateType = false;
+			bool bDefault = false;
+			auto fIsDeclarator = [&](aint _iToken)
+				{
+					return _iToken >= 0
+						&& (m_Tokens.f_IsText(Tokens[umint(_iToken)], "*") || m_Tokens.f_IsText(Tokens[umint(_iToken)], "&") || m_Tokens.f_IsText(Tokens[umint(_iToken)], "&&"))
+					;
+				}
+			;
+			auto fEndParameter = [&]
+				{
+					bool bDeclaresName
+						= nNames > 1
+						&& iLastName >= 0
+						&& !m_Tokens.f_HasRole(Tokens[umint(iLastName)], ECodeNameRole::mc_Type)
+						&& (!bAcrossOperator || bTemplateType)
+					;
+					bool bEndsInDeclarator = fIsDeclarator(iLastInParameter);
+					bool bEllipsis = iFirstInParameter >= 0 && iFirstInParameter == iLastInParameter && m_Tokens.f_IsText(Tokens[umint(iFirstInParameter)], "...");
+
+					bProven = bProven || bTypeWord || bDeclaresName || bEndsInDeclarator || bEllipsis;
+					bTypeWord = false;
+					nNames = 0;
+					iLastName = -1;
+					iFirstInParameter = -1;
+					iLastInParameter = -1;
+					bAcrossOperator = false;
+					bTemplateType = false;
+					bDefault = false;
+				}
+			;
+
+			bool bEmpty = true;
+			for (auto i = fp_NextCode(iOpen); i >= 0 && umint(i) < iClose; i = fp_NextCode(umint(i)))
+			{
+				bEmpty = false;
+				if (m_Structure.f_FindEnclosingNode(umint(i)) != iParen)
+					continue;
+
+				auto const &Token = Tokens[umint(i)];
+				if (m_Tokens.f_IsText(Token, ","))
+				{
+					fEndParameter();
+
+					continue;
+				}
+
+				if (iFirstInParameter < 0)
+					iFirstInParameter = i;
+
+				// A default argument is an expression, which proves nothing of the parameter in front of it.
+				if (bDefault)
+					continue;
+
+				if (m_Tokens.f_IsText(Token, "="))
+				{
+					bDefault = true;
+
+					continue;
+				}
+
+				// Any other operator between the names makes them operands: 'EFlag_A ^ g_Scale'.
+				iLastInParameter = i;
+				bool bScope = m_Tokens.f_IsText(Token, "::") || m_Tokens.f_IsText(Token, "...") || m_Structure.f_IsAngleBracket(umint(i));
+				if (nNames && Token.m_Kind == ECodeTokenKind::mc_Punctuator && !bScope)
+					bAcrossOperator = true;
+
+				if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
+				{
+					// A name behind a scope is qualified, behind the 'template' that names a member template too: 'CFoo::template g_Value<int>'.
+					auto iBehind = fp_NextCode(umint(i));
+					auto iQualifier = fp_PreviousCode(umint(i));
+					if (iQualifier >= 0 && m_Tokens.f_IsText(Tokens[umint(iQualifier)], "template"))
+						iQualifier = fp_PreviousCode(umint(iQualifier));
+
+					bool bQualified = iQualifier >= 0 && m_Tokens.f_IsText(Tokens[umint(iQualifier)], "::");
+					// The type's last name is the one its arguments prove a type: 'TCFlags<int>::EFlag_A' names a value as readily.
+					bool bInType = !nNames || (nNames == 1 && bQualified);
+					if (bInType)
+						bTemplateType = iBehind >= 0 && m_Tokens.f_IsText(Tokens[umint(iBehind)], "<") && m_Structure.f_IsAngleBracket(umint(iBehind));
+
+					bool bWord = false;
+					for (auto pWord : c_pTypeWords)
+						bWord = bWord || m_Tokens.f_IsText(Token, pWord);
+
+					bTypeWord = bTypeWord || bWord;
+					if (!bWord && !bQualified)
+					{
+						++nNames;
+						iLastName = i;
+					}
+				}
+			}
+
+			fEndParameter();
+			if (!bEmpty && !bProven)
+				return false;
+		}
+
 		// No parameter starts with a parenthesis, an initializer may: 'CType Value((42))'.
 		auto iFirstInside = fp_NextCode(Nodes[iParen].m_iFirstToken);
 		if (iFirstInside >= 0 && umint(iFirstInside) < Nodes[iParen].m_iLastToken && m_Tokens.f_IsText(Tokens[umint(iFirstInside)], "("))
@@ -1451,11 +1610,6 @@ namespace NMib::NDevelop::NPrivate
 		umint nHead = 0;
 		if (!fp_MeasureJoinedWidth(_iDeclFirst, iClose, nHead))
 			return false;
-
-		// Whether the name already fits in front of the parameter list decides, further
-		// down, whether converting is worth anything when the trailing type on its own
-		// line does not make the signature fit.
-		bool bNameFits = fp_FitsInline(_iDeclFirst, umint(iBeforeOpen), _iIndent);
 
 		// The declarator-id is the last name before the parameter list, extended backwards
 		// only through '::'. A return type in front of it looks the same, so stopping at
@@ -1562,7 +1716,6 @@ namespace NMib::NDevelop::NPrivate
 		;
 
 		umint iReturn = _iDeclFirst;
-		umint iSpecifiersFirst = _iDeclFirst;
 		while (iReturn < iDeclarator)
 		{
 			auto const &Token = Tokens[iReturn];
@@ -1589,7 +1742,6 @@ namespace NMib::NDevelop::NPrivate
 					return false;
 
 				iReturn = iAfter;
-				iSpecifiersFirst = iAfter;
 
 				continue;
 			}
@@ -1699,6 +1851,10 @@ namespace NMib::NDevelop::NPrivate
 		// A return type that is already 'auto' has nowhere to go: moving it behind the
 		// parameter list would only spell the same deduction as 'auto ... -> auto'.
 		if (umint(iReturnLast) == iReturn && m_Tokens.f_IsText(Tokens[iReturn], "auto"))
+			return false;
+
+		// A plain 'void' stays, so a split declaration with no trailing return type returns nothing: 'void f' over '(' over ')'.
+		if (umint(iReturnLast) == iReturn && m_Tokens.f_IsText(Tokens[iReturn], "void"))
 			return false;
 
 		umint nReturnWidth = 0;
@@ -1959,13 +2115,15 @@ namespace NMib::NDevelop::NPrivate
 		TCVector<umint> ParameterNames;
 		bool bOpaqueName = false;
 		{
+			// A name is the parameter's only behind another word: the type's own name stands first, 'CType const &'.
 			aint iName = -1;
 			umint nNames = 0;
+			bool bNamed = false;
 			bool bDefault = false;
 			bool bLastMacro = false;
 			auto fEndParameter = [&]
 				{
-					if (iName >= 0 && nNames > 1)
+					if (iName >= 0 && bNamed)
 						ParameterNames.f_Insert(umint(iName));
 
 					// A macro standing last can expand to the name, which could hide the return type: 'int DName', and so can one
@@ -1975,6 +2133,7 @@ namespace NMib::NDevelop::NPrivate
 
 					iName = -1;
 					nNames = 0;
+					bNamed = false;
 					bDefault = false;
 				}
 			;
@@ -2027,7 +2186,10 @@ namespace NMib::NDevelop::NPrivate
 						bKeyword = bKeyword || m_Tokens.f_IsText(ParameterToken, pKeyword);
 
 					if (!bAttribute && !bMacro && !bKeyword)
+					{
 						iName = aint(iParameter);
+						bNamed = nNames > 1;
+					}
 
 					if (!bAttribute)
 						bLastMacro = bMacro;
@@ -2060,7 +2222,14 @@ namespace NMib::NDevelop::NPrivate
 					// A macro there can expand to the name, which could hide the return type: 'int (*DName)(int)'.
 					bool bMacro = m_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_Macro) || m_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_SpecifierMacro);
 					bOpaqueName = bOpaqueName || (bDeclarator && bMacro);
-					if (bDeclarator)
+
+					// A function type's parameter in a template argument list declares no name in scope:
+					// 'TCFunction<void (int _Value)> const *_pOnAdd'.
+					bool bInArguments = false;
+					for (auto iEnclosing = m_Structure.f_FindEnclosingNode(iParameter); !bInArguments && iEnclosing < Nodes.f_GetLen() && iEnclosing != iParen; iEnclosing = Nodes[iEnclosing].m_iParent)
+						bInArguments = Nodes[iEnclosing].m_Kind == ECodeNodeKind::mc_Group && Nodes[iEnclosing].m_Bracket == ECodeBracket::mc_Angle;
+
+					if (bDeclarator && !bInArguments)
 						ParameterNames.f_Insert(iParameter);
 				}
 			}
@@ -2117,6 +2286,32 @@ namespace NMib::NDevelop::NPrivate
 		if (iPrevious < 0)
 			return false;
 
+		// Where a plain name does not fit behind 'auto' and the specifiers that stay in front of it, up to its parameter list's
+		// end when the list is empty and opens nothing, and moving the return type does not shorten that line, the return type
+		// stays: 'static int f_Get() noexcept(true)'. A qualified or a specialization's name opens at its qualifiers and arguments.
+		auto iNameEnd = fp_NextCode(iOpen) == aint(iClose) ? iClose : umint(iBeforeOpen);
+		bool bPlainName = true;
+		for (auto iInName = iDeclarator; iInName < iOpen && bPlainName; ++iInName)
+			bPlainName = !m_Tokens.f_IsText(Tokens[iInName], "::") && !m_Structure.f_IsAngleBracket(iInName);
+
+		if (bPlainName)
+		{
+			umint nName = 0;
+			umint nSpecifiers = 0;
+			umint nOriginal = 0;
+			auto iSpecifiersLast = fp_PreviousCode(iReturn);
+			bool bSpecifiers = iReturn > _iDeclFirst && iSpecifiersLast >= 0 && umint(iSpecifiersLast) >= _iDeclFirst;
+			bool bMeasured
+				= fp_MeasureJoinedWidth(iDeclarator, iNameEnd, nName)
+				&& fp_MeasureJoinedWidth(_iDeclFirst, iNameEnd, nOriginal)
+				&& (!bSpecifiers || fp_MeasureJoinedWidth(_iDeclFirst, umint(iSpecifiersLast), nSpecifiers))
+			;
+			auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+			auto nConverted = (bSpecifiers ? nSpecifiers + 1 : 0) + CStr("auto ").f_GetLen() + nName;
+			if (!bMeasured || (nMaxColumns && _iIndent + nConverted > nMaxColumns && nConverted >= nOriginal))
+				return false;
+		}
+
 		// The gap before the insertion point is written whole, so no other rule may claim it.
 		auto iGap = Tokens[umint(iPrevious)].f_GetEnd();
 		auto const &InsertAt = Tokens[iInsert];
@@ -2128,28 +2323,6 @@ namespace NMib::NDevelop::NPrivate
 		bool bVirtSpecifier = m_Tokens.f_IsText(InsertAt, "override") || m_Tokens.f_IsText(InsertAt, "final") || m_Tokens.f_IsText(InsertAt, "=");
 		CStr Replacement = Ending + fp_MakeIndent(_iIndent + nTab) + "-> " + ReturnType;
 		Replacement += bVirtSpecifier ? CStr(" ") : Ending + fp_MakeIndent(bBody ? _iIndent : _iIndent + nTab);
-
-		// With the trailing type on a line of its own, 'auto' and everything up to it may
-		// already fit on one. The parameter list is then left whole: opening it is the
-		// step after this one, not a part of it.
-		umint nSignature = 0;
-		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
-		// The specifiers in front of the return type stay in front of 'auto', and take their
-		// columns on the line with it: 'inline_small auto f_Get(...)'. A template header has
-		// a line of its own.
-		auto nAuto = _iIndent + CStr("auto ").f_GetLen();
-		auto iSpecifiersLast = fp_PreviousCode(iReturn);
-		umint nSpecifiers = 0;
-		if (iReturn > iSpecifiersFirst && iSpecifiersLast >= 0 && umint(iSpecifiersLast) >= iSpecifiersFirst && fp_MeasureJoinedWidth(iSpecifiersFirst, umint(iSpecifiersLast), nSpecifiers))
-			nAuto += nSpecifiers + 1;
-		bool bFits = fp_MeasureJoinedWidth(iDeclarator, umint(iPrevious), nSignature) && (!nMaxColumns || nAuto + nSignature <= nMaxColumns);
-
-		// Converting costs eight columns of its own. It pays for itself when it makes the
-		// signature fit, and otherwise only when the name would not fit in front of the
-		// parameter list at all and the return type is wider than the 'auto' that replaces
-		// it: moving 'void' frees no room on the line.
-		if (!bFits && (bNameFits || nReturnWidth <= CStr("auto").f_GetLen()))
-			return false;
 
 		auto nReturn = Tokens[umint(iReturnLast)].f_GetEnd() - iReturnStart;
 		if

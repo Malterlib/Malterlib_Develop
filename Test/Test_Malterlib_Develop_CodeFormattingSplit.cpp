@@ -81,8 +81,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			fg_ExpectFormat
 				(
 					"AssignPure"
-					, CStr("struct C\n{\n\tvirtual TCFuture<TCSubscription<>> f_Register(CFoo_@ _A, CBar_@ _B, CBaz_@ _C) = 0;\n};\n").f_Replace("@", Name)
-					, CStr("struct C\n{\n\tvirtual TCFuture<TCSubscription<>> f_Register\n\t\t(\n\t\t\tCFoo_@ _A\n\t\t\t, CBar_@ _B\n\t\t\t, CBaz_@ _C\n\t\t)\n\t\t= 0\n\t;\n};\n")
+					, CStr("struct C\n{\n\tvirtual auto f_Register(CFoo_@ _A, CBar_@ _B, CBaz_@ _C) -> TCFuture<TCSubscription<>> = 0;\n};\n").f_Replace("@", Name)
+					, CStr("struct C\n{\n\tvirtual auto f_Register\n\t\t(\n\t\t\tCFoo_@ _A\n\t\t\t, CBar_@ _B\n\t\t\t, CBaz_@ _C\n\t\t)\n\t\t-> TCFuture<TCSubscription<>> = 0\n\t;\n};\n")
 					.f_Replace("@", Name)
 				)
 			;
@@ -146,23 +146,29 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				)
 			;
 			// A definition splits its parameter list and keeps its body at statement level.
-			fSplit("Definition", "void fg_F(int @, int @)\n{\n}\n", "void fg_F\n\t(\n\t\tint @\n\t\t, int @\n\t)\n{\n}\n");
+			fSplit("Definition", "auto fg_F(int @, int @) -> void\n{\n}\n", "auto fg_F\n\t(\n\t\tint @\n\t\t, int @\n\t)\n\t-> void\n{\n}\n");
 			// A parameter that still does not fit is not split at its declarator, which
 			// is not an operator; it is reported instead.
-			fSplit("DeclaratorNotSplit", "void fg_F(C@@ &_A, int _B)\n{\n}\n", "void fg_F\n\t(\n\t\tC@@ &_A\n\t\t, int _B\n\t)\n{\n}\n");
+			fSplit("DeclaratorNotSplit", "auto fg_F(C@@ &_A, int _B) -> void\n{\n}\n", "auto fg_F\n\t(\n\t\tC@@ &_A\n\t\t, int _B\n\t)\n\t-> void\n{\n}\n");
 			// A trailing qualifier run is a logical unit of its own.
 			fSplit
 				(
 					// The qualifiers and the pure specifier stand behind the closing
 					// parenthesis.
 					"Qualifiers"
-					, "struct C\n{\n\tvoid f_F(int @, int @) const volatile = 0;\n};\n"
-					, "struct C\n{\n\tvoid f_F\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t)\n\t\tconst volatile = 0\n\t;\n};\n"
+					, "struct C\n{\n\tauto f_F(int @, int @) const volatile -> void = 0;\n};\n"
+					, "struct C\n{\n\tauto f_F\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t)\n\t\tconst volatile\n\t\t-> void = 0\n\t;\n};\n"
 				)
 			;
 			// An operator function's name is written apart from its parameter list, and
 			// its symbol is a name rather than an operation to be split at.
-			fSplit("OperatorName", "struct C\n{\n\tvoid operator + (int @, int @) &&;\n};\n", "struct C\n{\n\tvoid operator +\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t)\n\t\t&&\n\t;\n};\n");
+			fSplit
+				(
+					"OperatorName"
+					, "struct C\n{\n\tauto operator + (int @, int @) && -> void;\n};\n"
+					, "struct C\n{\n\tauto operator +\n\t\t(\n\t\t\tint @\n\t\t\t, int @\n\t\t)\n\t\t&&\n\t\t-> void\n\t;\n};\n"
+				)
+			;
 			// Every scope marker of a split statement gets its own line.
 			fSplit("Chained", "void f()\n{\n\tg(@, @).f_Call(@, @);\n}\n", "void f()\n{\n\tg(@, @)\n\t\t.f_Call\n\t\t(\n\t\t\t@\n\t\t\t, @\n\t\t)\n\t;\n}\n");
 			// Opening the first call would put the member access on a line of its own,
@@ -354,7 +360,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					(
 						"ReturnTypeAboveName"
 						, "CResult\nfg_F(int _" + Parameter + ", int _B" + Parameter + ") {\n}\n"
-						, "CResult fg_F\n\t(\n\t\tint _" + Parameter + "\n\t\t, int _B" + Parameter + "\n\t)\n{\n}\n"
+						, "auto fg_F\n\t(\n\t\tint _" + Parameter + "\n\t\t, int _B" + Parameter + "\n\t)\n\t-> CResult\n{\n}\n"
+						, false
 					)
 				;
 			}
@@ -442,6 +449,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					+ Long.f_Left(120)
 					+ ")))\n\t\t-> int\n"
 					"\t{\n\t\treturn 0;\n\t}\n};\n"
+					, false
 				)
 			;
 			// A class's head with an alignment in front of its name has a base clause, not an
@@ -497,15 +505,16 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					)
 				;
 			}
-			// With nothing behind its parameter list to give first, the list opens behind the whole name.
+			// With nothing behind its parameter list to give first, the list opens behind the whole name. A deduced return type
+			// has nothing to move behind it.
 			fg_ExpectFormat
 				(
 					"OperatorOpensBehindNameEmptyBody"
-					, "namespace NA\n{\n\tvoid "
+					, "namespace NA\n{\n\tauto "
 					+ OperatorClass
 					+ "::operator > (TCFutureMapBoundKey<tf_CKey, t_CReturn, tf_CForwardKey> &&_BoundKey) &&\n"
 					"\t{\n\t}\n}\n"
-					, "namespace NA\n{\n\tvoid "
+					, "namespace NA\n{\n\tauto "
 					+ OperatorClass
 					+ "::operator >\n\t\t(\n"
 					"\t\t\tTCFutureMapBoundKey<tf_CKey, t_CReturn, tf_CForwardKey> &&_BoundKey\n\t\t)\n\t\t&&\n\t{\n\t}\n}\n"
@@ -514,11 +523,11 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			fg_ExpectFormat
 				(
 					"OperatorOpensBehindName"
-					, "namespace NA\n{\n\ttemplate <typename t_C>\n\tvoid "
+					, "namespace NA\n{\n\ttemplate <typename t_C>\n\tauto "
 					+ OperatorClass
 					+ "::operator > (TCFutureMapBoundKey<tf_CKey, t_CReturn, tf_CForwardKey> &&_BoundKey)"
 					" &&\n\t{\n\t\tg();\n\t}\n}\n"
-					, "namespace NA\n{\n\ttemplate <typename t_C>\n\tvoid "
+					, "namespace NA\n{\n\ttemplate <typename t_C>\n\tauto "
 					+ OperatorClass
 					+ "::operator >\n\t\t(\n"
 					"\t\t\tTCFutureMapBoundKey<tf_CKey, t_CReturn, tf_CForwardKey> &&_BoundKey\n\t\t)\n\t\t&&\n\t{\n\t\tg();\n\t}\n}\n"
@@ -546,8 +555,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			fg_ExpectFormat
 				(
 					"OperatorGivesAtScopeAndSpecification"
-					, "namespace NA\n{\n\tbool " + OperatorClass + "::operator == (" + OperatorClass + " &_R) const noexcept\n\t{\n\t}\n}\n"
-					, "namespace NA\n{\n\tbool " + OperatorClass + "\n\t\t::operator == (" + OperatorClass + " &_R) const\n\t\tnoexcept\n\t{\n\t}\n}\n"
+					, "namespace NA\n{\n\tauto " + OperatorClass + "::operator == (" + OperatorClass + " &_R) const noexcept -> bool\n\t{\n\t}\n}\n"
+					, "namespace NA\n{\n\tauto " + OperatorClass + "\n\t\t::operator == (" + OperatorClass + " &_R) const\n\t\tnoexcept\n\t\t-> bool\n\t{\n\t}\n}\n"
 				)
 			;
 			// A class's head cut by a conditional keeps its lines at the class's level.
@@ -1195,6 +1204,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						"NameCommentSplit"
 						, "void f(\n  int _" + Long + ", int &&/*_B*/,\n  int _C" + Long + ")\n{\n}\n"
 						, "void f\n\t(\n\t\tint _" + Long + "\n\t\t, int &&/*_B*/\n\t\t, int _C" + Long + "\n\t)\n{\n}\n"
+						, false
 					)
 				;
 			}
@@ -1473,7 +1483,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				(
 					"QualifiedNameEmptyParameters"
 					, "template <typename t_C>\naint TCStrFormatType_Float<" + Arguments + ">::f_Get_aint_WWWWWWWW() const\n{\n}\n"
-					, "template <typename t_C>\naint TCStrFormatType_Float<" + Arguments + ">\n\t::f_Get_aint_WWWWWWWW() const\n{\n}\n"
+					, "template <typename t_C>\nauto TCStrFormatType_Float<" + Arguments + ">\n\t::f_Get_aint_WWWWWWWW() const\n\t-> aint\n{\n}\n"
+					, false
 				)
 			;
 			// A parameter's default is given the way a statement's value is, from its own
