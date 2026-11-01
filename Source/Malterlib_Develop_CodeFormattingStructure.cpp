@@ -783,8 +783,41 @@ namespace NMib::NDevelop
 			}
 		;
 
+		// A named cast takes a type in angle brackets and nothing else. Nor can an operand of a comparison start with a
+		// fundamental type, but where a functional cast, 'a < int(b)', or a qualifier, 'int const', goes on with it.
+		auto fFundamentalFirst = [&]() -> bool
+			{
+				constexpr ch8 const *c_pFundamental[] =
+					{
+						"void", "bool", "char", "char8_t", "char16_t", "char32_t", "wchar_t", "short", "int", "long", "float", "double", "unsigned"
+						, "signed", "const", "volatile"
+					}
+				;
+
+				if (_iToken + 2 >= mp_Significant.f_GetLen())
+					return false;
+
+				auto const &First = Tokens[mp_Significant[_iToken + 1]];
+				auto const &Behind = Tokens[mp_Significant[_iToken + 2]];
+				bool bFundamental = false;
+				for (auto pType : c_pFundamental)
+					bFundamental = bFundamental || mp_pTokens->f_IsText(First, pType);
+
+				return bFundamental && !mp_pTokens->f_IsText(Behind, "(") && !mp_pTokens->f_IsText(Behind, "{");
+			}
+		;
+
+		bool bNamedCast
+			= mp_pTokens->f_IsText(Previous, "static_cast")
+			|| mp_pTokens->f_IsText(Previous, "dynamic_cast")
+			|| mp_pTokens->f_IsText(Previous, "const_cast")
+			|| mp_pTokens->f_IsText(Previous, "reinterpret_cast")
+		;
+
 		bool bHeader
 			= mp_pTokens->f_IsText(Previous, "template")
+			|| bNamedCast
+			|| (Previous.m_Kind == ECodeTokenKind::mc_Identifier && fFundamentalFirst())
 			|| bCallOperator
 			|| mp_pTokens->f_HasRole(Previous, ECodeNameRole::mc_Type)
 			|| mp_pTokens->f_HasRole(Previous, ECodeNameRole::mc_Function)

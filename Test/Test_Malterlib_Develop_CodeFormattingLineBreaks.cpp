@@ -1578,6 +1578,15 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						, "NContainer::TCVector<CStr> g_A;\nTCVector<NContainer::TCVector<int>> g_B;\nauto X = Array.f_Get<CStr>();\nbool Y = i < n;\nbool Z = j < k;\n"
 					)
 				;
+				// So does one behind a named cast, and one whose first argument is a fundamental type, which no operand of a
+				// comparison starts with but a functional cast.
+				fg_ExpectFormat
+					(
+						"SpacedNamedCastOrFundamental"
+						, "void f()\n{\n\tauto p = static_cast < void * > (g(1));\n\tfoo < int > (1);\n\tsymbols < char, int > Symbols;\n\tbool b = a < int(c);\n}\n"
+						, "void f()\n{\n\tauto p = static_cast<void *>(g(1));\n\tfoo<int>(1);\n\tsymbols<char, int> Symbols;\n\tbool b = a < int(c);\n}\n"
+					)
+				;
 				// A '<' behind a name only a type can stand at opens a list however it is spaced and qualified: the type a
 				// 'typedef', an alias declaration or 'typename' starts with. An assignment's is a comparison.
 				fg_ExpectFormat

@@ -550,7 +550,10 @@ name before it, or across a line break; Malterlib spells a comparison with
 spaces, so the loose spelling stays an operator. Behind a name the naming lists
 as a type's or a function's, which no comparison has for an operand, it opens a
 list however it is spaced, so `TCVector< CStr >` and `TCVector < CStr >` both
-become `TCVector<CStr>`. A `>>` that ends a template argument list is read the
+become `TCVector<CStr>`. So does one behind a named cast, `static_cast < T * >`,
+and one whose first argument is a fundamental type, `foo < int >`, which no
+operand of a comparison starts with unless a functional cast goes on with it,
+`a < int(b)`. A `>>` that ends a template argument list is read the
 way C++ reads it, as two `>` tokens, so that each list has a closing marker of
 its own, and two closers written apart are joined back into one `>>` unless the
 layout gives the second a line of its own. A brace holding a statement
