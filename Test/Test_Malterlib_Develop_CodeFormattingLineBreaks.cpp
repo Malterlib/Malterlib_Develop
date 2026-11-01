@@ -18,6 +18,21 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				fg_ExpectFormat("Template", "TCMap\n<\n\tCStr\n\t, CStr\n>\ng_Map;\n", "TCMap<CStr, CStr> g_Map;\n");
 				// Two nested lists close with one '>>' token.
 				fg_ExpectFormat("NestedTemplate", "TCMap\n<\n\tCStr\n\t, TCVector<CStr>\n>\ng_Map;\n", "TCMap<CStr, TCVector<CStr>> g_Map;\n");
+				// A parenthesis behind a '!' or a '~' groups an expression, whose '&&' and '&' are operators, and a unary sign hugs
+				// the parenthesis it applies to, where a braced initializer or a fold's pack is no operand in front of it. GNU's case
+				// range's bounds are signed, and a function's call is an operand behind a '&&', where an explicit object parameter
+				// declares.
+				fg_ExpectFormat
+					(
+						"NegatedGroupAndUnarySign"
+						, "void f()\n{\n\tx = !(a & B) &&\n\t\t(c);\n\ty = ~(a + B) &\n\t\t(c);\n\tz = -\n\t\t(a);\n\tw = a -\n\t\t(b);\n\tv = int{} + (b);\n"
+						"\tu = (... + (p_Args));\n\tswitch (x)\n\t{\n\tcase -10 ... -1:\n\t\tbreak;\n\t}\n\tbEnabled && f_Log(1);\n}\nstruct CE\n{\n\tCFoo &&f_Get(this CFoo &_Self);\n"
+						"\tCFoo &&f_Global(this ::CFoo &_Self);\n};\n"
+						, "void f()\n{\n\tx = !(a & B) && (c);\n\ty = ~(a + B) & (c);\n\tz = -(a);\n\tw = a - (b);\n\tv = int{} + (b);\n\tu = (... + (p_Args));\n"
+						"\tswitch (x)\n\t{\n\tcase -10 ... -1: break;\n\t}\n\tbEnabled && f_Log(1);\n}\n\nstruct CE\n{\n\tCFoo &&f_Get(this CFoo &_Self);\n"
+						"\tCFoo &&f_Global(this ::CFoo &_Self);\n};\n"
+					)
+				;
 				// A function type is a template argument, and its parameter list is separated.
 				fg_ExpectFormat
 					(

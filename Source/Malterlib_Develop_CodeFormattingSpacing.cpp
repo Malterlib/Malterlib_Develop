@@ -498,10 +498,64 @@ namespace NMib::NDevelop
 		if ((fLeft(":") && fg_IsConditionalColon(_Tokens, _Structure, _iLeft)) || (fRight(":") && fg_IsConditionalColon(_Tokens, _Structure, _iRight)))
 			return ECodeSpacing::mc_Space;
 
+		// A sign with no operand in front of it is unary.
+		auto fIsUnarySign = [&]() -> bool
+			{
+				if (!fLeft("+") && !fLeft("-"))
+					return false;
+
+				auto iBefore = fg_PreviousCode(_Tokens, _iLeft);
+				if (iBefore < 0)
+					return true;
+
+				auto const &Before = Tokens[umint(iBefore)];
+				bool bOperand
+					= Before.m_Kind == ECodeTokenKind::mc_Number
+					|| Before.m_Kind == ECodeTokenKind::mc_StringLiteral
+					|| Before.m_Kind == ECodeTokenKind::mc_CharLiteral
+					|| (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
+					|| (_Tokens.f_IsText(Before, ")") && !fg_IsCast(_Tokens, _Structure, umint(iBefore)))
+					|| _Tokens.f_IsText(Before, "]")
+					|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
+					|| (_Tokens.f_IsText(Before, "}") && fg_ClosesExpressionBody(_Structure, umint(iBefore)))
+					|| fg_IsPostfixStep(_Tokens, _Structure, umint(iBefore))
+				;
+
+				// A braced initializer is an operand, 'int{} + (a)', and so is a fold's pack, '(... + (p_Args))'.
+				if (!bOperand && _Tokens.f_IsText(Before, "}"))
+				{
+					auto iBraced = _Structure.f_FindNodeClosingAt(umint(iBefore));
+					bOperand = iBraced < _Structure.f_GetNodes().f_GetLen() && _Structure.f_GetNodes()[iBraced].m_Kind == ECodeNodeKind::mc_Group;
+				}
+
+				// A fold's ellipsis stands behind its opener or an operator, where GNU's range's stands behind its first bound: 'case
+				// -10 ... -1:'.
+				if (!bOperand && _Tokens.f_IsText(Before, "..."))
+				{
+					auto iBeforeEllipsis = fg_PreviousCode(_Tokens, umint(iBefore));
+					auto const *pBeforeEllipsis = iBeforeEllipsis >= 0 ? &Tokens[umint(iBeforeEllipsis)] : nullptr;
+					bOperand
+						= pBeforeEllipsis
+						&& pBeforeEllipsis->m_Kind == ECodeTokenKind::mc_Punctuator
+						&& !_Tokens.f_IsText(*pBeforeEllipsis, ")")
+						&& !_Tokens.f_IsText(*pBeforeEllipsis, "]")
+						&& !_Tokens.f_IsText(*pBeforeEllipsis, "}")
+						&& !(_Structure.f_IsAngleBracket(umint(iBeforeEllipsis)) && _Tokens.f_IsText(*pBeforeEllipsis, ">"))
+					;
+				}
+
+				return !bOperand;
+			}
+		;
+
 		// A keyword is separated from a parenthesis that follows it; a call name is not.
 		// Operators spelled like a call, such as sizeof and decltype, stay tight.
 		if (fRight("("))
 		{
+			// A unary sign hugs the parenthesis it applies to as it does any operand: 'x = -(a + b)'.
+			if (fIsUnarySign())
+				return ECodeSpacing::mc_None;
+
 			// Behind a parameter list or a function's qualifier 'throw' is an exception specification,
 			// spelled like 'noexcept': 'f(size_t _Size) throw()'.
 			if (fLeft("throw"))
@@ -883,12 +937,15 @@ namespace NMib::NDevelop
 		}
 
 		// A name qualified from the global scope behind a keyword stands apart from the keyword:
-		// 'using ::size_t', 'typedef ::CFoo CBar', 'return ::fg_Get()', 'class CFoo : public ::NA::CBase'.
+		// 'using ::size_t', 'typedef ::CFoo CBar', 'return ::fg_Get()', 'class CFoo : public ::NA::CBase', an explicit object
+		// parameter's 'this ::CFoo &_Self' and 'requires ::cA<T>'.
 		if (fRight("::") && Left.m_Kind == ECodeTokenKind::mc_Identifier)
 		{
 			constexpr ch8 const *c_pDeclarationKeywords[] =
 				{
 					"using"
+					, "this"
+					, "requires"
 					, "typedef"
 					, "typename"
 					, "namespace"
@@ -1299,29 +1356,8 @@ namespace NMib::NDevelop
 
 		// A sign with no operand in front of it is unary and hugs its operand: '-1',
 		// 'a - -b'. Behind an operand it is the binary operator, written apart.
-		if (fLeft("+") || fLeft("-"))
-		{
-			auto iBefore = fg_PreviousCode(_Tokens, _iLeft);
-			bool bOperand = false;
-			if (iBefore >= 0)
-			{
-				auto const &Before = Tokens[umint(iBefore)];
-				bOperand
-					= Before.m_Kind == ECodeTokenKind::mc_Number
-					|| Before.m_Kind == ECodeTokenKind::mc_StringLiteral
-					|| Before.m_Kind == ECodeTokenKind::mc_CharLiteral
-					|| (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
-					|| (_Tokens.f_IsText(Before, ")") && !fg_IsCast(_Tokens, _Structure, umint(iBefore)))
-					|| _Tokens.f_IsText(Before, "]")
-					|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
-					|| (_Tokens.f_IsText(Before, "}") && fg_ClosesExpressionBody(_Structure, umint(iBefore)))
-					|| fg_IsPostfixStep(_Tokens, _Structure, umint(iBefore))
-				;
-			}
-
-			if (!bOperand)
-				return ECodeSpacing::mc_None;
-		}
+		if (fIsUnarySign())
+			return ECodeSpacing::mc_None;
 
 		// A block pointer's '^' hugs what it declares: '(^fReport)'.
 		if (fLeft("^"))

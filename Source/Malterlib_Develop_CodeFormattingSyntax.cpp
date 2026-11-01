@@ -1522,12 +1522,14 @@ namespace NMib::NDevelop::NPrivate
 				return !fg_IsAnyText(_Tokens, Name, gc_pExpressionKeywords) || fg_IsAnyText(_Tokens, Name, c_pValueOperators);
 
 			// A parenthesis opening behind another, an '=' or an operator groups an expression, a cast
-			// having been told apart above: '((a + b) & ~Mask)'.
+			// having been told apart above: '((a + b) & ~Mask)', '!(a & B) && (c)'.
 			constexpr ch8 const *c_pExpressionLeads[] =
 				{
 					"("
 					, "="
 					, ","
+					, "!"
+					, "~"
 					, "+"
 					, "-"
 					, "*"
@@ -2395,9 +2397,32 @@ namespace NMib::NDevelop
 			return false;
 
 		// At the statement's own level the token declares when everything in front of it
-		// spells a type: 'CFoo &&operator ()', 'TCActor<t_C> &f_Get()'.
+		// spells a type: 'CFoo &&operator ()', 'TCActor<t_C> &f_Get()'. A function or a macro the naming lists, called with
+		// arguments behind it, is an operand: 'bEnabled && f_Log(1);'.
 		if (Nodes[iGroup].m_Kind == ECodeNodeKind::mc_Statement)
+		{
+			if (iNext >= 0 && Tokens[umint(iNext)].m_Kind == ECodeTokenKind::mc_Identifier)
+			{
+				auto const &Next = Tokens[umint(iNext)];
+				bool bCallee = _Tokens.f_HasRole(Next, ECodeNameRole::mc_Function) || _Tokens.f_HasRole(Next, ECodeNameRole::mc_Macro);
+				auto iCall = fg_NextCode(_Tokens, umint(iNext));
+				if (bCallee && iCall >= 0 && _Tokens.f_IsText(Tokens[umint(iCall)], "("))
+				{
+					// An explicit object parameter declares, which a call's 'this' in front of a name cannot: 'f_Get(this CFoo &_Self)'.
+					auto iFirstInside = fg_NextCode(_Tokens, umint(iCall));
+					auto iBehindThis = iFirstInside >= 0 && _Tokens.f_IsText(Tokens[umint(iFirstInside)], "this") ? fg_NextCode(_Tokens, umint(iFirstInside)) : aint(-1);
+					bool bExplicitObject
+						= iBehindThis >= 0 && (Tokens[umint(iBehindThis)].m_Kind == ECodeTokenKind::mc_Identifier || _Tokens.f_IsText(Tokens[umint(iBehindThis)], "::"))
+					;
+
+					auto iArguments = _Structure.f_FindNodeOpeningAt(umint(iCall));
+					if (iArguments < Nodes.f_GetLen() && !bExplicitObject && fg_HoldsArguments(_Tokens, _Structure, iArguments))
+						return false;
+				}
+			}
+
 			return fg_SpellsType(_Tokens, _Structure, iGroup, umint(iPrevious));
+		}
 
 		if (fg_DeclaresInClause(_Tokens, _Structure, iGroup, _iToken))
 			return true;
