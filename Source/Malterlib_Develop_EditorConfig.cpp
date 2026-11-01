@@ -21,7 +21,6 @@ namespace
 {
 	using namespace NMib;
 	using namespace NMib::NDevelop;
-
 }
 
 namespace NMib::NDevelop::NPrivate
@@ -200,7 +199,6 @@ namespace NMib::NDevelop::NPrivate
 		TCMap<CStr, TCSharedPointer<CEntry>> m_Entries;
 		TCMap<CStr, TCSharedPointer<CEditorConfigChain>> m_Chains;
 	};
-
 }
 
 namespace NMib::NDevelop

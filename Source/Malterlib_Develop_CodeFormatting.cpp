@@ -1281,7 +1281,7 @@ namespace NMib::NDevelop::NPrivate
 	// text a conversion wrote is merged with that conversion, and with every other one it
 	// reaches, into a single edit over everything they cover in the original, whose text
 	// is what the converted source has there with the edits made.
-	bool fg_ComposeEdits
+	auto fg_ComposeEdits
 		(
 			TCVector<CCodeFormattingEdit> const &_Conversions
 			, CStr const &_Converted
@@ -1289,6 +1289,7 @@ namespace NMib::NDevelop::NPrivate
 			, TCVector<CCodeFormattingEdit> &o_Edits
 			, CStr &o_Explanation
 		)
+		-> bool
 	{
 		// Where each conversion's text stands in the converted source.
 		TCVector<umint> Starts;

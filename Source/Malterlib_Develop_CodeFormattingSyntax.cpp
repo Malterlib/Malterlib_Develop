@@ -168,12 +168,7 @@ namespace
 					// An attribute qualifies the type in front of it: 'umint __attribute__((address_space(256))) *pAddress'.
 					bool bAttribute
 						= pBeforeChild
-						&&
-						(
-							_Tokens.f_IsText(*pBeforeChild, "__attribute__")
-							|| _Tokens.f_IsText(*pBeforeChild, "__attribute")
-							|| _Tokens.f_IsText(*pBeforeChild, "__declspec")
-						)
+						&& (_Tokens.f_IsText(*pBeforeChild, "__attribute__") || _Tokens.f_IsText(*pBeforeChild, "__attribute") || _Tokens.f_IsText(*pBeforeChild, "__declspec"))
 					;
 					// So does a requires expression's body in it: 'requires requires { T::a; }' over 'auto fg_F() -> int'.
 					if (bClause && fg_IsRequirementsBlock(_Tokens, _Structure, iChild))
@@ -2479,9 +2474,7 @@ namespace NMib::NDevelop
 					// An explicit object parameter declares, which a call's 'this' in front of a name cannot: 'f_Get(this CFoo &_Self)'.
 					auto iFirstInside = fg_NextCode(_Tokens, umint(iCall));
 					auto iBehindThis = iFirstInside >= 0 && _Tokens.f_IsText(Tokens[umint(iFirstInside)], "this") ? fg_NextCode(_Tokens, umint(iFirstInside)) : aint(-1);
-					bool bExplicitObject
-						= iBehindThis >= 0 && (Tokens[umint(iBehindThis)].m_Kind == ECodeTokenKind::mc_Identifier || _Tokens.f_IsText(Tokens[umint(iBehindThis)], "::"))
-					;
+					bool bExplicitObject = iBehindThis >= 0 && (Tokens[umint(iBehindThis)].m_Kind == ECodeTokenKind::mc_Identifier || _Tokens.f_IsText(Tokens[umint(iBehindThis)], "::"));
 
 					auto iArguments = _Structure.f_FindNodeOpeningAt(umint(iCall));
 					if (iArguments < Nodes.f_GetLen() && !bExplicitObject && fg_HoldsArguments(_Tokens, _Structure, iArguments))

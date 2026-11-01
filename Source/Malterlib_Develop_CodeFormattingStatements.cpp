@@ -1162,10 +1162,7 @@ namespace NMib::NDevelop::NPrivate
 					// A dependent name goes on behind its 'template' disambiguator: 'T::template cA<int>'.
 					auto const &Last = Tokens[umint(iPrimaryLast)];
 					bool bOpens = (m_Tokens.f_IsText(Next, "<") && m_Structure.f_IsAngleBracket(umint(iNext))) || m_Tokens.f_IsText(Next, "(");
-					bool bScope
-						= m_Tokens.f_IsText(Next, "::")
-						|| (Next.m_Kind == ECodeTokenKind::mc_Identifier && (m_Tokens.f_IsText(Last, "::") || m_Tokens.f_IsText(Last, "template")))
-					;
+					bool bScope = m_Tokens.f_IsText(Next, "::") || (Next.m_Kind == ECodeTokenKind::mc_Identifier && (m_Tokens.f_IsText(Last, "::") || m_Tokens.f_IsText(Last, "template")));
 					if (bOpens)
 						iPrimaryLast = fSkipGroup(iNext);
 					else if (bScope)
@@ -1274,20 +1271,11 @@ namespace NMib::NDevelop::NPrivate
 					if (m_Tokens.f_IsText(First, "requires") && Node.m_iParent < Nodes.f_GetLen())
 					{
 						auto const &Parent = Nodes[Node.m_iParent];
-						bOperand
-							= Parent.m_Kind == ECodeNodeKind::mc_Block
-							&& Parent.m_iParent < Nodes.f_GetLen()
-							&& fp_IsRequirementsBody(Parent.m_iParent, Parent.m_iFirstToken)
-						;
+						bOperand = Parent.m_Kind == ECodeNodeKind::mc_Block && Parent.m_iParent < Nodes.f_GetLen() && fp_IsRequirementsBody(Parent.m_iParent, Parent.m_iFirstToken);
 					}
 
 					for (auto iToken = Node.m_iFirstToken; iToken < Child.m_iFirstToken && !bOperand; ++iToken)
-					{
-						bOperand
-							= m_Tokens.f_IsText(Tokens[iToken], "concept")
-							|| (m_Tokens.f_IsText(Tokens[iToken], "=") && m_TokenDepth[iToken] == m_TokenDepth[Node.m_iFirstToken])
-						;
-					}
+						bOperand = m_Tokens.f_IsText(Tokens[iToken], "concept") || (m_Tokens.f_IsText(Tokens[iToken], "=") && m_TokenDepth[iToken] == m_TokenDepth[Node.m_iFirstToken]);
 
 					// So is an expression statement's: '[] { ... }() && requires { T::a; };'. A clause starts with a 'requires' of
 					// its own in front, or stands behind a parameter list and its qualifiers: 'void f() const &&' over 'requires'.
@@ -1783,15 +1771,15 @@ namespace NMib::NDevelop::NPrivate
 						if (m_Tokens.f_IsText(Type, "->"))
 							bExpression = false;
 						else if
-							(
-								Type.m_Kind == ECodeTokenKind::mc_Punctuator
-								&& !m_Tokens.f_IsText(Type, "::")
-								&& !m_Tokens.f_IsText(Type, "*")
-								&& !m_Tokens.f_IsText(Type, "&")
-								&& !m_Tokens.f_IsText(Type, "<")
-								&& !m_Tokens.f_IsText(Type, ">")
-								&& !m_Tokens.f_IsText(Type, ",")
-							)
+						(
+							Type.m_Kind == ECodeTokenKind::mc_Punctuator
+							&& !m_Tokens.f_IsText(Type, "::")
+							&& !m_Tokens.f_IsText(Type, "*")
+							&& !m_Tokens.f_IsText(Type, "&")
+							&& !m_Tokens.f_IsText(Type, "<")
+							&& !m_Tokens.f_IsText(Type, ">")
+							&& !m_Tokens.f_IsText(Type, ",")
+						)
 						{
 							break;
 						}
@@ -1961,10 +1949,7 @@ namespace NMib::NDevelop::NPrivate
 						// and a suffix behind it as well.
 						auto nLastLineIndent = iLastLineFirst == umint(iClause) ? _iIndent + nTab : _iIndent + 2 * nTab;
 						auto iLineLead = iLastLineFirst == umint(iClause) ? umint(iClauseLead) : iLastLineFirst;
-						bool bMustSplit
-							= fp_FitsInline(iLastLineFirst, umint(iConstraintLast), nLastLineIndent)
-							&& !fp_FitsInline(iLineLead, iMeasureLast, nLastLineIndent)
-						;
+						bool bMustSplit = fp_FitsInline(iLastLineFirst, umint(iConstraintLast), nLastLineIndent) && !fp_FitsInline(iLineLead, iMeasureLast, nLastLineIndent);
 						if (iLastLineFirst != umint(iClause) && bMustSplit)
 							fp_LayoutRange(_iNode, iLastLineFirst, umint(iConstraintLast), nLastLineIndent, true, false, true);
 						else
@@ -2030,12 +2015,7 @@ namespace NMib::NDevelop::NPrivate
 			iMeasureFirst = umint(iBefore);
 		}
 
-		bool bJoinable
-			= fp_IsRangeJoinable(_iNode, iDeclFirst, iSignatureLast)
-			&& !bFixedLineBreaks
-			&& Node.m_Kind != ECodeNodeKind::mc_Unsupported
-			&& fp_IsFirstOnLine(iMeasureFirst)
-		;
+		bool bJoinable = fp_IsRangeJoinable(_iNode, iDeclFirst, iSignatureLast) && !bFixedLineBreaks && Node.m_Kind != ECodeNodeKind::mc_Unsupported && fp_IsFirstOnLine(iMeasureFirst);
 		if (iInitializerList != TCLimitsInt<umint>::mc_Max)
 			iHeadLast = iSignatureLast;
 

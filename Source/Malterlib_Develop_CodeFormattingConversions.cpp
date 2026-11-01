@@ -1320,11 +1320,7 @@ namespace NMib::NDevelop::NPrivate
 			auto iUsing = iBeforeAlias >= 0 ? fp_PreviousCode(umint(iBeforeAlias)) : aint(-1);
 			bool bTypeOnly
 				= iBefore >= 0
-				&&
-				(
-					m_Tokens.f_IsText(Tokens[umint(iBefore)], "->")
-					|| (m_Tokens.f_IsText(Tokens[umint(iBefore)], "=") && iUsing >= 0 && m_Tokens.f_IsText(Tokens[umint(iUsing)], "using"))
-				)
+				&& (m_Tokens.f_IsText(Tokens[umint(iBefore)], "->") || (m_Tokens.f_IsText(Tokens[umint(iBefore)], "=") && iUsing >= 0 && m_Tokens.f_IsText(Tokens[umint(iUsing)], "using")))
 			;
 			constexpr ch8 const *c_pFundamentals[] = {"int", "char", "short", "long", "signed", "unsigned", "bool", "float", "double", "void", "auto"};
 			if (iType == aint(iEnd) && bEndsDeclaration && !bTypeOnly && !fIsAny(umint(iType), c_pFundamentals))
@@ -1560,12 +1556,7 @@ namespace NMib::NDevelop::NPrivate
 			;
 			auto fEndParameter = [&]
 				{
-					bool bDeclaresName
-						= nNames > 1
-						&& iLastName >= 0
-						&& !m_Tokens.f_HasRole(Tokens[umint(iLastName)], ECodeNameRole::mc_Type)
-						&& (!bAcrossOperator || bTemplateType)
-					;
+					bool bDeclaresName = nNames > 1 && iLastName >= 0 && !m_Tokens.f_HasRole(Tokens[umint(iLastName)], ECodeNameRole::mc_Type) && (!bAcrossOperator || bTemplateType);
 					bool bEndsInDeclarator = fIsDeclarator(iLastInParameter);
 					bool bEllipsis = iFirstInParameter >= 0 && iFirstInParameter == iLastInParameter && m_Tokens.f_IsText(Tokens[umint(iFirstInParameter)], "...");
 
@@ -2277,8 +2268,15 @@ namespace NMib::NDevelop::NPrivate
 					// A function type's parameter in a template argument list declares no name in scope:
 					// 'TCFunction<void (int _Value)> const *_pOnAdd'.
 					bool bInArguments = false;
-					for (auto iEnclosing = m_Structure.f_FindEnclosingNode(iParameter); !bInArguments && iEnclosing < Nodes.f_GetLen() && iEnclosing != iParen; iEnclosing = Nodes[iEnclosing].m_iParent)
+					for
+					(
+						auto iEnclosing = m_Structure.f_FindEnclosingNode(iParameter)
+						; !bInArguments && iEnclosing < Nodes.f_GetLen() && iEnclosing != iParen
+						; iEnclosing = Nodes[iEnclosing].m_iParent
+					)
+					{
 						bInArguments = Nodes[iEnclosing].m_Kind == ECodeNodeKind::mc_Group && Nodes[iEnclosing].m_Bracket == ECodeBracket::mc_Angle;
+					}
 
 					if (bDeclarator && !bInArguments)
 						ParameterNames.f_Insert(iParameter);

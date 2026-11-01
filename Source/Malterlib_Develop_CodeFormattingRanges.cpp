@@ -1549,12 +1549,7 @@ namespace NMib::NDevelop::NPrivate
 				if (!bSplitAll || !fp_LayoutAtLooseOperators(_iNode, umint(iTail), _iLast, _iIndent))
 					fp_LayoutRange(_iNode, umint(iTail), _iLast, _iIndent, false, false);
 			}
-			else if
-			(
-				iTail >= 0
-				&& umint(iTail) < _iLast
-				&& (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], ".") || m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], "->"))
-			)
+			else if (iTail >= 0 && umint(iTail) < _iLast && (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], ".") || m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iTail)], "->")))
 			{
 				// A member called on the result goes on behind the body's line, its own brackets laid out from there:
 				// '}().f_Call' over '('.
@@ -1751,9 +1746,7 @@ namespace NMib::NDevelop::NPrivate
 			// The key has to stand in the range: a requires clause laid out on its own lines is no class's head.
 			auto iRangeKey = fp_SkipHeadIntroducers(_iFirst);
 			auto const &RangeKey = Tokens[iRangeKey];
-			bool bClassHead
-				= iRangeKey <= _iLast && (m_Tokens.f_IsText(RangeKey, "class") || m_Tokens.f_IsText(RangeKey, "struct") || m_Tokens.f_IsText(RangeKey, "union"))
-			;
+			bool bClassHead = iRangeKey <= _iLast && (m_Tokens.f_IsText(RangeKey, "class") || m_Tokens.f_IsText(RangeKey, "struct") || m_Tokens.f_IsText(RangeKey, "union"));
 
 			for (umint iCut = 0; iCut <= Cuts.f_GetLen(); ++iCut)
 			{
@@ -1861,9 +1854,7 @@ namespace NMib::NDevelop::NPrivate
 			// The key has to stand in the range: a requires clause laid out on its own lines is no class's head.
 			auto iKey = fp_SkipHeadIntroducers(_iFirst);
 			auto const &Key = Tokens[iKey];
-			bool bClassHead
-				= iKey <= _iLast && (m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "union"))
-			;
+			bool bClassHead = iKey <= _iLast && (m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "union"));
 			auto nLevel = m_TokenDepth[_iFirst];
 			TCVector<umint> Bases;
 			for (auto i = _iFirst; bClassHead && i <= _iLast; ++i)
@@ -2249,8 +2240,7 @@ namespace NMib::NDevelop::NPrivate
 				{
 					// A part led by an operator gives at the operators binding tighter than its own in turn, deeper
 					// conditionals as well: ': c' over '? d' over ': e ? f : g'.
-					auto fSplit = [&](auto &_fSplit, umint _iStart, umint _iEnd, TCVector<umint> const &_Inner, umint _nIndent, umint _nFirstIndent)
-						-> void
+					auto fSplit = [&](auto &_fSplit, umint _iStart, umint _iEnd, TCVector<umint> const &_Inner, umint _nIndent, umint _nFirstIndent) -> void
 						{
 							// A conditional that is a branch of another binds no tighter than it, and is set
 							// off one level deeper instead: ': b' with its '? c' and ': d' indented under it.

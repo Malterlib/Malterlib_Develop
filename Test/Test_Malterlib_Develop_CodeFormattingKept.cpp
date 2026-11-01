@@ -961,23 +961,9 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					, false
 				)
 			;
-			fg_ExpectFormat
-				(
-					"BlockCommentClosingMarker"
-					, "void f()\n{\n\t\t/*\n\t\t\t\tg();\n*/\n\th();\n}\n"
-					, "void f()\n{\n\t/*\n\tg();\n\t*/\n\th();\n}\n"
-					, false
-				)
-			;
+			fg_ExpectFormat("BlockCommentClosingMarker", "void f()\n{\n\t\t/*\n\t\t\t\tg();\n*/\n\th();\n}\n", "void f()\n{\n\t/*\n\tg();\n\t*/\n\th();\n}\n", false);
 			// Text standing in front of the opening marker moves out to the marker's column, so the comment moves with its code.
-			fg_ExpectFormat
-				(
-					"BlockCommentTextInFront"
-					, "void f()\n{\n\t\t\t/* A\n\tB\n\t\t\t*/\n\th();\n}\n"
-					, "void f()\n{\n\t/* A\n\tB\n\t*/\n\th();\n}\n"
-					, false
-				)
-			;
+			fg_ExpectFormat("BlockCommentTextInFront", "void f()\n{\n\t\t\t/* A\n\tB\n\t\t\t*/\n\th();\n}\n", "void f()\n{\n\t/* A\n\tB\n\t*/\n\th();\n}\n", false);
 			fg_ExpectFormat("BlockCommentPrefixMarkerAloneDecorated", "void f()\n{\n\t/*\n\t * A\n\t *   B\n\t */\n\th();\n}\n", "void f()\n{\n\t/*\n\t * A\n\t *   B\n\t */\n\th();\n}\n");
 			// A block comment at the line's start stands at its scope's level, commented out code included, and its text with it.
 			fg_ExpectFormat

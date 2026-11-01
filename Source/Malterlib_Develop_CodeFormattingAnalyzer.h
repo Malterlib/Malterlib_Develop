@@ -56,7 +56,7 @@ namespace NMib::NDevelop::NPrivate
 	bool fg_JoinsAcrossSplice(ch8 const *_pText, umint _nLength);
 	bool fg_HasEquivalentDirectives(CStr const &_First, CStr const &_Second, ECodeLanguage _Language);
 
-	bool fg_ComposeEdits
+	auto fg_ComposeEdits
 		(
 			TCVector<CCodeFormattingEdit> const &_Conversions
 			, CStr const &_Converted
@@ -64,6 +64,7 @@ namespace NMib::NDevelop::NPrivate
 			, TCVector<CCodeFormattingEdit> &o_Edits
 			, CStr &o_Explanation
 		)
+		-> bool
 	;
 
 	// The spans of a conditional whose branches write alternative heads for one body: '#if A' over 'if (a) {' over '#else'
@@ -91,14 +92,16 @@ namespace NMib::NDevelop::NPrivate
 				, NContainer::TCVector<CCodeFormattingDiagnostic> const &_Pass
 				, bool _bFixable
 				, NContainer::TCVector<CCodeFormattingDiagnostic> &o_Diagnostics
-			) const
+			)
+			const
 		;
 		void f_ReplaceResidualDiagnostics
 			(
 				NContainer::TCVector<CCodeFormattingEdit> const &_Plan
 				, NContainer::TCVector<CCodeFormattingDiagnostic> const &_Residual
 				, NContainer::TCVector<CCodeFormattingDiagnostic> &o_Diagnostics
-			) const
+			)
+			const
 		;
 
 	private:

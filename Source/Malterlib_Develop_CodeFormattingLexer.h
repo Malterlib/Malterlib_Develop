@@ -57,10 +57,10 @@ namespace NMib::NDevelop
 		ECodeTokenKind m_Kind = ECodeTokenKind::mc_Unknown;
 		umint m_iOffset = 0;
 		umint m_nLength = 0;
-		bool m_bMultiLine = false;    // Contains a line terminator, so its interior layout is protected.
-		bool m_bUnterminated = false; // The source ends inside the token.
-		bool m_bPlainName = false;    // In C, a word only C++ reserves, which no rule reads as that keyword.
-		bool m_bCpp = false;          // In C, it stands in a branch only C++ compiles: '#ifdef __cplusplus'.
+		bool m_bMultiLine = false;        // Contains a line terminator, so its interior layout is protected.
+		bool m_bUnterminated = false;     // The source ends inside the token.
+		bool m_bPlainName = false;        // In C, a word only C++ reserves, which no rule reads as that keyword.
+		bool m_bCpp = false;              // In C, it stands in a branch only C++ compiles: '#ifdef __cplusplus'.
 		ch8 const *m_pOperator = nullptr; // In C++, the operator an alternative token spells, 'or' for '||', which the rules read it as.
 		ECodeNameRole m_Roles = ECodeNameRole::mc_None;
 	};

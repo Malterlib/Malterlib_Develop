@@ -789,8 +789,22 @@ namespace NMib::NDevelop
 			{
 				constexpr ch8 const *c_pFundamental[] =
 					{
-						"void", "bool", "char", "char8_t", "char16_t", "char32_t", "wchar_t", "short", "int", "long", "float", "double", "unsigned"
-						, "signed", "const", "volatile"
+						"void"
+						, "bool"
+						, "char"
+						, "char8_t"
+						, "char16_t"
+						, "char32_t"
+						, "wchar_t"
+						, "short"
+						, "int"
+						, "long"
+						, "float"
+						, "double"
+						, "unsigned"
+						, "signed"
+						, "const"
+						, "volatile"
 					}
 				;
 
@@ -2410,14 +2424,7 @@ namespace NMib::NDevelop
 					bool bBehindBody = i > _iToken + 1 && mp_pTokens->f_IsText(Previous, "&&") && mp_pTokens->f_IsText(Tokens[mp_Significant[i - 2]], "}");
 					// A clause behind a declarator follows its parameter list, so a constraint's '&&' in a header's clause starts none:
 					// 'requires cA<T> && requires {'.
-					if
-					(
-						!bRequiresClause
-						&& bDeclaratorParameters
-						&& fg_IsAnyText(*mp_pTokens, Previous, c_pDeclaratorEnds)
-						&& !mp_pTokens->f_IsText(Previous, "requires")
-						&& !bBehindBody
-					)
+					if (!bRequiresClause && bDeclaratorParameters && fg_IsAnyText(*mp_pTokens, Previous, c_pDeclaratorEnds) && !mp_pTokens->f_IsText(Previous, "requires") && !bBehindBody)
 					{
 						bRequiresClause = true;
 						iClauseRequires = i;

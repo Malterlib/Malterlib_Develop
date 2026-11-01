@@ -251,7 +251,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			{
 				CStr Constraint
 					= "template <typename T>\n\trequires T::template cA<int> and cB<T>\nCFoo<T>::CFoo(int _A);\n\n"
-					"template <typename T>\n\trequires cA<T> or cB<T>\nvoid fg_F();\n"
+						"template <typename T>\n\trequires cA<T> or cB<T>\nvoid fg_F();\n"
 				;
 				fg_ExpectFormat("ConstraintSpellings", Constraint, Constraint);
 			}
@@ -338,8 +338,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 							"template <typename T>\nvoid fg_T() requires requires { T::a; } && (requires { T::b; }) or cA<T>;\n\n"
 							"template <typename T>\n\trequires cA@<T> && cB@<T> && requires { T::a; }\nvoid fg_U();\n"
 						)
-						.f_Replace("%", Fits)
-						.f_Replace("@", Long)
+						.f_Replace("%", Fits).f_Replace("@", Long)
 						, CStr
 						(
 							"template <typename T>\n\trequires requires (T _A)\n\t{\n\t\t_A.f_Get();\n\t}\nvoid fg_A(int _A);\n\n"
@@ -370,8 +369,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 							"template <typename T>\nvoid fg_T()\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n\t&&\n\t(\n\t\trequires\n\t\t{\n\t\t\tT::b;\n\t\t}\n\t)\n\tor cA<T>\n;\n\n"
 							"template <typename T>\n\trequires cA@<T>\n\t&& cB@<T>\n\t&& requires\n\t{\n\t\tT::a;\n\t}\nvoid fg_U();\n"
 						)
-						.f_Replace("%", Fits)
-						.f_Replace("@", Long)
+						.f_Replace("%", Fits).f_Replace("@", Long)
 						, false
 					)
 				;
@@ -400,9 +398,13 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				fg_ExpectFormat
 					(
 						"ClauseMeasuredWithTerminator"
-						, "template <typename T>\nstruct CE\n{\n\tvoid f_F(int _A) &&\n\trequires " + Constraint + "cAAAAAAA<T>;\n"
+						, "template <typename T>\nstruct CE\n{\n\tvoid f_F(int _A) &&\n\trequires "
+						+ Constraint
+						+ "cAAAAAAA<T>;\n"
 						"\tvoid f_G(int _A)\n\t\trequires (cB<T>) // B\n\t;\n};\n"
-						, "template <typename T>\nstruct CE\n{\n\tvoid f_F(int _A) &&\n\t\trequires cA<T>\n" + Split + "\t\t\t&& cAAAAAAA<T>\n\t;\n"
+						, "template <typename T>\nstruct CE\n{\n\tvoid f_F(int _A) &&\n\t\trequires cA<T>\n"
+						+ Split
+						+ "\t\t\t&& cAAAAAAA<T>\n\t;\n"
 						"\tvoid f_G(int _A)\n\t\trequires (cB<T>) // B\n\t;\n};\n"
 					)
 				;
@@ -423,8 +425,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						"template <typename T>\nvoid fg_A(int _A)\n\trequires\n\t(\n\t\tc@<T>\n\t) // A\n{\n}\n\n"
 						"template <typename T>\nauto fg_B\n\t(\n\t\tint _A%\n\t\t, int _B%\n\t)\n\t-> CResult\n\t/* B */ requires cB<T>\n;\n"
 					)
-					.f_Replace("@", Constraint)
-					.f_Replace("%", Parameter)
+					.f_Replace("@", Constraint).f_Replace("%", Parameter)
 				;
 
 				fg_ExpectFormat
@@ -435,8 +436,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 							"template <typename T>\nvoid fg_A(int _A) requires (c@<T>) // A\n{\n}\n\n"
 							"template <typename T>\nCResult fg_B(int _A%, int _B%) /* B */ requires cB<T>;\n"
 						)
-						.f_Replace("@", Constraint)
-						.f_Replace("%", Parameter)
+						.f_Replace("@", Constraint).f_Replace("%", Parameter)
 						, Expected
 						, false
 					)
@@ -449,8 +449,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 							"template <typename T>\nvoid fg_A(int _A)\nrequires (c@<T>) // A\n{\n}\n\n"
 							"template <typename T>\nCResult fg_B(int _A%, int _B%)\n\t/* B */ requires cB<T>;\n"
 						)
-						.f_Replace("@", Constraint)
-						.f_Replace("%", Parameter)
+						.f_Replace("@", Constraint).f_Replace("%", Parameter)
 						, Expected
 						, false
 					)
@@ -499,7 +498,9 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					(
 						"LambdaRequiresClause"
 						, "void f()\n{\n\tauto f = []<typename T>(" + Parameters + ") requires requires { T::a; } && requires { T::b; } { return 1; };\n}\n"
-						, "void f()\n{\n\tauto f = []\n\t\t<typename T>\n\t\t(\n" + SplitParameters + "\t\t)\n\t\trequires requires\n\t\t{\n\t\t\tT::a;\n\t\t}\n"
+						, "void f()\n{\n\tauto f = []\n\t\t<typename T>\n\t\t(\n"
+						+ SplitParameters
+						+ "\t\t)\n\t\trequires requires\n\t\t{\n\t\t\tT::a;\n\t\t}\n"
 						"\t\t&& requires\n\t\t{\n\t\t\tT::b;\n\t\t}\n\t{\n\t\treturn 1;\n\t};\n}\n"
 					)
 				;
@@ -588,7 +589,9 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					(
 						"LambdaStatementBodyTail"
 						, "template <typename T>\nvoid f()\n{\n\t[] { return true; }() && requires (T _" + Long + ") { _A + 1; } || requires { sizeof(T); };\n}\n"
-						, "template <typename T>\nvoid f()\n{\n\t[]\n\t{\n\t\treturn true;\n\t}() && requires (T _" + Long + ")\n\t{\n\t\t_A + 1;\n\t}\n"
+						, "template <typename T>\nvoid f()\n{\n\t[]\n\t{\n\t\treturn true;\n\t}() && requires (T _"
+						+ Long
+						+ ")\n\t{\n\t\t_A + 1;\n\t}\n"
 						"\t|| requires\n\t{\n\t\tsizeof(T);\n\t}\n\t;\n}\n"
 					)
 				;
@@ -670,7 +673,9 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					(
 						"ClauseTailParenthesisBody"
 						, "template <typename T>\n\trequires requires { sizeof(T); } or (c" + Long + "<T> && requires { sizeof(T); } && true)\nvoid fg_F();\n"
-						, "template <typename T>\n\trequires requires\n\t{\n\t\tsizeof(T);\n\t}\n\tor\n\t(\n\t\tc" + Long + "<T>\n\t\t&& requires\n\t\t{\n\t\t\tsizeof(T);\n\t\t}\n"
+						, "template <typename T>\n\trequires requires\n\t{\n\t\tsizeof(T);\n\t}\n\tor\n\t(\n\t\tc"
+						+ Long
+						+ "<T>\n\t\t&& requires\n\t\t{\n\t\t\tsizeof(T);\n\t\t}\n"
 						"\t\t&& true\n\t)\nvoid fg_F();\n"
 					)
 				;
