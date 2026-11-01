@@ -692,6 +692,14 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				for (umint i = 0; i < 90; ++i)
 					Parameter += "a";
 
+				// So does a calling convention the naming lists between the return type and the name, written on a line of its own.
+				fg_ExpectFormat
+					(
+						"ConventionAboveName"
+						, "extern \"C\" ULONG\nDCall\nfg_F(\n\tint _A\n\t);\n\nBOOL\nDCall\nfg_G(\n\tint _A\n\t)\n/*++\n\tDescription\n--*/\n{\n\treturn 0;\n}\n"
+						, "extern \"C\" ULONG DCall fg_F(int _A);\n\nBOOL DCall fg_G(int _A)\n/*++\n\tDescription\n--*/\n{\n\treturn 0;\n}\n"
+					)
+				;
 				fg_ExpectFormat
 					(
 						"ReturnTypeAboveName"

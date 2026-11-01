@@ -1349,10 +1349,28 @@ namespace NMib::NDevelop
 			bool bDeclarator = pBehind && (_Tokens.f_IsText(*pBehind, "(") || _Tokens.f_IsText(*pBehind, "::"));
 			auto iBody = pStatement->m_iParent;
 			bool bEnumBody = _Structure.f_IsEnumBody(iBody);
+
+			// A calling convention the naming lists between the return type and the name is the declarator's as well: 'ULONG'
+			// over 'NTAPI' over 'LsaNtStatusToWinError(...)'.
+			auto iBehindName = iBehind >= 0 ? fg_NextCode(_Tokens, umint(iBehind)) : aint(-1);
+			bool bConventionBelow
+				= _Tokens.f_HasRole(Right, ECodeNameRole::mc_Macro)
+				&& pBehind
+				&& pBehind->m_Kind == ECodeTokenKind::mc_Identifier
+				&& iBehindName >= 0
+				&& _Tokens.f_IsText(Tokens[umint(iBehindName)], "(")
+			;
+			auto iInFront = fg_PreviousCode(_Tokens, _iLeft);
+			bool bConventionAbove
+				= _Tokens.f_HasRole(Left, ECodeNameRole::mc_Macro)
+				&& iInFront >= 0
+				&& umint(iInFront) >= pStatement->m_iFirstToken
+				&& (Tokens[umint(iInFront)].m_Kind == ECodeTokenKind::mc_Identifier || fg_IsDeclaratorText(_Tokens, Tokens[umint(iInFront)]))
+			;
 			bool bSettled
-				= bDeclarator
+				= (bDeclarator || bConventionBelow)
 				&& !bEnumBody
-				&& !_Tokens.f_HasRole(Left, ECodeNameRole::mc_Macro)
+				&& (!_Tokens.f_HasRole(Left, ECodeNameRole::mc_Macro) || bConventionAbove)
 				&& !(Nodes[iBody].m_Kind == ECodeNodeKind::mc_Block && fg_IsFunctionBody(_Tokens, _Structure, iBody))
 			;
 
