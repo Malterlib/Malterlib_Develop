@@ -3126,7 +3126,7 @@ namespace
 							"\t(\n\t\tint CReturnTypeWithALongName DAttr\n\t)\n;\n"
 						)
 					;
-					// An empty statement stays in a structure a macro cuts, and in front of a directive.
+					// An empty statement stays in a structure a macro cuts, and in a statement expression, whose last statement gives its value.
 					CStr MacroLoop = "#define DLoop for (int i = 0\nvoid f()\n{\n\tDLoop;;)\n\t{\n\t\tbreak;\n\t}\n}\n";
 					fExpect("EmptyStatementInCutStructure", MacroLoop, MacroLoop);
 					fExpect
@@ -3134,6 +3134,15 @@ namespace
 							"EmptyStatementBeforeDirective"
 							, "int f()\n{\n\treturn ({ 1;;\n#if X\n\t\t2;\n#endif\n\t});\n}\n"
 							, "int f()\n{\n\treturn\n\t\t(\n\t\t\t{\n\t\t\t\t1;;\n#if X\n\t\t\t\t2;\n#endif\n\t\t\t}\n\t\t)\n\t;\n}\n"
+						)
+					;
+					// One ending a full statement in front of a directive goes, as anywhere else.
+					fExpect
+						(
+							"EmptyStatementBeforeDirectiveInBody"
+							, "int f()\n{\n#ifdef A\n\tg();;\n#else\n\treturn 1;;\n#endif\n\treturn 0;\n}\n"
+							, "int f()\n{\n#ifdef A\n\tg();\n#else\n\treturn 1;\n#endif\n\treturn 0;\n}\n"
+							, false
 						)
 					;
 					// Continuation lines are aligned in a file whose lines end in a lone CR as in any other.

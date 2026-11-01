@@ -215,19 +215,6 @@ namespace NMib::NDevelop::NPrivate
 			if (!bPlain)
 				continue;
 
-			// The last statement of a GNU statement expression gives its type, which an empty one makes 'void': '({ 1;; })'.
-			// Behind a directive the next statement can be one a configuration leaves out.
-			bool bDirectiveBehind = false;
-			for (auto iAfter = iEmpty + 1; iAfter < Tokens.f_GetLen() && !bDirectiveBehind; ++iAfter)
-			{
-				bDirectiveBehind = Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Preprocessor;
-				if (fg_IsCodeToken(Tokens[iAfter]))
-					break;
-			}
-
-			if (bDirectiveBehind)
-				continue;
-
 			auto iClose = fp_NextCode(iEmpty);
 			auto iAfterClose = iClose >= 0 ? fp_NextCode(umint(iClose)) : aint(-1);
 			if (iAfterClose >= 0 && m_Tokens.f_IsText(Tokens[umint(iClose)], "}") && m_Tokens.f_IsText(Tokens[umint(iAfterClose)], ")"))
