@@ -283,6 +283,7 @@ namespace
 				= (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
 				|| _Tokens.f_IsText(Before, "sizeof")
 				|| _Tokens.f_IsText(Before, "alignof")
+				|| fg_IsSizeofPack(_Tokens, umint(iBefore))
 				|| _Tokens.f_IsText(Before, ")")
 				|| _Tokens.f_IsText(Before, "]")
 				|| _Structure.f_IsAngleBracket(umint(iBefore))
@@ -331,10 +332,12 @@ namespace
 			// A keyword whose operand is an expression starts one with the parenthesis: 'return (void *)p', 'delete (CFoo *)p'.
 			constexpr ch8 const *c_pExpressionStarts[] = {"return", "co_return", "co_await", "co_yield", "throw", "delete", "case", "else", "do"};
 
-			// A cast converts what another cast yields: '(umint)(void *)*pBuffer'.
+			// A cast converts what another cast yields: '(umint)(void *)*pBuffer'. A parenthesis behind an ellipsis is the operand of
+			// 'sizeof...': 'sizeof...(tp_CParams) + 1'.
 			auto const &BeforeOpen = Tokens[umint(iBeforeOpen)];
 			bool bOperand
 				= (BeforeOpen.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, BeforeOpen, c_pExpressionStarts))
+				|| fg_IsSizeofPack(_Tokens, umint(iBeforeOpen))
 				|| (_Tokens.f_IsText(BeforeOpen, ")") && !fg_IsCast(_Tokens, _Structure, umint(iBeforeOpen)))
 				|| _Tokens.f_IsText(BeforeOpen, "]")
 				|| (_Structure.f_IsAngleBracket(umint(iBeforeOpen)) && _Tokens.f_IsText(BeforeOpen, ">"))
@@ -406,6 +409,17 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		return -1;
+	}
+
+	// Whether the token is the ellipsis of 'sizeof...', whose parenthesis is its operand, never a cast. Another ellipsis can
+	// stand in front of a cast: 'case -10 ... (int)-1:'.
+	bool fg_IsSizeofPack(CCodeTokenStream const &_Tokens, umint _iEllipsis)
+	{
+		if (!_Tokens.f_IsText(_Tokens.f_GetTokens()[_iEllipsis], "..."))
+			return false;
+
+		auto iSizeof = fg_PreviousCode(_Tokens, _iEllipsis);
+		return iSizeof >= 0 && _Tokens.f_IsText(_Tokens.f_GetTokens()[umint(iSizeof)], "sizeof");
 	}
 
 	bool fg_IsDeclaratorText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token)

@@ -55,6 +55,7 @@ namespace NMib::NDevelop::NPrivate
 	aint fg_PreviousCode(CCodeTokenStream const &_Tokens, umint _iToken);
 	aint fg_NextCode(CCodeTokenStream const &_Tokens, umint _iToken);
 	bool fg_IsDeclaratorText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token);
+	bool fg_IsSizeofPack(CCodeTokenStream const &_Tokens, umint _iEllipsis);
 	bool fg_NamesOperator(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken);
 	bool fg_IsRefQualifier(CCodeTokenStream const &_Tokens, umint _iToken);
 	aint fg_FindGroupClosingAt(CCodeStructure const &_Structure, umint _iClose, ECodeBracket _Bracket);

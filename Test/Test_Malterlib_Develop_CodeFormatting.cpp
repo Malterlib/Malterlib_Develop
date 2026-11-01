@@ -1944,6 +1944,15 @@ namespace
 							, "struct C\n{\n\tvoid f_A() &;\n};\n\nvoid f()\n{\n\tauto a = (ch8 const *)&Data;\n\tauto b = (CFoo &&)*pFoo;\n\tauto c = (x) & y;\n}\n"
 						)
 					;
+					// The parenthesis behind 'sizeof...' is its operand, never a cast, however its name is spelled, while one behind
+					// another ellipsis can be a cast: a GNU range's.
+					fg_ExpectFormat
+						(
+							"SizeofPackOperand"
+							, "auto x = sizeof...(CTypes)+1 - sizeof...(CMore);\nint a[] = {[0 ... (int)+4] = 1};\n"
+							, "auto x = sizeof...(CTypes) + 1 - sizeof...(CMore);\nint a[] = {[0 ... (int)+4] = 1};\n"
+						)
+					;
 					// A keyword whose operand is an expression starts it with the parenthesis, which is the cast's, where it ends in a
 					// declarator rather than an operator function's symbol or a conversion function's type.
 					fg_ExpectFormat

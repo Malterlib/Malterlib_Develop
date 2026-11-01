@@ -1206,6 +1206,7 @@ namespace NMib::NDevelop
 					&& _Tokens.f_IsText(Tokens[umint(iOpen)], "(")
 					&& fg_NamesType(_Tokens, Tokens[umint(iInner)])
 					&& !(iBeforeOpen >= 0 && Tokens[umint(iBeforeOpen)].m_Kind == ECodeTokenKind::mc_Identifier)
+					&& !(iBeforeOpen >= 0 && fg_IsSizeofPack(_Tokens, umint(iBeforeOpen)))
 				;
 			}
 
