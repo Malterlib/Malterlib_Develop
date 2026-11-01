@@ -2901,21 +2901,32 @@ namespace NMib::NDevelop
 				bAfterCloseParen = Bracket == ECodeBracket::mc_Paren;
 
 				// A macro invoked as a statement of its own needs no terminator: its argument list
-				// ends the statement where a name on the next line starts another one, or where
-				// the file ends. For a name the naming does not list, the next line has to start a
-				// declaration with a keyword, or be another call standing alone on its line, or what
-				// follows stands behind a blank line.
+				// ends the statement where a name on the next line starts another one, where the
+				// scope around it closes, or where the file ends. For a name the naming does not
+				// list, the next line has to start a declaration with a keyword, or be another call
+				// standing alone on its line, or what follows stands behind a blank line.
 				bool bAttributeNext = i + 1 < mp_Significant.f_GetLen() && mp_pTokens->f_IsText(Tokens[mp_Significant[i]], "[") && mp_pTokens->f_IsText(Tokens[mp_Significant[i + 1]], "[");
+				bool bScopeCloses = i < mp_Significant.f_GetLen() && mp_pTokens->f_IsText(Tokens[mp_Significant[i]], "}");
 				bool bMacroStatement
 					= Bracket == ECodeBracket::mc_Paren
 					&& iOpen == _iToken + 1
 					&& First.m_Kind == ECodeTokenKind::mc_Identifier
-					&& (i >= mp_Significant.f_GetLen() || Tokens[mp_Significant[i]].m_Kind == ECodeTokenKind::mc_Identifier || bAttributeNext)
+					&& (i >= mp_Significant.f_GetLen() || Tokens[mp_Significant[i]].m_Kind == ECodeTokenKind::mc_Identifier || bAttributeNext || bScopeCloses)
 				;
-				if (bMacroStatement && !mp_pTokens->f_HasRole(First, ECodeNameRole::mc_Macro))
+				if (bMacroStatement && bScopeCloses)
+					bMacroStatement = !f_IsEnumBody(_iParent);
+				else if (bMacroStatement && !mp_pTokens->f_HasRole(First, ECodeNameRole::mc_Macro))
 					bMacroStatement = !f_IsEnumBody(_iParent) && (fp_IsUnlistedMacro(_iToken, i) || fp_EndsCallStatement(_iParent, _iToken, i));
 				else if (bMacroStatement && i < mp_Significant.f_GetLen())
-					bMacroStatement = fp_GetColumn(mp_Significant[i]) <= fp_GetColumn(mp_Significant[_iToken]);
+				{
+					// A directive between the two ends the call as well, whatever columns the branches were written at:
+					// 'DMibCompilerMessage("A")' over '#else' over 'DMibCompilerMessage("B")'.
+					bool bDirectiveBetween = false;
+					for (auto iGap = mp_Significant[i - 1] + 1; iGap < mp_Significant[i] && !bDirectiveBetween; ++iGap)
+						bDirectiveBetween = Tokens[iGap].m_Kind == ECodeTokenKind::mc_Preprocessor;
+
+					bMacroStatement = bDirectiveBetween || fp_GetColumn(mp_Significant[i]) <= fp_GetColumn(mp_Significant[_iToken]);
+				}
 
 				for (auto iGap = mp_Significant[i - 1] + 1; bMacroStatement && i < mp_Significant.f_GetLen() && iGap <= mp_Significant[i]; ++iGap)
 				{

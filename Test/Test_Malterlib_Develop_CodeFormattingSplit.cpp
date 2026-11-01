@@ -1719,6 +1719,30 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				CStr Kept = "namespace N\n{\n#define/**/DAdd\\\n(x) x\n#define DName \\u{\\\ne9}\n}\n";
 				fg_ExpectFormat("DirectiveSpliceKept", Kept, Kept);
 			}
+			// A macro called as a statement ends it where the scope around it closes, so the statements in a conditional's
+			// branches stand at their scope's level.
+			fg_ExpectFormat
+				(
+					"MacroStatementInBranch"
+					, "namespace N\n{\n#ifdef DA\n\t\tDMessage(\"A\")\n#else\n\t\t\tDMessage(\"B\")\n#endif\n}\n"
+					, "namespace N\n{\n#ifdef DA\n\tDMessage(\"A\")\n#else\n\tDMessage(\"B\")\n#endif\n}\n"
+				)
+			;
+			// So does a directive standing between two of them, whatever columns the branches were written at.
+			fg_ExpectFormat
+				(
+					"MacroStatementsAcrossBranches"
+					, "namespace N\n{\n#if DA\n\tDMessage(\"A\")\n\tint g_A;\n#else\n\t\tDMessage(\"B\")\n#endif\n\tint g_B;\n}\n"
+					, "namespace N\n{\n#if DA\n\tDMessage(\"A\")\n\tint g_A;\n#else\n\tDMessage(\"B\")\n#endif\n\tint g_B;\n}\n"
+				)
+			;
+			fg_ExpectFormat
+				(
+					"MacroStatementsAcrossNestedBranches"
+					, "namespace N\n{\n#if DA\n#\tdefine DB\n\tDMessage(\"A\")\n#else\n#\tdefine DC\n\t\tDMessage(\"B\")\n#endif\n}\n"
+					, "namespace N\n{\n#if DA\n#\tdefine DB\n\tDMessage(\"A\")\n#else\n#\tdefine DC\n\tDMessage(\"B\")\n#endif\n}\n"
+				)
+			;
 			// A directive's continuation lines move together, the least indented one level in from the directive.
 			fg_ExpectFormat
 				(
