@@ -1706,6 +1706,19 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				DMibExpect(fFormat(Spaces, false, "Spaces"), ==, Spaces);
 				DMibExpect(fFormat(Spaces, true, "ToTabs"), ==, Tabs);
 			}
+			// A splice behind a character that is a token of its own joins nothing, so the lines it continues move in as well.
+			fg_ExpectFormat
+				(
+					"DirectiveContinuationBehindComma"
+					, "namespace N\n{\n#define DEnums(d_Name) \\\nE_##d_Name##_Low = 1,\\\nE_##d_Name##_High = 2\n}\n"
+					, "namespace N\n{\n#define DEnums(d_Name) \\\n\tE_##d_Name##_Low = 1,\\\n\tE_##d_Name##_High = 2\n}\n"
+				)
+			;
+			// A splice in front of an opening parenthesis, a macro's parameter list, or inside a character's name keeps its lines.
+			{
+				CStr Kept = "namespace N\n{\n#define/**/DAdd\\\n(x) x\n#define DName \\u{\\\ne9}\n}\n";
+				fg_ExpectFormat("DirectiveSpliceKept", Kept, Kept);
+			}
 			// A directive's continuation lines move together, the least indented one level in from the directive.
 			fg_ExpectFormat
 				(

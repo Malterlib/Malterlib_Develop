@@ -1520,9 +1520,24 @@ namespace NMib::NDevelop::NPrivate
 	}
 
 	// Whether a splice in a directive's text joins what ends one line to what starts the next, with no blank on either
-	// side: '#define DAdd\' over '(x) x'. Blanks added at the splice would part them.
+	// side: '#define DAdd\' over '(x) x'. Blanks added at the splice would part them. A character that is a token of its
+	// own whatever stands beside it joins nothing: 'E_A = 1,\' over 'E_B = 2'. Behind the splice an opening parenthesis can
+	// be a macro's parameter list, which a blank in front makes the macro's text, and a brace can belong to a character's
+	// name, '\u{e9}'. Out of scope by decision: a header name a macro spells for an '#include' across a splice, '<file,\'
+	// over 'name.h>', whose spelling keeps the blanks between its tokens, as no other macro's text does.
 	bool fg_JoinsAcrossSplice(ch8 const *_pText, umint _nLength)
 	{
+		auto fAloneBefore = [](ch8 _Char)
+			{
+				return _Char == ',' || _Char == ';' || _Char == '(' || _Char == ')' || _Char == '[' || _Char == ']';
+			}
+		;
+		auto fAloneAfter = [](ch8 _Char)
+			{
+				return _Char == ',' || _Char == ';' || _Char == ')' || _Char == ']';
+			}
+		;
+
 		for (umint i = 1; i + 1 < _nLength; ++i)
 		{
 			if (_pText[i] != '\\')
@@ -1542,7 +1557,7 @@ namespace NMib::NDevelop::NPrivate
 			auto After = iNext + 1 < _nLength ? _pText[iNext + 1] : ch8(' ');
 			bool bBlankBefore = Before == ' ' || Before == '\t';
 			bool bBlankAfter = After == ' ' || After == '\t' || After == '\n' || After == '\r' || After == '\\';
-			if (!bBlankBefore && !bBlankAfter)
+			if (!bBlankBefore && !bBlankAfter && !fAloneBefore(Before) && !fAloneAfter(After))
 				return true;
 		}
 
