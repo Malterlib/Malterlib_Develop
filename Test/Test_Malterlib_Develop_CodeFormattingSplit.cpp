@@ -1407,7 +1407,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				(
 					"ListRowBehindCommentLine"
 					, "char const *g_A[][2] = {\n  {\"a\", \"b\"},\n#ifdef DA\n  /* x\n   */\n  {\"c\",\n   \"d \"\n   \"e\"},\n#endif\n  {\"f\", \"g\"},\n};\n"
-					, "char const *g_A[][2] =\n\t{\n\t\t{\"a\", \"b\"}\n#ifdef DA\n\t\t/* x\n\t\t */\n\t\t,\n\t\t{\n\t\t\t\"c\"\n\t\t\t, \"d \"\n"
+					, "char const *g_A[][2] =\n\t{\n\t\t{\"a\", \"b\"}\n#ifdef DA\n\t\t/* x\n\t\t*/\n\t\t,\n\t\t{\n\t\t\t\"c\"\n\t\t\t, \"d \"\n"
 					"\t\t\t\"e\"\n\t\t}\n#endif\n\t\t, {\"f\", \"g\"}\n\t}\n;\n"
 					, false
 				)

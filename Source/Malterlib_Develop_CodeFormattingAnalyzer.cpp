@@ -1668,6 +1668,9 @@ namespace NMib::NDevelop::NPrivate
 			fp_ConvertCommentPrefixes();
 		}
 
+		if (m_bAllowQualifiers)
+			fp_ConvertBlockCommentLines();
+
 		bool bQualifierStage = !m_Structural.f_IsEmpty();
 		if (!bQualifierStage && m_bAllowConversions && !bBuildSystem)
 		{
@@ -1715,7 +1718,7 @@ namespace NMib::NDevelop::NPrivate
 
 			// Moving a qualifier changes nothing but where it stands, which is checked here
 			// since the result is only ever compared against the converted source.
-			if (bQualifierStage && fg_GetReorderInvariant(m_Request.m_Source) != fg_GetReorderInvariant(ConvertedSource))
+			if (bQualifierStage && fg_GetReorderInvariant(m_Request.m_Source, Language) != fg_GetReorderInvariant(ConvertedSource, Language))
 				return fFailed("Reordering qualifiers and specifiers would change more than where they stand; no edits were produced");
 
 			// No conversion moves or rewrites a directive, and the result is only ever compared against the converted source.

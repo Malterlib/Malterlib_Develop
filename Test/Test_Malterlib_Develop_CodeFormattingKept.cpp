@@ -910,7 +910,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				)
 			;
 			// A line comment behind a block comment's end is no line of its own, and keeps its text.
-			fg_ExpectFormat("CommentBehindBlockCommentEnd", "/*\nA\n */   // \t> B\n  // > C\nint a;\n", "/*\nA\n */   // \t> B\n// > C\nint a;\n");
+			fg_ExpectFormat("CommentBehindBlockCommentEnd", "/*\nA\n */   // \t> B\n  // > C\nint a;\n", "/*\nA\n*/   // \t> B\n// > C\nint a;\n");
 			// The blanks every line of a run of line comments starts with behind its markers are one space.
 			fg_ExpectFormat("LineCommentPrefix", "void f()\n{\n\t//\t\tA\n\t//\t\t\tB\n\th();\n}\n", "void f()\n{\n\t// A\n\t// \tB\n\th();\n}\n", false);
 			// Code a toggle commented out at the line's start stands at its text, and code one commented out at its
@@ -951,12 +951,30 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					, false
 				)
 			;
-			// Text below a block comment's marker alone on its line further in than the marker moves out to its column.
+			// Text below a block comment's marker alone on its line further in than the marker moves out to its column, and the
+			// closing marker on a line of its own stands under the opening one.
 			fg_ExpectFormat
 				(
 					"BlockCommentPrefixMarkerAlone"
 					, "void f()\n{\n\t/*\n\t\t\t{\n\t\t\t\tg();\n\t\t\t}\n\t */\n\th();\n}\n"
-					, "void f()\n{\n\t/*\n\t{\n\t\tg();\n\t}\n\t */\n\th();\n}\n"
+					, "void f()\n{\n\t/*\n\t{\n\t\tg();\n\t}\n\t*/\n\th();\n}\n"
+					, false
+				)
+			;
+			fg_ExpectFormat
+				(
+					"BlockCommentClosingMarker"
+					, "void f()\n{\n\t\t/*\n\t\t\t\tg();\n*/\n\th();\n}\n"
+					, "void f()\n{\n\t/*\n\tg();\n\t*/\n\th();\n}\n"
+					, false
+				)
+			;
+			// Text standing in front of the opening marker moves out to the marker's column, so the comment moves with its code.
+			fg_ExpectFormat
+				(
+					"BlockCommentTextInFront"
+					, "void f()\n{\n\t\t\t/* A\n\tB\n\t\t\t*/\n\th();\n}\n"
+					, "void f()\n{\n\t/* A\n\tB\n\t*/\n\th();\n}\n"
 					, false
 				)
 			;

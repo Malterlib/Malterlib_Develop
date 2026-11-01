@@ -1164,7 +1164,7 @@ namespace NMib::NDevelop::NPrivate
 	// move left out, and how many of each there are. The tokens are joined since a '>' that
 	// a qualifier lands between two of is lexed as one token with its neighbour before the
 	// move and as two after it.
-	CStr fg_GetReorderInvariant(CStr const &_Source)
+	CStr fg_GetReorderInvariant(CStr const &_Source, ECodeLanguage _Language)
 	{
 		constexpr ch8 const *c_pMoved[] =
 			{
@@ -1179,7 +1179,7 @@ namespace NMib::NDevelop::NPrivate
 		// that end nothing: 'f_Call();;' reads as 'f_Call();'. A comma in front of a closing
 		// brace goes the same way: 'EA, }' reads as 'EA }'. So does one beside a directive,
 		// which the stage moves across it into every branch.
-		CCodeTokenStream Tokens(_Source);
+		CCodeTokenStream Tokens(_Source, nullptr, _Language);
 		auto pSource = _Source.f_GetStr();
 		CStr Text;
 		{

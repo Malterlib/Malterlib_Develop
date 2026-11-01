@@ -711,12 +711,28 @@ namespace
 
 				DMibTestCategory("Comments")
 				{
+					// A block comment's lines move with its first, as in C++, its text at the marker's column and its end under it.
+					fg_ExpectBuildSystemFormat
+						(
+							"BlockCommentLines"
+							, "A\n{\n\tB 1\n\t\t/*\n\t\t\t\tC 2\n\t\t\t\t\tD 3\n\t\t\t*/\n\tE 4\n}\n"
+							, "A\n{\n\tB 1\n\t/*\n\tC 2\n\t\tD 3\n\t*/\n\tE 4\n}\n"
+						)
+					;
+					// A build file is lexed as one wherever a conversion is checked: no raw string runs across the comment here.
+					fg_ExpectBuildSystemFormat
+						(
+							"BlockCommentBetweenRawStringMarkers"
+							, "A\n{\n\tB `R\"(`\n\t\t/*\n\t\t\tC\n\t\t*/\n\tD `)\"`\n}\n"
+							, "A\n{\n\tB `R\"(`\n\t/*\n\tC\n\t*/\n\tD `)\"`\n}\n"
+						)
+					;
 					// A comment at the start of a line comments out what it stands in front of.
 					fg_ExpectBuildSystemFormat
 						(
 							"CommentedOut"
 							, "A\n{\n//\tB 1\n  // Note\n/*\tC 1\n    D 2 */\n\t\t/* E\n    F */\n}\n"
-							, "A\n{\n//\tB 1\n\t// Note\n/*\tC 1\n    D 2 */\n\t/* E\n    F */\n}\n"
+							, "A\n{\n//\tB 1\n\t// Note\n/*\tC 1\n    D 2 */\n\t/* E\n\tF */\n}\n"
 						)
 					;
 					fg_ExpectBuildSystemFormat
@@ -1719,8 +1735,8 @@ namespace
 					// Layout inside a multiline literal is protected. A comment's lines keep their columns, spelled as the
 					// indentation is.
 					fg_ExpectFormat("RawStringBody", "auto x = R\"(\n    keep\n)\";\n", "auto x = R\"(\n    keep\n)\";\n");
-					fg_ExpectFormat("BlockCommentBody", "/* text\n    keep\n */\n", "/* text\n\tkeep\n */\n");
-					fg_ExpectFormat("BlockCommentLines", "/*\n    a\n      b\n */\nint g_A;\n", "/*\na\n  b\n */\nint g_A;\n", false);
+					fg_ExpectFormat("BlockCommentBody", "/* text\n    keep\n */\n", "/* text\n\tkeep\n*/\n");
+					fg_ExpectFormat("BlockCommentLines", "/*\n    a\n      b\n */\nint g_A;\n", "/*\na\n  b\n*/\nint g_A;\n", false);
 					// A macro's body is not: its lines stand one level in from the directive.
 					fg_ExpectFormat("MacroBody", "#define A \\\n    B\n", "#define A \\\n\tB\n");
 				};

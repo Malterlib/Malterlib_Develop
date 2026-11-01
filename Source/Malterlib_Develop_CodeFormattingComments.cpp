@@ -2040,12 +2040,15 @@ namespace NMib::NDevelop::NPrivate
 				Replace.m_Rule = "comment-space";
 			}
 		}
+	}
 
-		// A block comment's text written further in than one space behind its opening marker starts below the marker, at
-		// the marker's column, and the lines below keep where they stand relative to it: '/*\t\tA' over '\t\t\tB' is '/*'
-		// over 'A' over '\tB'. Text below a marker alone on its line further in than the marker moves out to it the same
-		// way. A comment with a line further out than that, or a decorated ' * B', keeps its lines; a closing marker on a
-		// line of its own keeps its place.
+	// The text below a block comment's opening marker alone on its line stands at the marker's column, the least indented
+	// line there and the others where they stand relative to it, and a closing marker on a line of its own stands under
+	// the opening one: '/*' over '\t\tA' over '\t\t\tB' over '\t*/' is '/*' over 'A' over '\tB' over '*/'. A decorated
+	// comment, ' * B', keeps its lines. The layout then moves the lines with the opening marker.
+	void CFormattingAnalyzer::fp_ConvertBlockCommentLines()
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
 		auto nTab = m_Request.m_Settings.m_nTabWidth;
 		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
 		{
@@ -2064,6 +2067,10 @@ namespace NMib::NDevelop::NPrivate
 			if (!bStartsLine || bDocumenting || fp_IsDisabled(Comment.m_iOffset, Comment.m_nLength) || !fp_IsSelected(Comment.m_iOffset, Comment.m_nLength))
 				continue;
 
+			// In a build file one at the very start of its line comments out what it stands in front of, and keeps its lines.
+			if (m_Tokens.f_GetLanguage() == ECodeLanguage::mc_BuildSystem && Comment.m_iOffset == iLineStart)
+				continue;
+
 			umint nBlanks = 0;
 			while (2 + nBlanks < Comment.m_nLength && fg_IsSpaceOrTab(pText[2 + nBlanks]))
 				++nBlanks;
@@ -2072,25 +2079,24 @@ namespace NMib::NDevelop::NPrivate
 			umint nFirstColumns = 0;
 			auto FirstChar = pText[2 + nBlanks];
 			bool bMarkerAlone = FirstChar == '\n' || FirstChar == '\r';
-			bool bFirstText = nBlanks && !bMarkerAlone;
 			bool bMeasured
 				= fg_MeasureTextColumns(m_pSource + iLineStart, Comment.m_iOffset - iLineStart, nTab, nMarkerColumns)
 				&& fg_MeasureTextColumns(m_pSource + iLineStart, Comment.m_iOffset + 2 + nBlanks - iLineStart, nTab, nFirstColumns)
 			;
-			if (!bMeasured || (!bFirstText && !bMarkerAlone))
+			if (!bMeasured)
 				continue;
 
-			// The lines below with text, each with its indentation's end and columns; one holding only the closing marker
-			// keeps its place.
+			// The lines below with text, each with its indentation's end and columns, and the one holding only the closing marker.
 			struct CLine
 			{
 				umint m_iStart;
 				umint m_iContent;
 				umint m_nColumns;
+				bool m_bClosing;
 			};
 
 			TCVector<CLine> Lines;
-			umint nMinColumns = bFirstText ? nFirstColumns : TCLimitsInt<umint>::mc_Max;
+			umint nMinColumns = TCLimitsInt<umint>::mc_Max;
 			bool bValid = true;
 			for (auto iLine = m_Lines.f_FindLine(Comment.m_iOffset) + 1; bValid && iLine < m_Lines.f_GetLineCount() && m_Lines.f_GetLineStart(iLine) < Comment.f_GetEnd(); ++iLine)
 			{
@@ -2103,26 +2109,41 @@ namespace NMib::NDevelop::NPrivate
 				if (!pContent || *pContent == '\n' || *pContent == '\r')
 					continue;
 
-				if (iContent + 2 == Comment.f_GetEnd())
-					continue;
-
+				bool bClosing = iContent + 2 == Comment.f_GetEnd();
 				umint nColumns = 0;
-				bValid = *pContent != '*' && fg_MeasureTextColumns(m_pSource + iStart, iContent - iStart, nTab, nColumns);
-				nMinColumns = fg_Min(nMinColumns, nColumns);
-				Lines.f_Insert(CLine{iStart, iContent, nColumns});
+				bValid = (bClosing || *pContent != '*') && fg_MeasureTextColumns(m_pSource + iStart, iContent - iStart, nTab, nColumns);
+				if (!bClosing)
+					nMinColumns = fg_Min(nMinColumns, nColumns);
+
+				Lines.f_Insert(CLine{iStart, iContent, nColumns, bClosing});
 			}
 
-			auto nTextColumns = nMarkerColumns;
-			if (!bValid || Lines.f_IsEmpty() || nMinColumns <= (bFirstText ? nMarkerColumns + 3 : nTextColumns))
+			if (!bValid || Lines.f_IsEmpty())
+				continue;
+
+			// Text on the marker's line moves below it where all of the text stands further in than one space behind the marker,
+			// and otherwise the lines below keep their text's layout, only moved out to the marker's column where they stand in
+			// front of it: '/* A' over '   B */' stays.
+			bool bMoveFirst = !bMarkerAlone && nBlanks && nMinColumns != TCLimitsInt<umint>::mc_Max && fg_Min(nMinColumns, nFirstColumns) > nMarkerColumns + 3;
+			if (bMoveFirst)
+				nMinColumns = fg_Min(nMinColumns, nFirstColumns);
+
+			auto nShift = nMinColumns == TCLimitsInt<umint>::mc_Max ? aint(0) : aint(nMinColumns) - aint(nMarkerColumns);
+			if (!bMarkerAlone && !bMoveFirst && nShift > 0)
+				nShift = 0;
+			bool bChanges = bMoveFirst;
+			for (auto const &Line : Lines)
+				bChanges = bChanges || (Line.m_bClosing ? Line.m_nColumns != nMarkerColumns : nShift != 0);
+
+			if (!bChanges)
 				continue;
 
 			// The first line's text moves to a line of its own below the marker, ended as the source ends the marker's line.
-			auto nShift = aint(nMinColumns) - aint(nTextColumns);
 			CStr Replacement;
 			{
 				CStr::CAppender Appender(Replacement);
 				auto iCopied = Comment.m_iOffset + 2;
-				if (bFirstText)
+				if (bMoveFirst)
 				{
 					auto iNewline = Comment.m_iOffset + 2 + nBlanks;
 					auto Char = m_pSource[iNewline];
@@ -2137,7 +2158,7 @@ namespace NMib::NDevelop::NPrivate
 				for (auto const &Line : Lines)
 				{
 					Appender.f_AddString(m_pSource + iCopied, Line.m_iStart - iCopied);
-					fp_AppendIndent(Appender, umint(aint(Line.m_nColumns) - nShift));
+					fp_AppendIndent(Appender, Line.m_bClosing ? nMarkerColumns : umint(aint(Line.m_nColumns) - nShift));
 					iCopied = Line.m_iContent;
 				}
 

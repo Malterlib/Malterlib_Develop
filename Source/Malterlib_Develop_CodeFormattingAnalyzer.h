@@ -38,7 +38,7 @@ namespace NMib::NDevelop::NPrivate
 	CStr fg_TrailingLineComment(CStr const &_Text);
 	bool fg_IsFallthroughComment(CStr const &_Text);
 	umint fg_MapOffsetToConverted(TCVector<CCodeFormattingEdit> const &_Conversions, umint _iOffset, bool _bEnd);
-	CStr fg_GetReorderInvariant(CStr const &_Source);
+	CStr fg_GetReorderInvariant(CStr const &_Source, ECodeLanguage _Language);
 
 	// Maps offsets of the converted source back to the original, resuming where the previous offset left off, so ascending
 	// offsets take one pass over the edits; a smaller one starts over.
@@ -267,6 +267,7 @@ namespace NMib::NDevelop::NPrivate
 		void fp_ConvertEnumCommas();
 		void fp_ConvertTrailingComments();
 		void fp_ConvertCommentPrefixes();
+		void fp_ConvertBlockCommentLines();
 		bool fp_MeasureTrailedCode(umint _iComment, CTrailedCode &o_Code) const;
 		bool fp_MeasureOnOpeningBraceLine(umint _iComment, CTrailedCode const &_Code, umint &o_nColumns) const;
 		bool fp_MultiLineTrailingCommentLines(umint _iComment, CStr &o_Replacement) const;

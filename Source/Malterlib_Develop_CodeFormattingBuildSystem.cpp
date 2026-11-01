@@ -264,9 +264,21 @@ namespace NMib::NDevelop::NPrivate
 			if (bComment && First.m_iOffset == iStart)
 				continue;
 
-			auto Canonical = fp_MakeIndent(Line.m_bContinued ? Line.m_nContinuationColumns : Line.m_Level * nTab);
+			auto nColumns = Line.m_bContinued ? Line.m_nContinuationColumns : Line.m_Level * nTab;
+			auto Canonical = fp_MakeIndent(nColumns);
 			if (fg_IsSameText(Canonical, m_pSource + iStart, First.m_iOffset - iStart))
 				continue;
+
+			// A block comment's lines below its first move with it.
+			umint nSourceColumns = 0;
+			if (First.m_Kind == ECodeTokenKind::mc_BlockComment && First.m_bMultiLine)
+			{
+				auto nDelta = fg_MeasureTextColumns(m_pSource + iStart, First.m_iOffset - iStart, nTab, nSourceColumns) ? aint(nColumns) - aint(nSourceColumns) : aint(0);
+				if (!fp_CanShiftCommentLines(umint(Line.m_iFirst), nDelta))
+					continue;
+
+				fp_ShiftCommentLines(umint(Line.m_iFirst), nDelta, "indentation", "a block comment's lines move with its first");
+			}
 
 			fp_AddEdit
 				(
