@@ -11,6 +11,16 @@ namespace NMib::NDevelop
 		if (_Token.m_bPlainName)
 			return false;
 
+		if (_Token.m_pOperator)
+		{
+			umint iOperator = 0;
+			while (_Token.m_pOperator[iOperator] && _Token.m_pOperator[iOperator] == _pText[iOperator])
+				++iOperator;
+
+			if (!_Token.m_pOperator[iOperator] && !_pText[iOperator])
+				return true;
+		}
+
 		auto pToken = mp_Source.f_GetStr() + _Token.m_iOffset;
 		umint i = 0;
 		for (; i < _Token.m_nLength; ++i)

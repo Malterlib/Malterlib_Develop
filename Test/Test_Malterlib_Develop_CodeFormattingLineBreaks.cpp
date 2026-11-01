@@ -232,12 +232,22 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						, "template <class T>\n[[nodiscard]] inline int f(T a)\n\trequires requires\n\t{\n\t\t{ a + 1 } -> cA;\n\t}\n{\n\treturn a;\n}\n"
 					)
 				;
-				// A requires expression in a concept's definition is no requires clause the declaration ends in, and the
-				// definition keeps its lines.
-				{
-					CStr Kept = "template <class T>\nconcept cA =\n\tcB<T> &&\n\trequires (T &a)\n{\n\t{ a.f() } -> cC;\n};\n";
-					fg_ExpectFormat("ConceptRequiresExpression", Kept, Kept);
-				}
+				// A requires expression in a concept's definition is no requires clause the declaration ends in, and its body opens
+				// as any body in an expression does.
+				fg_ExpectFormat
+					(
+						"ConceptRequiresExpression"
+						, "template <class T>\nconcept cA =\n\tcB<T> &&\n\trequires (T &a)\n{\n\t{ a.f() } -> cC;\n};\n"
+						, "template <class T>\nconcept cA = cB<T> && requires (T &a)\n\t{\n\t\t{ a.f() } -> cC;\n\t}\n;\n"
+					)
+				;
+				fg_ExpectFormat
+					(
+						"ConceptRequiresExpressionOneLine"
+						, "template <class T>\nconcept cA = cB<T> && requires (T &a) { { a.f() } -> cC; };\n"
+						, "template <class T>\nconcept cA = cB<T> && requires (T &a)\n\t{\n\t\t{ a.f() } -> cC;\n\t}\n;\n"
+					)
+				;
 				// A requires clause the layout joins is one written on one line, and the initializer list behind it is laid out.
 				fg_ExpectFormat
 					(
@@ -1969,7 +1979,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				// A qualifier already behind its type, a pointer's own, a function's, a macro's
 				// bare argument, and one with a comment or an unresolved '<' behind it stay.
 				CStr Kept = "struct C\n{\n\tCFoo const m_A;\n\tint * const m_pB = nullptr;\n\tCFoo const &f_C() const override;\n"
-					"\tvoid f_D() const requires cFoo<C>;\n\tconst /* why */ int m_E;\n\tDMacro(const, x);\n};\n"
+					"\tvoid f_D() const\n\t\trequires cFoo<C>\n\t;\n\tconst /* why */ int m_E;\n\tDMacro(const, x);\n};\n"
 				;
 				fg_ExpectFormat("Kept", Kept, Kept);
 				// So does one leading a type whose words go on behind specifiers, which the next pass would move it behind.
@@ -2373,6 +2383,88 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						"UnnamedParameterSharesType"
 						, "extern template TCValue<CSorted> CValue::fs_From<COrdered@>(TCValue<COrdered> const &);\n"
 						, "extern template auto CValue::fs_From\n\t<\n\t\tCOrdered@\n\t>\n\t(TCValue<COrdered> const &)\n\t-> TCValue<CSorted>\n;\n"
+					)
+				;
+				// Names the naming lists as types are enumerators as readily, qualified too, and a requires expression's body in front
+				// of the declaration is no function's: all of them construct variables.
+				fSplit
+					(
+						"ConstructsVariable"
+						, "CValue g_A(EFlag_A@, EFlag_B@);\n\ntemplate <typename T>\n\trequires requires { T::a; }\nCValue g_B(g_Value@);\n"
+						"CValue g_C(N::EFlag_A@, N::EFlag_B@);\nCValue g_D(EFlag_A@ * g_Scale);\nCValue g_E(TCFlags<int>::EFlag_A * g_Scale@);\nCValue g_F(EFlag_A ^ g_Scale@);\n"
+						, "CValue g_A\n\t(\n\t\tEFlag_A@\n\t\t, EFlag_B@\n\t)\n;\n\ntemplate <typename T>\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n"
+						"CValue g_B\n\t(\n\t\tg_Value@\n\t)\n;\nCValue g_C\n\t(\n\t\tN::EFlag_A@\n\t\t, N::EFlag_B@\n\t)\n;\n"
+						"CValue g_D\n\t(\n\t\tEFlag_A@ *g_Scale\n\t)\n;\nCValue g_E\n\t(\n\t\tTCFlags\n\t\t<\n\t\t\tint\n\t\t>\n\t\t::EFlag_A *g_Scale@\n\t)\n;\n"
+						"CValue g_F\n\t(\n\t\tEFlag_A\n\t\t^ g_Scale@\n\t)\n;\n"
+					)
+				;
+				// A fundamental type proves a parameter on its own, and so do a declarator nothing follows, an ellipsis and a type's
+				// template argument list in front of a declarator. A name the naming lists as a function's names one, behind its
+				// template arguments too, and so does an operator.
+				fSplit
+					(
+						"UnnamedParameters"
+						, "TCLongTemplate<@> fg_F(int);\nTCLongTemplate<@> fg_G(CAllocator &);\nTCLongTemplate<@> fg_H(...);\n"
+						"TCLongTemplate<@> fg_I(TCVector<CStr> &o_Lines);\nTCLongTemplate<@> fg_J(EFlag _Flags = EFlag_A ^ EFlag_B);\n"
+						"TCLongTemplate<@> fg_K(CStr *_pStr);\nTCLongTemplate<@> operator +(CFoo, CFoo);\ntemplate TCLongTemplate<@> fg_L<int>(CFoo);\n"
+						, "auto fg_F(int)\n\t-> TCLongTemplate<@>\n;\nauto fg_G(CAllocator &)\n\t-> TCLongTemplate<@>\n;\nauto fg_H(...)\n\t-> TCLongTemplate<@>\n;\n"
+						"auto fg_I(TCVector<CStr> &o_Lines)\n\t-> TCLongTemplate<@>\n;\nauto fg_J(EFlag _Flags = EFlag_A ^ EFlag_B)\n\t-> TCLongTemplate<@>\n;\n"
+						"auto fg_K(CStr *_pStr)\n\t-> TCLongTemplate<@>\n;\nauto operator + (CFoo, CFoo)\n\t-> TCLongTemplate<@>\n;\n"
+						"template auto fg_L<int>(CFoo)\n\t-> TCLongTemplate<@>\n;\n"
+					)
+				;
+				// A name that only fits behind its return type keeps it, behind the specifiers in front of it too, where an empty
+				// parameter list opens nothing, and an operator named in the type proves no function.
+				{
+					CStr Name;
+					for (umint i = 0; i < 178; ++i)
+						Name += "W";
+
+					CStr Opened;
+					for (umint i = 0; i < 184; ++i)
+						Opened += "W";
+
+					CStr Specified;
+					for (umint i = 0; i < 171; ++i)
+						Specified += "W";
+
+					fSplit
+						(
+							"NameFitsBehindReturnType"
+							, "int f_" + Opened + "(int _A);\nstruct C\n{\n\tstatic int f_" + Specified + "() noexcept(true);\n};\n"
+							, "int f_" + Opened + "\n\t(\n\t\tint _A\n\t)\n;\nstruct C\n{\n\tstatic int f_" + Specified + "()\n\t\tnoexcept(true)\n\t;\n};\n"
+						)
+					;
+
+					fSplit
+						(
+							"EmptyParametersAndOperatorInType"
+							, "struct C\n{\n\tint f_" + Name + "() noexcept(true);\n};\n\nTCValue<&CFoo::operator ()> g_G(EFlag_A@, EFlag_B);\n"
+							, "struct C\n{\n\tint f_" + Name + "()\n\t\tnoexcept(true)\n\t;\n};\n\nTCValue<&CFoo::operator ()> g_G\n\t(\n\t\tEFlag_A@\n\t\t, EFlag_B\n\t)\n;\n"
+						)
+					;
+				}
+				// No member is initialized with a parenthesis, so in a class's body any parameter list declares a function, behind a
+				// requires expression in front of the class too, and behind an alignment, an attribute or a base clause holding a
+				// parenthesis; an operator's definition and a specialization's are no class.
+				fSplit
+					(
+						"MemberParameters"
+						, "struct C\n{\n\tTCLongTemplate<@> f_F(CFoo *_pA);\n};\n\ntemplate <typename T>\n\trequires requires { typename T::CA; }\nstruct CT\n{\n"
+						"\tTCLongTemplate<@> f_F(CFoo *_pA);\n};\n\ntemplate <typename T>\n\trequires (sizeof(T) > 1)\nstruct CS\n{\n\tTCLongTemplate<@> f_F(CFoo *_pA);\n};\n"
+						"\nstruct alignas(8) CA\n{\n\tTCLongTemplate<@> f_F(CFoo *_pA);\n};\n\nstruct alignas(fg_Align()) [[deprecated(\"old\")]] CB : TCBase<void (int)>\n{\n"
+						"\tTCLongTemplate<@> f_F(CFoo *_pA);\n};\n\nstruct CResult operator + (CResult const &_Left, CResult const &_Right)\n{\n\tCValue Result(EFlag_A@, EFlag_B);\n}\n"
+						"template <>\nstruct CResult *fg_Get<int>()\n{\n\tCValue Result(EFlag_A@, EFlag_B);\n}\n"
+						"template <>\nstruct CResult fg_Get<(1 < 2)>()\n{\n\tCValue Result(EFlag_A@, EFlag_B);\n}\n"
+						, "struct C\n{\n\tauto f_F(CFoo *_pA)\n\t\t-> TCLongTemplate<@>\n\t;\n};\n\ntemplate <typename T>\n\trequires requires\n\t{\n"
+						"\t\ttypename T::CA;\n\t}\nstruct CT\n{\n\tauto f_F(CFoo *_pA)\n\t\t-> TCLongTemplate<@>\n\t;\n};\n\ntemplate <typename T>\n"
+						"\trequires (sizeof(T) > 1)\nstruct CS\n{\n\tauto f_F(CFoo *_pA)\n\t\t-> TCLongTemplate<@>\n\t;\n};\n"
+						"\nstruct alignas(8) CA\n{\n\tauto f_F(CFoo *_pA)\n\t\t-> TCLongTemplate<@>\n\t;\n};\n\n"
+						"struct alignas(fg_Align()) [[deprecated(\"old\")]] CB : TCBase<void (int)>\n{\n\tauto f_F(CFoo *_pA)\n\t\t-> TCLongTemplate<@>\n\t;\n};\n\n"
+						"struct CResult operator + (CResult const &_Left, CResult const &_Right)\n{\n"
+						"\tCValue Result\n\t\t(\n\t\t\tEFlag_A@\n\t\t\t, EFlag_B\n\t\t)\n\t;\n}\n\ntemplate <>\nstruct CResult *fg_Get<int>()\n{\n"
+						"\tCValue Result\n\t\t(\n\t\t\tEFlag_A@\n\t\t\t, EFlag_B\n\t\t)\n\t;\n}\n\ntemplate <>\nstruct CResult fg_Get<(1 < 2)>()\n{\n"
+						"\tCValue Result\n\t\t(\n\t\t\tEFlag_A@\n\t\t\t, EFlag_B\n\t\t)\n\t;\n}\n"
 					)
 				;
 			};

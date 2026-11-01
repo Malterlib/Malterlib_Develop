@@ -740,8 +740,19 @@ binary operator behind the body's closing brace: `pState->m_Launch(...)` over
 operator that takes the lambda stays on the line, `g_Dispatch(Actor) / [=]`.
 Every body in an expression opens, a later one standing under what goes on
 behind the first: `}` over `() && []` over `{`. A requires expression's body
-opens the same way wherever it stands, in a requires clause under the clause's
-line, what the clause goes on with starting the line below its closing brace.
+opens the same way wherever it stands, under the line its `requires` ends up on,
+one level in from a statement where that line is the statement's own, as in a
+concept's definition or a variable's initializer; what the expression goes on
+with starts the line below its closing brace with an operator leading it, `}`
+over `&& cB<T>`, and a terminator behind it below. The `&&` or `||` in front of
+`requires` joins it to the constraints in front of it, so a long conjunction
+starts each operand's line with its operator, the requires expression's
+included, where a `&&` ending a trailing return type, `-> CFoo &&`, is a
+declarator.
+One in a parenthesis opens the parenthesis around it, as in any expression:
+`&&` over `(` over `requires` over `{`. C++'s alternative tokens, `and`, `or`,
+`not` and the others, are the operators they spell wherever an operand follows
+them; C has them as macros of `<iso646.h>` and reads them as names.
 The conversion is the one rule that changes tokens. It is decided on the
 original source, and the layout is then made on the converted source, so the
 lines the plan writes are the lines a later pass sees.
@@ -821,8 +832,17 @@ as the source has it, and otherwise opened at its outermost break, `requires`
 over `(` over the constraints, or each `&&` and `||` starting a line one level
 in. One on the header's line takes a line of its own one level in. A member
 template's header behind the clause keeps its line, and the declaration behind
-them starts its own line and is laid out as usual. Only a requires clause
-elsewhere in a declaration keeps the whole statement's lines.
+them starts its own line and is laid out as usual, a class's body as a body. A
+requires clause behind the declaration, behind its qualifiers, a reference
+qualifier included, always starts a line of its own one level in, and is laid out
+the same way; the declaration in front of it is laid out as one that ends there,
+and a declaration without a body ends with its terminator on a line of its own,
+`requires cA<T>` over `;`, while a defaulted definition's `= default;` keeps its
+line. A block comment on the clause's line in front of it names it and goes with
+it, `/* Note */ requires cA<T>`, and a line comment behind it is left to the
+trailing comment rule. A clause behind a lambda's parameters is the lambda's, laid
+out with the expression it stands in. Only a requires clause elsewhere in a
+declaration keeps the whole statement's lines.
 
 A line that is still too long after all of that is broken again, so the layout
 does not depend on where the source happened to break: an element the source

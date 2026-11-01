@@ -1397,11 +1397,12 @@ namespace NMib::NDevelop::NPrivate
 		auto iHeadNode = Nodes[iParen].m_iParent;
 
 		// A conditional in the head gives each branch a declaration of its own, and the return type would move behind
-		// only the last one's parameter list.
+		// only the last one's parameter list. The body stands behind the parameter list, where a requires expression's in a
+		// clause in front of the declaration does not: 'requires requires { T::a; }' over 'CFoo g_Value(g_Init);'.
 		auto iHeadEnd = Node.m_iLastToken;
 		for (auto iChild : Node.m_Children)
 		{
-			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Block)
+			if (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Block && Nodes[iChild].m_iFirstToken > iClose)
 			{
 				iHeadEnd = Nodes[iChild].m_iFirstToken;
 
@@ -2317,6 +2318,17 @@ namespace NMib::NDevelop::NPrivate
 		auto iGap = Tokens[umint(iPrevious)].f_GetEnd();
 		auto const &InsertAt = Tokens[iInsert];
 		auto nGap = InsertAt.m_iOffset - iGap;
+
+		// A block comment naming what the type goes in front of stays with it: '-> void' over '/*Constraint*/ requires cA<T>'.
+		for (auto iComment = umint(iPrevious) + 1; iComment < iInsert; ++iComment)
+		{
+			if (Tokens[iComment].m_Kind == ECodeTokenKind::mc_BlockComment && fp_IsAttachedComment(iComment))
+			{
+				nGap = Tokens[iComment].m_iOffset - iGap;
+
+				break;
+			}
+		}
 		auto bBody = m_Tokens.f_IsText(InsertAt, "{") || m_Tokens.f_IsText(InsertAt, ";");
 
 		// 'override', 'final' and a pure specifier are written behind the trailing type, on

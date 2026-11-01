@@ -1283,7 +1283,7 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 
 			// A typedef names the record its class key defines: 'typedef struct { ... } CFoo;'.
-			auto iKey = fp_SkipTemplateHeader(Owner.m_iFirstToken);
+			auto iKey = fp_SkipHeadIntroducers(Owner.m_iFirstToken);
 			if (m_Tokens.f_IsText(Tokens[iKey], "typedef"))
 			{
 				auto iDefined = fp_NextCode(iKey);
@@ -1533,7 +1533,7 @@ namespace NMib::NDevelop::NPrivate
 			bool bTypeDefinition = false;
 			if (!bBody)
 			{
-				auto iKey = fp_SkipTemplateHeader(Node.m_iFirstToken);
+				auto iKey = fp_SkipHeadIntroducers(Node.m_iFirstToken);
 				bool bTypedef = false;
 				if (auto iBehind = fp_NextCode(iKey); iBehind >= 0 && m_Tokens.f_IsText(Tokens[iKey], "typedef"))
 				{

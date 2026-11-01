@@ -231,6 +231,337 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					, "template <typename t_C>\nrequires (cA<TCFoo<TCBar<t_C>>> && cB<TCBar<TCFoo<TCBar<t_C>>>, TCFoo<t_C>>)\n" + Constraint
 				)
 			;
+			// A requires clause behind a header opens at its outermost break where it does not fit on one line, and the operands
+			// of a condition written across lines are joined.
+			fg_ExpectFormat
+				(
+					"ClauseBehindHeaderOpens"
+					, "template <typename t_C>\n\trequires\n\t(\n\t\t!\n\t\t(\n"
+					"\t\t\tNMib::NConcurrency::NPrivate::TCCoroutineContextFlagsFromParams<tp_CParams...>::mc_Value & NMib::ECoroutineFlag_UnsafeReferenceParameters\n"
+					"\t\t)\n\t\t|| !!\n\t\t(\n"
+					"\t\t\tNMib::NConcurrency::NPrivate::TCCoroutineContextFlagsFromParams<tp_CParams...>::mc_Value & NMib::ECoroutineFlag_AllowReferences\n"
+					"\t\t)\n\t)\nstruct CTraits\n{\n\tint m_A;\n};\n"
+					, "template <typename t_C>\n\trequires\n\t(\n"
+					"\t\t!(NMib::NConcurrency::NPrivate::TCCoroutineContextFlagsFromParams<tp_CParams...>::mc_Value & NMib::ECoroutineFlag_UnsafeReferenceParameters)\n"
+					"\t\t|| !!(NMib::NConcurrency::NPrivate::TCCoroutineContextFlagsFromParams<tp_CParams...>::mc_Value & NMib::ECoroutineFlag_AllowReferences)\n"
+					"\t)\nstruct CTraits\n{\n\tint m_A;\n};\n"
+				)
+			;
+			// A constraint goes on behind a dependent name's 'template' and behind 'and' and 'or'.
+			{
+				CStr Constraint
+					= "template <typename T>\n\trequires T::template cA<int> and cB<T>\nCFoo<T>::CFoo(int _A);\n\n"
+					"template <typename T>\n\trequires cA<T> or cB<T>\nvoid fg_F();\n"
+				;
+				fg_ExpectFormat("ConstraintSpellings", Constraint, Constraint);
+			}
+			// A deduction guide behind a clause starts the line below it, and a class body behind one is a body, empty or not.
+			fg_ExpectFormat
+				(
+					"ClauseBehindHeaderDeclarations"
+					, "template <typename t_C>\n\trequires\n\t(!cA<t_C> && !cB<t_C>) TCFuture(t_C)\n\t-> TCFuture<t_C>\n;\n\ntemplate <typename t_C>\n"
+					"\trequires (sizeof(t_C) > 1)\nstruct CEmpty {};\n\ntemplate <typename t_C>\n\trequires cA<t_C>\nstruct CBody\n\t{\n\t\tint m_A;\n\t}\n;\n"
+					"\ntemplate <typename t_C>\n\trequires cA<t_C> // A\n\t\t&& cB<t_C>\nstruct CCommented\n{\n\tint m_A;\n};\n"
+					, "template <typename t_C>\n\trequires (!cA<t_C> && !cB<t_C>)\nTCFuture(t_C) -> TCFuture<t_C>;\n\ntemplate <typename t_C>\n"
+					"\trequires (sizeof(t_C) > 1)\nstruct CEmpty\n{\n};\n\ntemplate <typename t_C>\n\trequires cA<t_C>\nstruct CBody\n{\n\tint m_A;\n};\n"
+					"\ntemplate <typename t_C>\n\trequires cA<t_C> // A\n\t\t&& cB<t_C>\nstruct CCommented\n{\n\tint m_A;\n};\n"
+				)
+			;
+			// A declaration in front of a clause behind its reference qualifier, or of one holding a requires expression, is laid
+			// out as any that ends there.
+			{
+				CStr Long;
+				for (umint i = 0; i < 70; ++i)
+					Long += "W";
+
+				fg_ExpectFormat
+					(
+						"DeclarationInFrontOfClause"
+						, CStr
+						(
+							"struct C\n{\n\tvoid f_A(TCFoo<int> &&_Result@, TCFoo<int> &&_Other@) &&\n\t\trequires (cA<int>);\n};\n\n"
+							"template <typename tf_C>\nint C::f_B(TCFoo<tf_C> &_Args@, COption &_Option@) const\n\trequires requires\n\t{\n\t\t_Args;\n\t}\n"
+							"{\n\treturn 0;\n}\n"
+						)
+						.f_Replace("@", Long)
+						, CStr
+						(
+							"struct C\n{\n\tvoid f_A\n\t\t(\n\t\t\tTCFoo<int> &&_Result@\n\t\t\t, TCFoo<int> &&_Other@\n\t\t)\n\t\t&&\n"
+							"\t\trequires (cA<int>)\n\t;\n};\n\ntemplate <typename tf_C>\nauto C::f_B\n\t(\n\t\tTCFoo<tf_C> &_Args@\n\t\t, COption &_Option@\n\t)\n"
+							"\tconst\n\t-> int\n\trequires requires\n\t{\n\t\t_Args;\n\t}\n{\n\treturn 0;\n}\n"
+						)
+						.f_Replace("@", Long)
+						, false
+					)
+				;
+			}
+			// A requires expression's body in a clause opens below the clause's line, and the clause and the declaration go on
+			// behind it, an operator leading its line and what follows the last body laid out as a condition is, a body nested in
+			// a parenthesis opened. A comment in front of a clause keeps it on the declaration's line. A clause on a declaration's
+			// line too long for both takes a line of its own, and the declaration is laid out in front of it where it is still too
+			// long.
+			{
+				CStr Fits;
+				for (umint i = 0; i < 80; ++i)
+					Fits += "W";
+
+				CStr Long;
+				for (umint i = 0; i < 85; ++i)
+					Long += "W";
+
+				fg_ExpectFormat
+					(
+						"RequiresExpressionInClause"
+						, CStr
+						(
+							"template <typename T>\n\trequires requires (T _A) { _A.f_Get(); }\nvoid fg_A(int _A);\n\n"
+							"template <typename T>\n\trequires requires (T _A) { _A.f_Get(); } && cB<T>\nvoid fg_B(int _A);\n\n"
+							"template <typename T>\nvoid fg_C(int _A%, int _B%) requires cA<T>;\n\n"
+							"template <typename T>\nvoid fg_D(int _A%, int _B%) requires requires { sizeof(T); };\n\n"
+							"template <typename T>\nvoid fg_E(int _A@, int _B@) requires cA<T>;\n\n"
+							"template <typename T>\nvoid fg_F(int _A@, int _B@) requires requires { sizeof(T); };\n\n"
+							"template <typename T>\nvoid fg_G(int _A) requires requires { sizeof(T); };\n\n"
+							"template <typename T>\nvoid fg_H(int _A@, int _B@) requires requires { T::a; } && requires { T::b; };\n\n"
+							"template <typename T>\nvoid fg_I(int _A) requires requires { T::a; } && requires { T::b; };\n\n"
+							"template <typename T>\nint fg_J(int _A@, int _B@) const && requires requires { T::a; };\n\n"
+							"template <typename T>\nvoid fg_K(int _A@, int _B@) requires requires { T::a; } and requires { T::b; };\n\n"
+							"template <typename T>\n\trequires requires { T::a; } && requires { T::b; }\nvoid fg_L();\n\n"
+							"template <typename T>\n\trequires requires { T::a; } auto fg_M(int _A) -> int;\n\n"
+							"template <typename T>\n\trequires requires { T::a; }\n\t\tvoid fg_N(int _A);\n\n"
+							"template <typename T> void fg_O() requires requires { [] { if (true) { return; } }(); };\n\n"
+							"template <typename T>\n\trequires true\n::CResult *fg_P(int _A@, int _B@);\n\n"
+							"template <typename T>\nvoid fg_Q(int _A%, int _B%) requires (requires { T::a; }) || requires (T _A) { _A.f_Get(); };\n\n"
+							"template <typename T>\n\trequires requires { T::a; } && requires (T t) { t.f(); }\nvoid fg_R(int _A@, int _B@);\n\n"
+							"template <typename T>\n\trequires requires { T::a; }\n\t&&\n\tcB<T> &&\n\tcC<T>\nvoid fg_S();\n\n"
+							"template <typename T>\nstruct C\n{\n\tvoid f_T(int _A@, int _B@) const && /* note */ requires cA<T>;\n};\n\n"
+							"template <typename T>\n\trequires\n\trequires {typename T::CA;} &&\n\tcB<T>\nstruct CA\n{\n};\n\n"
+							"template <typename T>\nvoid fg_T() requires requires { T::a; } && (requires { T::b; }) or cA<T>;\n\n"
+							"template <typename T>\n\trequires cA@<T> && cB@<T> && requires { T::a; }\nvoid fg_U();\n"
+						)
+						.f_Replace("%", Fits)
+						.f_Replace("@", Long)
+						, CStr
+						(
+							"template <typename T>\n\trequires requires (T _A)\n\t{\n\t\t_A.f_Get();\n\t}\nvoid fg_A(int _A);\n\n"
+							"template <typename T>\n\trequires requires (T _A)\n\t{\n\t\t_A.f_Get();\n\t}\n\t&& cB<T>\nvoid fg_B(int _A);\n\n"
+							"template <typename T>\nvoid fg_C(int _A%, int _B%)\n\trequires cA<T>\n;\n\n"
+							"template <typename T>\nvoid fg_D(int _A%, int _B%)\n\trequires requires\n\t{\n\t\tsizeof(T);\n\t}\n;\n\n"
+							"template <typename T>\nvoid fg_E\n\t(\n\t\tint _A@\n\t\t, int _B@\n\t)\n\trequires cA<T>\n;\n\n"
+							"template <typename T>\nvoid fg_F\n\t(\n\t\tint _A@\n\t\t, int _B@\n\t)\n\trequires requires\n\t{\n\t\tsizeof(T);\n\t}\n;\n\n"
+							"template <typename T>\nvoid fg_G(int _A)\n\trequires requires\n\t{\n\t\tsizeof(T);\n\t}\n;\n\n"
+							"template <typename T>\nvoid fg_H\n\t(\n\t\tint _A@\n\t\t, int _B@\n\t)\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n"
+							"\t&& requires\n\t{\n\t\tT::b;\n\t}\n;\n\n"
+							"template <typename T>\nvoid fg_I(int _A)\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n\t&& requires\n\t{\n\t\tT::b;\n\t}\n;\n\n"
+							"template <typename T>\nauto fg_J\n\t(\n\t\tint _A@\n\t\t, int _B@\n\t)\n\tconst &&\n\t-> int\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n;\n\n"
+							"template <typename T>\nvoid fg_K\n\t(\n\t\tint _A@\n\t\t, int _B@\n\t)\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n"
+							"\tand requires\n\t{\n\t\tT::b;\n\t}\n;\n\n"
+							"template <typename T>\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n\t&& requires\n\t{\n\t\tT::b;\n\t}\nvoid fg_L();\n\n"
+							"template <typename T>\n\trequires requires\n\t{\n\t\tT::a;\n\t}\nauto fg_M(int _A) -> int;\n\n"
+							"template <typename T>\n\trequires requires\n\t{\n\t\tT::a;\n\t}\nvoid fg_N(int _A);\n\n"
+							"template <typename T>\nvoid fg_O()\n\trequires requires\n\t{\n\t\t[]\n\t\t{\n\t\t\tif (true)\n\t\t\t\treturn;\n\t\t}();\n\t}\n;\n\n"
+							"template <typename T>\n\trequires true\nauto fg_P\n\t(\n\t\tint _A@\n\t\t, int _B@\n\t)\n\t-> ::CResult *\n;\n\n"
+							"template <typename T>\nvoid fg_Q(int _A%, int _B%)\n\trequires\n\t(\n\t\trequires\n\t\t{\n\t\t\tT::a;\n\t\t}\n\t)\n"
+							"\t|| requires (T _A)\n\t{\n\t\t_A.f_Get();\n\t}\n;\n\n"
+							"template <typename T>\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n\t&& requires (T t)\n\t{\n\t\tt.f();\n\t}\n"
+							"void fg_R\n\t(\n\t\tint _A@\n\t\t, int _B@\n\t)\n;\n\n"
+							"template <typename T>\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n\t&& cB<T> && cC<T>\nvoid fg_S();\n\n"
+							"template <typename T>\nstruct C\n{\n\tvoid f_T\n\t\t(\n\t\t\tint _A@\n\t\t\t, int _B@\n\t\t)\n\t\tconst &&\n\t\t/* note */ requires cA<T>\n\t;\n};\n\n"
+							"template <typename T>\n\trequires\n\trequires\n\t{\n\t\ttypename T::CA;\n\t}\n\t&& cB<T>\nstruct CA\n{\n};\n\n"
+							"template <typename T>\nvoid fg_T()\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n\t&&\n\t(\n\t\trequires\n\t\t{\n\t\t\tT::b;\n\t\t}\n\t)\n\tor cA<T>\n;\n\n"
+							"template <typename T>\n\trequires cA@<T>\n\t&& cB@<T>\n\t&& requires\n\t{\n\t\tT::a;\n\t}\nvoid fg_U();\n"
+						)
+						.f_Replace("%", Fits)
+						.f_Replace("@", Long)
+						, false
+					)
+				;
+			}
+			// An alternative token is the operator it spells.
+			fg_ExpectFormat
+				(
+					"AlternativeTokens"
+					, "bool g_a = not g_b and g_c or compl g_d;\nbool g_e = g_f and\n\tg_g;\n\ntemplate <typename T>\nconcept cA = (requires { T::b; }) or cB<T>;\n"
+					, "bool g_a = not g_b and g_c or compl g_d;\nbool g_e = g_f and g_g;\n\ntemplate <typename T>\nconcept cA =\n\t(\n\t\trequires\n\t\t{\n\t\t\tT::b;\n\t\t}\n"
+					"\t)\n\tor cB<T>\n;\n"
+				)
+			;
+			// A clause is measured at the level it moves to, without the terminator, which takes a line of its own, and without a
+			// line comment behind it.
+			{
+				CStr Constraint;
+				CStr Split;
+				for (umint i = 0; i < 19; ++i)
+				{
+					Constraint += "cA<T> && ";
+					if (i)
+						Split += "\t\t\t&& cA<T>\n";
+				}
+
+				fg_ExpectFormat
+					(
+						"ClauseMeasuredWithTerminator"
+						, "template <typename T>\nstruct CE\n{\n\tvoid f_F(int _A) &&\n\trequires " + Constraint + "cAAAAAAA<T>;\n"
+						"\tvoid f_G(int _A)\n\t\trequires (cB<T>) // B\n\t;\n};\n"
+						, "template <typename T>\nstruct CE\n{\n\tvoid f_F(int _A) &&\n\t\trequires cA<T>\n" + Split + "\t\t\t&& cAAAAAAA<T>\n\t;\n"
+						"\tvoid f_G(int _A)\n\t\trequires (cB<T>) // B\n\t;\n};\n"
+					)
+				;
+			}
+			// A clause is measured without the line comment behind it, at the level it moves to, and a block comment in front of
+			// it goes with it to its line.
+			{
+				CStr Constraint;
+				for (umint i = 0; i < 175; ++i)
+					Constraint += "A";
+
+				CStr Parameter;
+				for (umint i = 0; i < 88; ++i)
+					Parameter += "W";
+
+				CStr Expected = CStr
+					(
+						"template <typename T>\nvoid fg_A(int _A)\n\trequires\n\t(\n\t\tc@<T>\n\t) // A\n{\n}\n\n"
+						"template <typename T>\nauto fg_B\n\t(\n\t\tint _A%\n\t\t, int _B%\n\t)\n\t-> CResult\n\t/* B */ requires cB<T>\n;\n"
+					)
+					.f_Replace("@", Constraint)
+					.f_Replace("%", Parameter)
+				;
+
+				fg_ExpectFormat
+					(
+						"ClauseWithComment"
+						, CStr
+						(
+							"template <typename T>\nvoid fg_A(int _A) requires (c@<T>) // A\n{\n}\n\n"
+							"template <typename T>\nCResult fg_B(int _A%, int _B%) /* B */ requires cB<T>;\n"
+						)
+						.f_Replace("@", Constraint)
+						.f_Replace("%", Parameter)
+						, Expected
+						, false
+					)
+				;
+				fg_ExpectFormat
+					(
+						"ClauseWithCommentOnItsLine"
+						, CStr
+						(
+							"template <typename T>\nvoid fg_A(int _A)\nrequires (c@<T>) // A\n{\n}\n\n"
+							"template <typename T>\nCResult fg_B(int _A%, int _B%)\n\t/* B */ requires cB<T>;\n"
+						)
+						.f_Replace("@", Constraint)
+						.f_Replace("%", Parameter)
+						, Expected
+						, false
+					)
+				;
+			}
+			// A name can hold non-ASCII characters, which an alternative token in front of it stays apart from.
+			fg_ExpectFormat("AlternativeTokenUnicodeOperand", "bool f(bool \u00e9)\n{\n\treturn not\n\t\t\u00e9;\n}\n", "bool f(bool \u00e9)\n{\n\treturn not \u00e9;\n}\n");
+			// A declaration a block comment leads on its line under a template header is measured from the comment and laid out.
+			{
+				CStr Parameter;
+				for (umint i = 0; i < 88; ++i)
+					Parameter += "W";
+
+				fg_ExpectFormat
+					(
+						"CommentLedDeclarationUnderHeader"
+						, CStr("template <typename T>\n/* A */ CResult fg_A(int _A%, int _B%);\n").f_Replace("%", Parameter)
+						, CStr("template <typename T>\n/* A */ auto fg_A\n\t(\n\t\tint _A%\n\t\t, int _B%\n\t)\n\t-> CResult\n;\n").f_Replace("%", Parameter)
+						, false
+					)
+				;
+			}
+			// A requires expression is an operand behind 'return' too, and a clause behind a lambda's parameters is the lambda's.
+			{
+				CStr Name;
+				for (umint i = 0; i < 175; ++i)
+					Name += "A";
+
+				fg_ExpectFormat
+					(
+						"ReturnedRequiresExpression"
+						, CStr("template <typename T>\nconstexpr bool fg_A()\n{\n\treturn c@<T> || requires { typename T::X; };\n}\n").f_Replace("@", Name)
+						, CStr("template <typename T>\nconstexpr bool fg_A()\n{\n\treturn c@<T>\n\t\t|| requires\n\t\t{\n\t\t\ttypename T::X;\n\t\t}\n\t;\n}\n").f_Replace("@", Name)
+					)
+				;
+
+				CStr Parameters;
+				for (umint i = 0; i < 7; ++i)
+					Parameters += CStr::CFormat("{}T _Param{}WithALongerName") << (i ? ", " : "") << i;
+
+				CStr SplitParameters;
+				for (umint i = 0; i < 7; ++i)
+					SplitParameters += CStr::CFormat("\t\t\t{}T _Param{}WithALongerName\n") << (i ? ", " : "") << i;
+
+				fg_ExpectFormat
+					(
+						"LambdaRequiresClause"
+						, "void f()\n{\n\tauto f = []<typename T>(" + Parameters + ") requires requires { T::a; } && requires { T::b; } { return 1; };\n}\n"
+						, "void f()\n{\n\tauto f = []\n\t\t<typename T>\n\t\t(\n" + SplitParameters + "\t\t)\n\t\trequires requires\n\t\t{\n\t\t\tT::a;\n\t\t}\n"
+						"\t\t&& requires\n\t\t{\n\t\t\tT::b;\n\t\t}\n\t{\n\t\treturn 1;\n\t};\n}\n"
+					)
+				;
+			}
+			// A name behind '::template' is qualified, so the parenthesis holds arguments and the variable keeps its type.
+			{
+				CStr Long;
+				for (umint i = 0; i < 90; ++i)
+					Long += "A";
+
+				fg_ExpectFormat
+					(
+						"TemplateQualifiedArgument"
+						, "CValue g_Value(CFoo::template g_Value<int>, CBar::template g_Other" + Long + "<int>, g_Third" + Long + ");\n"
+						, "CValue g_Value\n\t(\n\t\tCFoo::template g_Value<int>\n\t\t, CBar::template g_Other" + Long + "<int>\n\t\t, g_Third" + Long + "\n\t)\n;\n"
+					)
+				;
+			}
+			// A clause whose body stands in a parenthesis is opened, as every body in an expression is.
+			fg_ExpectFormat
+				(
+					"ClauseBodyInParenthesis"
+					, "template <typename T>\nvoid fg_F() requires (requires { [] { int a; int b; }(); });\n"
+					, "template <typename T>\nvoid fg_F()\n\trequires\n\t(\n\t\trequires\n\t\t{\n\t\t\t[]\n\t\t\t{\n\t\t\t\tint a;\n\t\t\t\tint b;\n\t\t\t}();\n\t\t}\n\t)\n;\n"
+				)
+			;
+			// A lambda in a default argument is no clause's, a cv-qualified conversion function's name ends no cast, and the
+			// requires expression's parameters are measured with what stands in front of it.
+			{
+				CStr Long;
+				for (umint i = 0; i < 175; ++i)
+					Long += "A";
+
+				fg_ExpectFormat
+					(
+						"ClauseBehindNestedLambda"
+						, "template <typename T>\nint fg_F(T _A = [] { return T{}; }())\n\trequires cA<T>;\n"
+						, "template <typename T>\nauto fg_F\n\t(\n\t\tT _A = []\n\t\t{\n\t\t\treturn T{};\n\t\t}()\n\t)\n\t-> int\n\trequires cA<T>\n;\n"
+						, false
+					)
+				;
+				fg_ExpectFormat
+					(
+						"QualifiedConversionNameInGroup"
+						, "bool f()\n{\n\treturn (b ? nullptr : &C::operator CResult const) && x;\n}\n"
+						, "bool f()\n{\n\treturn (b ? nullptr : &C::operator CResult const) && x;\n}\n"
+					)
+				;
+				fg_ExpectFormat
+					(
+						"PrefixMeasuredWithParameters"
+						, "template <typename T>\n\trequires cA<T> || requires (T _" + Long + ") { _A.f(); }\nvoid fg_F();\n"
+						, "template <typename T>\n\trequires cA<T>\n\t|| requires (T _" + Long + ")\n\t{\n\t\t_A.f();\n\t}\nvoid fg_F();\n"
+					)
+				;
+			}
+			// What stands between two requires expressions' bodies is laid out as a condition, wherever the source broke it.
+			{
+				CStr Expected = "template <typename T>\nvoid fg_A(int _A)\n\trequires requires\n\t{\n\t\tT::a;\n\t}\n\t&& cB<T> && cC<T> && requires\n\t{\n\t\tT::b;\n\t}\n;\n";
+				fg_ExpectFormat("TailBetweenBodies", "template <typename T>\nvoid fg_A(int _A) requires requires { T::a; } && cB<T> && cC<T> && requires { T::b; };\n", Expected);
+				fg_ExpectFormat("TailBetweenBodiesBroken", "template <typename T>\nvoid fg_A(int _A) requires requires { T::a; }\n\t&& cB<T> &&\n\tcC<T> && requires { T::b; };\n", Expected);
+			}
 			// Its operators are settled, so one written tight is spaced.
 			fg_ExpectFormat
 				(

@@ -9,6 +9,26 @@ namespace
 	using namespace NMib::NDevelop;
 	using namespace NMib::NDevelop::NPrivate;
 
+	// Whether the block is a requires expression's body, which a clause in front of a declaration holds as an operand:
+	// 'requires requires (T _A) { _A.f_Get(); }'.
+	bool fg_IsRequirementsBlock(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iBlock)
+	{
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto const &Block = Nodes[_iBlock];
+		if (Block.m_Kind != ECodeNodeKind::mc_Block)
+			return false;
+
+		auto iRequires = fg_PreviousCode(_Tokens, Block.m_iFirstToken);
+		if (iRequires >= 0 && _Tokens.f_IsText(Tokens[umint(iRequires)], ")"))
+		{
+			auto iParameters = fg_FindGroupClosingAt(_Structure, umint(iRequires), ECodeBracket::mc_Paren);
+			iRequires = iParameters >= 0 ? fg_PreviousCode(_Tokens, Nodes[umint(iParameters)].m_iFirstToken) : aint(-1);
+		}
+
+		return iRequires >= 0 && _Tokens.f_IsText(Tokens[umint(iRequires)], "requires");
+	}
+
 	// Whether the statement is a class head: 'struct', 'class' or 'union' stands at its
 	// own level, behind any template header and requires clause.
 	bool fg_IsClassHead(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iStatement)
@@ -27,7 +47,9 @@ namespace
 				auto const &Child = Nodes[iChild];
 				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
 				{
-					if (Child.m_Kind == ECodeNodeKind::mc_Block)
+					// A requires expression's body in a clause in front of the head is no body of it: 'requires requires { T::a; }'
+					// over 'struct CFoo'.
+					if (Child.m_Kind == ECodeNodeKind::mc_Block && !fg_IsRequirementsBlock(_Tokens, _Structure, iChild))
 						return false;
 
 					i = Child.m_iLastToken;
@@ -153,6 +175,15 @@ namespace
 							|| _Tokens.f_IsText(*pBeforeChild, "__declspec")
 						)
 					;
+					// So does a requires expression's body in it: 'requires requires { T::a; }' over 'auto fg_F() -> int'.
+					if (bClause && fg_IsRequirementsBlock(_Tokens, _Structure, iChild))
+					{
+						bNested = true;
+						i = Child.m_iLastToken;
+
+						break;
+					}
+
 					bool bTypePart = Child.m_Bracket == ECodeBracket::mc_Angle || Child.m_Bracket == ECodeBracket::mc_Square || bRequires || bDecltype || bAttribute;
 					if (Child.m_Kind != ECodeNodeKind::mc_Group || !bTypePart)
 						return false;
@@ -1398,6 +1429,33 @@ namespace NMib::NDevelop::NPrivate
 				, "&&"
 			}
 		;
+
+		// In front of 'requires' a '&&' ends a trailing return type only where the arrow leads the type it ends, and joins a
+		// requires expression to the constraints in front of it anywhere else: '-> C &&' over 'requires', 'cA<T> && requires'.
+		if (_Tokens.f_IsText(After, "requires") && !_Tokens.f_IsText(Before, ")") && !_Tokens.f_IsText(Before, "const") && !_Tokens.f_IsText(Before, "volatile"))
+		{
+			smint Depth = 0;
+			for (auto iType = iBefore; iType >= 0; iType = fg_PreviousCode(_Tokens, umint(iType)))
+			{
+				auto const &Type = Tokens[umint(iType)];
+				bool bAngle = _Structure.f_IsAngleBracket(umint(iType));
+				if (_Tokens.f_IsText(Type, ")") || _Tokens.f_IsText(Type, "]") || (bAngle && _Tokens.f_IsText(Type, ">")))
+					++Depth;
+				else if (_Tokens.f_IsText(Type, "(") || _Tokens.f_IsText(Type, "[") || (bAngle && _Tokens.f_IsText(Type, "<")))
+				{
+					if (--Depth < 0)
+						return true;
+				}
+				else if (Depth > 0)
+					continue;
+				else if (_Tokens.f_IsText(Type, "->"))
+					return false;
+				else if (Type.m_Kind != ECodeTokenKind::mc_Identifier && !_Tokens.f_IsText(Type, "::") && !_Tokens.f_IsText(Type, "*") && !_Tokens.f_IsText(Type, "&"))
+					return true;
+			}
+
+			return true;
+		}
 
 		if (fg_IsAnyText(_Tokens, After, c_pTails))
 			return false;

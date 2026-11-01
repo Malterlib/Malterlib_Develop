@@ -235,6 +235,9 @@ namespace NMib::NDevelop::NPrivate
 		bool fp_IsTrailingReturnArrow(umint _iToken) const;
 		bool fp_ClosesLambdaIntroducer(umint _iToken) const;
 		umint fp_SkipTemplateHeader(umint _iToken) const;
+		umint fp_SkipHeadIntroducers(umint _iToken) const;
+		aint fp_FindConstraintLast(umint _iRequires, umint _iLimit) const;
+		void fp_PlaceClauseRequirements(umint _iNode, umint _iClause, umint _iClauseLast, umint _iIndent, bool _bPlaceBodies);
 		bool fp_IsCastGroup(umint _iNode) const;
 		bool fp_IsStructuredBinding(umint _iNode) const;
 		CChildSpan fp_ChildrenIn(CCodeNode const &_Node, umint _iFirst, umint _iLast) const;

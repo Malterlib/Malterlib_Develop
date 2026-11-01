@@ -620,6 +620,90 @@ namespace NMib::NDevelop
 			}
 		}
 
+		// C++'s alternative tokens are the operators they spell, which C has as macros of '<iso646.h>' instead.
+		if (_Language != ECodeLanguage::mc_C)
+		{
+			struct CAlternative
+			{
+				ch8 const *m_pText;
+				ch8 const *m_pOperator;
+			};
+
+			constexpr CAlternative c_Alternatives[] =
+				{
+					{"and", "&&"}
+					, {"or", "||"}
+					, {"not", "!"}
+					, {"bitand", "&"}
+					, {"bitor", "|"}
+					, {"xor", "^"}
+					, {"compl", "~"}
+					, {"and_eq", "&="}
+					, {"or_eq", "|="}
+					, {"xor_eq", "^="}
+					, {"not_eq", "!="}
+				}
+			;
+
+			// An operand follows one, which text an assembler reads does not have: 'and \scratch3, \scratch3' in a macro.
+			auto fStartsOperand = [&](umint _iToken)
+				{
+					for (auto i = _iToken + 1; i < mp_Tokens.f_GetLen(); ++i)
+					{
+						auto const &Next = mp_Tokens[i];
+						switch (Next.m_Kind)
+						{
+						case ECodeTokenKind::mc_Whitespace:
+						case ECodeTokenKind::mc_Newline:
+						case ECodeTokenKind::mc_LineComment:
+						case ECodeTokenKind::mc_BlockComment:
+							continue;
+						case ECodeTokenKind::mc_Identifier:
+						case ECodeTokenKind::mc_Number:
+						case ECodeTokenKind::mc_CharLiteral:
+						case ECodeTokenKind::mc_StringLiteral:
+							return true;
+						case ECodeTokenKind::mc_Punctuator:
+							{
+								for (auto pLead : {"(", "!", "~", "-", "+", "*", "&", "::", "[", "++", "--", "{"})
+								{
+									if (f_IsText(Next, pLead))
+										return true;
+								}
+
+								return false;
+							}
+						default:
+							return false;
+						}
+					}
+
+					return false;
+				}
+			;
+
+			for (umint iToken = 0; iToken < mp_Tokens.f_GetLen(); ++iToken)
+			{
+				auto &Token = mp_Tokens[iToken];
+				if (Token.m_Kind != ECodeTokenKind::mc_Identifier)
+					continue;
+
+				for (auto const &Alternative : c_Alternatives)
+				{
+					if (!f_IsText(Token, Alternative.m_pText))
+						continue;
+
+					if (fStartsOperand(iToken))
+					{
+						Token.m_Kind = ECodeTokenKind::mc_Punctuator;
+						Token.m_pOperator = Alternative.m_pOperator;
+					}
+
+					break;
+				}
+			}
+		}
+
 		if (!_pStyle)
 			return;
 
@@ -694,7 +778,13 @@ namespace NMib::NDevelop
 
 	bool CCodeTokenStream::f_IsText(CCodeToken const &_Token, CStr const &_Text) const
 	{
-		if (_Token.m_nLength != _Text.f_GetLen() || _Token.m_bPlainName)
+		if (_Token.m_bPlainName)
+			return false;
+
+		if (_Token.m_pOperator && _Text == _Token.m_pOperator)
+			return true;
+
+		if (_Token.m_nLength != _Text.f_GetLen())
 			return false;
 
 		auto pToken = mp_Source.f_GetStr() + _Token.m_iOffset;

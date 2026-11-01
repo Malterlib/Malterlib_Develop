@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "Malterlib_Develop_CodeFormattingAnalyzer.h"
+#include "Malterlib_Develop_CodeFormattingStructurePrivate.h"
 
 namespace NMib::NDevelop::NPrivate
 {
@@ -728,7 +729,7 @@ namespace NMib::NDevelop::NPrivate
 							m_Tokens.f_IsText(*pNext, "->")
 							|| m_Tokens.f_IsText(*pNext, "{")
 							|| m_Tokens.f_IsText(*pNext, "=")
-							|| m_Tokens.f_IsText(*pNext, "requires")
+							|| (m_Tokens.f_IsText(*pNext, "requires") && !fg_IsInfixOperator(m_Tokens, m_Structure, i))
 							|| fp_IsFunctionQualifier(umint(iNext))
 						)
 					;
@@ -835,6 +836,30 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		return _iToken;
+	}
+
+	// Steps over the template headers and the requires clauses behind them in front of the head a declaration spells:
+	// 'template <typename t_C>' over 'requires cA<t_C>' over 'struct CFoo'.
+	umint CFormattingAnalyzer::fp_SkipHeadIntroducers(umint _iToken) const
+	{
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto iToken = _iToken;
+		for (;;)
+		{
+			auto iNext = fp_SkipTemplateHeader(iToken);
+			if (iNext == iToken && m_Tokens.f_IsText(Tokens[iToken], "requires"))
+			{
+				auto iLast = fp_FindConstraintLast(iToken, Tokens.f_GetLen() - 1);
+				auto iBehind = iLast >= 0 ? fp_NextCode(umint(iLast)) : aint(-1);
+				if (iBehind >= 0)
+					iNext = umint(iBehind);
+			}
+
+			if (iNext == iToken)
+				return iToken;
+
+			iToken = iNext;
+		}
 	}
 
 	// A capture list, or a lambda's own template parameter list, ends one part of an

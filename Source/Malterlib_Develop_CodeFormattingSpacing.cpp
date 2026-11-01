@@ -130,6 +130,21 @@ namespace NMib::NDevelop
 			if (_Tokens.f_IsText(_Left, "@"))
 				return _Right.m_Kind == ECodeTokenKind::mc_Identifier || _Right.m_Kind == ECodeTokenKind::mc_StringLiteral || _Right.m_Kind == ECodeTokenKind::mc_Number;
 
+			// Word characters on both sides read as one word, behind an alternative token too: 'not Value'. A name can hold any
+			// non-ASCII character and a universal character name: 'not é', 'not \u00e9'.
+			auto fIsWordCharacter = [](ch8 _Character)
+				{
+					return _Character == '_' || _Character == '\\' || uint8(_Character) >= 0x80 || fg_CharIsNumber(_Character) || fg_CharIsAnsiAlphabetical(_Character);
+				}
+			;
+			if (_Left.m_nLength && _Right.m_nLength)
+			{
+				auto LeftLast = _Tokens.f_GetTextPointer(_Left)[_Left.m_nLength - 1];
+				auto RightFirst = _Tokens.f_GetTextPointer(_Right)[0];
+				if ((_Left.m_pOperator || _Right.m_pOperator) && fIsWordCharacter(LeftLast) && fIsWordCharacter(RightFirst))
+					return true;
+			}
+
 			if (_Left.m_Kind == ECodeTokenKind::mc_Number)
 			{
 				auto Next = _Tokens.f_GetTextPointer(_Right)[0];
@@ -234,6 +249,18 @@ namespace NMib::NDevelop
 				return _Tokens.f_IsText(Right, _pText);
 			}
 		;
+
+		// A requires expression is an operand, so the '&&' or '||' in front of it joins constraints, which no declarator does:
+		// 'cA<T> && requires'.
+		if (fRight("requires") && (fLeft("&&") || fLeft("||")))
+			return ECodeSpacing::mc_Space;
+
+		if (fRight("&&") || fRight("||"))
+		{
+			auto iOperand = fg_NextCode(_Tokens, _iRight);
+			if (iOperand >= 0 && _Tokens.f_IsText(Tokens[umint(iOperand)], "requires"))
+				return ECodeSpacing::mc_Space;
+		}
 
 		// An operator function is named by the keyword and what follows it, and that name
 		// stands apart from both: 'operator + (', 'operator () ('. The rules below read the

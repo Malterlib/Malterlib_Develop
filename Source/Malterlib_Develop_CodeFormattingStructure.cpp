@@ -2079,6 +2079,8 @@ namespace NMib::NDevelop
 		auto i = _iToken;
 		bool bAfterCloseParen = false;
 		bool bRequiresClause = false;
+		umint iClauseRequires = TCLimitsInt<umint>::mc_Max;
+		bool bDeclaratorParameters = false;
 		// A parameter list in front of a body makes it a function's, whatever type the function returns: 'enum EFoo f() {'.
 		bool bParameterList = false;
 		bool bAfterTrailingReturn = false;
@@ -2404,7 +2406,22 @@ namespace NMib::NDevelop
 						}
 					;
 
-					bRequiresClause |= fg_IsAnyText(*mp_pTokens, Previous, c_pDeclaratorEnds) && !mp_pTokens->f_IsText(Previous, "requires");
+					// A '&&' behind a requires expression's body joins two constraints: '}' over '&& requires {'.
+					bool bBehindBody = i > _iToken + 1 && mp_pTokens->f_IsText(Previous, "&&") && mp_pTokens->f_IsText(Tokens[mp_Significant[i - 2]], "}");
+					// A clause behind a declarator follows its parameter list, so a constraint's '&&' in a header's clause starts none:
+					// 'requires cA<T> && requires {'.
+					if
+					(
+						!bRequiresClause
+						&& bDeclaratorParameters
+						&& fg_IsAnyText(*mp_pTokens, Previous, c_pDeclaratorEnds)
+						&& !mp_pTokens->f_IsText(Previous, "requires")
+						&& !bBehindBody
+					)
+					{
+						bRequiresClause = true;
+						iClauseRequires = i;
+					}
 				}
 			}
 
@@ -2519,6 +2536,30 @@ namespace NMib::NDevelop
 					iHead = iEnd + 1;
 				}
 
+				// A requires clause behind the header constrains the head behind it, which starts with the first class key outside
+				// the clause's brackets: 'requires (sizeof(t_C) > 1) struct CFoo {'.
+				if (iHead + 1 < i && mp_pTokens->f_IsText(Tokens[mp_Significant[iHead]], "requires"))
+				{
+					constexpr ch8 const *c_pHeadKeys[] = {"struct", "class", "union"};
+					umint nDepth = 0;
+					for (auto iClause = iHead + 1; iClause < i; ++iClause)
+					{
+						auto iClauseToken = mp_Significant[iClause];
+						auto const &ClauseToken = Tokens[iClauseToken];
+						bool bAngle = iClauseToken < mp_AngleBracket.f_GetLen() && mp_AngleBracket[iClauseToken];
+						if (mp_pTokens->f_IsText(ClauseToken, "(") || mp_pTokens->f_IsText(ClauseToken, "[") || (bAngle && mp_pTokens->f_IsText(ClauseToken, "<")))
+							++nDepth;
+						else if (nDepth && (mp_pTokens->f_IsText(ClauseToken, ")") || mp_pTokens->f_IsText(ClauseToken, "]") || (bAngle && mp_pTokens->f_IsText(ClauseToken, ">"))))
+							--nDepth;
+						else if (!nDepth && fg_IsAnyText(*mp_pTokens, ClauseToken, c_pHeadKeys))
+						{
+							iHead = iClause;
+
+							break;
+						}
+					}
+				}
+
 				// A typedef names the type its class key defines: 'typedef enum { ... } EFoo;'.
 				if (iHead + 1 < i && mp_pTokens->f_IsText(Tokens[mp_Significant[iHead]], "typedef"))
 					++iHead;
@@ -2613,8 +2654,11 @@ namespace NMib::NDevelop
 
 				// Behind a requires clause's constraint the brace is the body it constrains, where it is no requires expression's own:
 				// 'requires cA<T> && requires { T::a; }' over '{' over '}'.
+				// A requires expression's body is an operand, so the statement goes on behind it: 'requires requires (T _A)' over
+				// '{ _A.f_Get(); }' over 'void f();'.
 				bool bConstrainedBody = false;
-				if (bRequiresClause && i > _iToken)
+				bool bRequirementsBody = false;
+				if (i > _iToken)
 				{
 					auto iLead = i - 1;
 					if (mp_pTokens->f_IsText(Tokens[mp_Significant[iLead]], ")"))
@@ -2634,7 +2678,36 @@ namespace NMib::NDevelop
 						}
 					}
 
-					bConstrainedBody = !mp_pTokens->f_IsText(Tokens[mp_Significant[iLead]], "requires");
+					bool bBehindRequires = mp_pTokens->f_IsText(Tokens[mp_Significant[iLead]], "requires");
+					bConstrainedBody = bRequiresClause && !bBehindRequires;
+
+					// A requires expression's 'requires' stands where an operand does, and a clause's behind the declaration, where
+					// its parenthesis is the constraint in front of the body: 'void f() requires (cA<T>)' over '{'.
+					if (bBehindRequires && iLead > _iToken)
+					{
+						constexpr ch8 const *c_pOperandLeads[] =
+							{
+								"requires"
+								, "="
+								, "("
+								, ","
+								, "||"
+								, "&&"
+								, "or"
+								, "and"
+								, "!"
+								, "not"
+								, "?"
+								, ":"
+								, "return"
+							}
+						;
+
+						// The 'requires' that starts a clause is never an expression's, behind a declarator's '&&' too: 'auto f() ->'
+						// over 'CFoo && requires (cA<T>)'.
+						auto const &BeforeKeyword = Tokens[mp_Significant[iLead - 1]];
+						bRequirementsBody = fg_IsAnyText(*mp_pTokens, BeforeKeyword, c_pOperandLeads) && iLead != iClauseRequires;
+					}
 				}
 
 				bool bBlock = bAfterCloseParen || bAfterTrailingReturn || bStatementBrace || bDefinition || bConstrainedBody;
@@ -2778,6 +2851,9 @@ namespace NMib::NDevelop
 					if (mp_pTokens->f_IsText(Next, "else") || mp_pTokens->f_IsText(Next, "while") || mp_pTokens->f_IsText(Next, "catch"))
 						continue;
 
+					if (bRequirementsBody && !mp_pTokens->f_IsText(Next, "{") && !mp_pTokens->f_IsText(Next, "}"))
+						continue;
+
 					// A type's definition goes on with the declarators it declares, up to its terminator: '} CFoo, *pFoo;'.
 					bool bTypeDefinition = bDefinition && !bParameterList && !mp_pTokens->f_IsText(First, "namespace") && !mp_pTokens->f_IsText(First, "extern");
 					if (bTypeDefinition && !mp_pTokens->f_IsText(Next, "{") && !mp_pTokens->f_IsText(Next, "}"))
@@ -2813,6 +2889,11 @@ namespace NMib::NDevelop
 						|| mp_pTokens->f_IsText(Before, "__declspec")
 					;
 					bParameterList |= !bAttribute;
+
+					// A declarator's parameter list stands behind its name, where a constraint's parenthesis stands behind
+					// 'requires' or an operator joining constraints.
+					constexpr ch8 const *c_pConstraintLeads[] = {"requires", "&&", "||", "!", "and", "or", "not", "("};
+					bDeclaratorParameters |= !bAttribute && !fg_IsAnyText(*mp_pTokens, Before, c_pConstraintLeads);
 				}
 
 				mp_Nodes[iNode].m_SplitPoints.f_Insert(mp_Significant[i]);

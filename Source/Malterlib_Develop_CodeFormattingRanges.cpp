@@ -1698,8 +1698,12 @@ namespace NMib::NDevelop::NPrivate
 
 			// A class's head is no expression continued: the words naming it stand at its own
 			// level, the directives between them included, and only its base clause one in.
-			auto const &RangeKey = Tokens[fp_SkipTemplateHeader(_iFirst)];
-			bool bClassHead = m_Tokens.f_IsText(RangeKey, "class") || m_Tokens.f_IsText(RangeKey, "struct") || m_Tokens.f_IsText(RangeKey, "union");
+			// The key has to stand in the range: a requires clause laid out on its own lines is no class's head.
+			auto iRangeKey = fp_SkipHeadIntroducers(_iFirst);
+			auto const &RangeKey = Tokens[iRangeKey];
+			bool bClassHead
+				= iRangeKey <= _iLast && (m_Tokens.f_IsText(RangeKey, "class") || m_Tokens.f_IsText(RangeKey, "struct") || m_Tokens.f_IsText(RangeKey, "union"))
+			;
 
 			for (umint iCut = 0; iCut <= Cuts.f_GetLen(); ++iCut)
 			{
@@ -1804,8 +1808,12 @@ namespace NMib::NDevelop::NPrivate
 		// 'class CFoo' over ': public CBar' over ', public CBaz'.
 		{
 			auto const &Tokens = m_Tokens.f_GetTokens();
-			auto const &Key = Tokens[fp_SkipTemplateHeader(_iFirst)];
-			bool bClassHead = m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "union");
+			// The key has to stand in the range: a requires clause laid out on its own lines is no class's head.
+			auto iKey = fp_SkipHeadIntroducers(_iFirst);
+			auto const &Key = Tokens[iKey];
+			bool bClassHead
+				= iKey <= _iLast && (m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "union"))
+			;
 			auto nLevel = m_TokenDepth[_iFirst];
 			TCVector<umint> Bases;
 			for (auto i = _iFirst; bClassHead && i <= _iLast; ++i)

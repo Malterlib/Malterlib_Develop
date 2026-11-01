@@ -888,7 +888,7 @@ namespace NMib::NDevelop::NPrivate
 
 		// A class's colon starts its base clause, whatever parenthesis stands in front of it,
 		// and a case's ends its label: 'struct alignas(32) CFoo : public CBar', 'case DFoo(1):'.
-		auto const &Key = m_Tokens.f_GetTokens()[fp_SkipTemplateHeader(Node.m_iFirstToken)];
+		auto const &Key = m_Tokens.f_GetTokens()[fp_SkipHeadIntroducers(Node.m_iFirstToken)];
 		if (m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "union") || m_Tokens.f_IsText(Key, "case"))
 			return TCLimitsInt<umint>::mc_Max;
 
@@ -973,6 +973,229 @@ namespace NMib::NDevelop::NPrivate
 		}
 	}
 
+	// The bodies of the requires expressions in a clause open under the clause's line at the indent: 'requires requires (T _A)'
+	// over '{'. What the clause goes on with behind one starts a line of its own: '}' over '&& cB<T>'. Without _bPlaceBodies
+	// the bodies are left to the layout that places them.
+	void CFormattingAnalyzer::fp_PlaceClauseRequirements(umint _iNode, umint _iClause, umint _iClauseLast, umint _iIndent, bool _bPlaceBodies)
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		// The 'requires' a body belongs to, in front of its parameter list where it has one, or -1.
+		auto fRequiresOf = [&](umint _iBody) -> aint
+			{
+				auto iRequires = fp_PreviousCode(Nodes[_iBody].m_iFirstToken);
+				if (iRequires >= 0 && m_Tokens.f_IsText(Tokens[umint(iRequires)], ")"))
+				{
+					auto iParameters = m_Structure.f_FindNodeClosingAt(umint(iRequires));
+					iRequires = iParameters < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iParameters].m_iFirstToken) : aint(-1);
+				}
+
+				return iRequires >= 0 && m_Tokens.f_IsText(Tokens[umint(iRequires)], "requires") ? iRequires : aint(-1);
+			}
+		;
+
+		bool bFirstBody = true;
+		for (auto iChild : Nodes[_iNode].m_Children)
+		{
+			auto const &Body = Nodes[iChild];
+			bool bInClause = Body.m_iFirstToken > _iClause && Body.m_iLastToken <= _iClauseLast;
+			if (!bInClause || Body.m_Kind != ECodeNodeKind::mc_Block || !fp_IsRequirementsBody(_iNode, Body.m_iFirstToken))
+				continue;
+
+			bool bCanPlace = fp_CanPlaceBlock(iChild);
+			auto nBodyIndent = _iIndent;
+			auto iRequires = fRequiresOf(iChild);
+
+			// What stands in front of the first body, whose line placing the body decides, is laid out next as a condition is
+			// where it does not fit, up to the requires expression's own 'requires', its operators at the clause's level as the
+			// ones behind a body are: 'requires cA<T>' over '&& cB<T>' over '&& requires'.
+			if (bFirstBody && _bPlaceBodies && !m_bProbing)
+			{
+				// One holding a body of its own, nested in a parenthesis, is opened, as every body in an expression is.
+				bool bPrefix = iRequires >= 0 && umint(iRequires) > fp_NextCode(_iClause);
+				bool bNestedBody = false;
+				for (auto iInPrefix = _iClause; bPrefix && iInPrefix < umint(iRequires) && !bNestedBody; ++iInPrefix)
+					bNestedBody = m_Tokens.f_IsText(Tokens[iInPrefix], "{");
+
+				// It is measured with the requires expression's parameters, which stay on its line: 'requires (T _A)' over '{'.
+				auto iMeasureLast = bPrefix ? fp_PreviousCode(Body.m_iFirstToken) : aint(-1);
+				if (iMeasureLast < iRequires)
+					iMeasureLast = iRequires;
+
+				bool bFits = bPrefix && fp_IsRangeJoinable(_iNode, _iClause, umint(iMeasureLast)) && fp_FitsInline(_iClause, umint(iMeasureLast), _iIndent);
+				if (bPrefix && fp_IsRangeJoinable(_iNode, _iClause, umint(iRequires)) && (bNestedBody || !bFits))
+					fp_LayoutRange(_iNode, _iClause, umint(iRequires), _iIndent, true, false, bNestedBody || !bFits);
+			}
+
+			// The body stands at the level of the line its 'requires' ends up on, as a lambda's does: '&& requires' over '{'.
+			if (_bPlaceBodies && !m_bProbing && iRequires >= 0)
+			{
+				auto iLine = iRequires;
+				while (iLine > aint(_iClause) && !fp_IsFirstOnLine(umint(iLine)))
+					iLine = fp_PreviousCode(umint(iLine));
+
+				if (iLine >= 0 && fp_IsFirstOnLine(umint(iLine)))
+					nBodyIndent = fg_Max(nBodyIndent, fp_GetStatementIndent(umint(iLine)));
+			}
+
+			if (_bPlaceBodies && bCanPlace)
+			{
+				fp_PlaceBody(_iNode, iChild, nBodyIndent, true);
+				fp_LayoutNode(iChild, nBodyIndent);
+			}
+
+			bFirstBody = false;
+			if (!bCanPlace)
+				continue;
+
+			auto iTail = fp_NextCode(Body.m_iLastToken);
+			if (iTail < 0 || umint(iTail) > _iClauseLast)
+				continue;
+
+			if (!fp_IsFirstOnLine(umint(iTail)))
+				fp_BreakBefore(umint(iTail), _iIndent);
+			else if (!m_bProbing && fp_GetStatementIndent(umint(iTail)) != _iIndent)
+				fp_IndentBefore(umint(iTail), _iIndent);
+
+			// The tail behind a body is laid out as a condition is, on its line where it fits and otherwise opened at its
+			// outermost break, up to the next body's 'requires' where another follows: '}' over '&& cB<T> && requires' over '{'.
+			// One holding a body of its own, nested in a parenthesis, is opened, as every body in an expression is.
+			auto iTailLast = aint(_iClauseLast);
+			for (auto iLater : Nodes[_iNode].m_Children)
+			{
+				auto const &Later = Nodes[iLater];
+				if (Later.m_iFirstToken <= umint(iTail) || Later.m_iFirstToken > _iClauseLast || Later.m_Kind != ECodeNodeKind::mc_Block)
+					continue;
+
+				iTailLast = fRequiresOf(iLater);
+
+				break;
+			}
+
+			if (iTailLast < iTail)
+				continue;
+
+			bool bLastTail = umint(iTailLast) == _iClauseLast;
+			bool bNestedBody = false;
+			for (auto iInTail = umint(iTail); iInTail <= umint(iTailLast) && !bNestedBody; ++iInTail)
+				bNestedBody = m_Tokens.f_IsText(Tokens[iInTail], "{");
+
+			// A body nested in a parenthesis makes the range unjoinable, and the layout opens it.
+			if (!bNestedBody && !fp_IsRangeJoinable(_iNode, umint(iTail), umint(iTailLast)))
+				continue;
+
+			// A body nested in the operand behind the tail's operator opens the operand there: '||' over '(' over 'requires'.
+			auto iOperand = fp_NextCode(umint(iTail));
+			bool bOperator = false;
+			for (auto pOperator : {"&&", "||", "and", "or"})
+				bOperator = bOperator || m_Tokens.f_IsText(Tokens[umint(iTail)], pOperator);
+
+			TCVector<umint> LooseOperators;
+			if (bNestedBody && bOperator)
+				fp_FindLooseOperators(umint(iTail), umint(iTailLast), LooseOperators);
+
+			if (!bNestedBody && fp_FitsInline(umint(iTail), umint(iTailLast), _iIndent))
+				fp_MarkInline(umint(iTail), umint(iTailLast));
+			else if (!m_bProbing && bNestedBody && bOperator && iOperand >= 0 && iOperand <= iTailLast && LooseOperators.f_IsEmpty())
+			{
+				auto iGroup = m_Structure.f_FindNodeOpeningAt(umint(iOperand));
+				bool bGroup = iGroup < Nodes.f_GetLen() && Nodes[iGroup].m_iLastToken == umint(iTailLast);
+				if (bGroup && fp_LayoutGroup(iGroup, _iIndent, true))
+				{
+					auto iInnerFirst = fp_NextCode(Nodes[iGroup].m_iFirstToken);
+					auto iInnerLast = fp_PreviousCode(Nodes[iGroup].m_iLastToken);
+					if (iInnerFirst >= 0 && iInnerLast >= iInnerFirst)
+						fp_LayoutRange(iGroup, umint(iInnerFirst), umint(iInnerLast), _iIndent + m_Request.m_Settings.m_nTabWidth, false, false);
+				}
+				else
+					fp_LayoutRange(_iNode, umint(iTail), umint(iTailLast), _iIndent, true, false, true);
+			}
+			else if (!m_bProbing)
+				fp_LayoutRange(_iNode, umint(iTail), umint(iTailLast), _iIndent, true, bLastTail && !bNestedBody, bNestedBody);
+		}
+	}
+
+	// The last token of the constraint a requires clause starts with at the token, at most the limit, or -1 where its
+	// tokens read as no constraint. A constraint is a parenthesis or a concept's name, with its scopes, template arguments
+	// and call, and those joined by '&&' and '||', or 'and' and 'or': 'requires cA<T> && (cB<T> || cC<T>)'.
+	aint CFormattingAnalyzer::fp_FindConstraintLast(umint _iRequires, umint _iLimit) const
+	{
+		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto fSkipGroup = [&](aint _iToken) -> aint
+			{
+				auto iGroup = m_Structure.f_FindNodeOpeningAt(umint(_iToken));
+				return iGroup < Nodes.f_GetLen() ? aint(Nodes[iGroup].m_iLastToken) : aint(-1);
+			}
+		;
+
+		aint iLast = -1;
+		auto iToken = fp_NextCode(_iRequires);
+		while (iToken >= 0 && umint(iToken) <= _iLimit)
+		{
+			auto const &Token = Tokens[umint(iToken)];
+			aint iPrimaryLast = -1;
+			if (m_Tokens.f_IsText(Token, "("))
+				iPrimaryLast = fSkipGroup(iToken);
+			else if (m_Tokens.f_IsText(Token, "requires"))
+			{
+				// A requires expression ends with its body: 'requires requires (T _A) { _A.f_Get(); } && cB<T>'.
+				auto iBody = fp_NextCode(umint(iToken));
+				if (iBody >= 0 && m_Tokens.f_IsText(Tokens[umint(iBody)], "("))
+				{
+					auto iParametersLast = fSkipGroup(iBody);
+					iBody = iParametersLast >= 0 ? fp_NextCode(umint(iParametersLast)) : aint(-1);
+				}
+
+				if (iBody >= 0 && umint(iBody) <= _iLimit && m_Tokens.f_IsText(Tokens[umint(iBody)], "{"))
+					iPrimaryLast = fSkipGroup(iBody);
+			}
+			else if (Token.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Token, "::"))
+			{
+				// A boolean literal is a primary of its own, which a qualified name behind it does not go on: 'requires true' over
+				// '::CResult *fg_Get()'.
+				iPrimaryLast = iToken;
+				bool bLiteral = m_Tokens.f_IsText(Token, "true") || m_Tokens.f_IsText(Token, "false");
+				for (auto iNext = fp_NextCode(umint(iToken)); !bLiteral && iNext >= 0 && umint(iNext) <= _iLimit; iNext = fp_NextCode(umint(iPrimaryLast)))
+				{
+					auto const &Next = Tokens[umint(iNext)];
+					// A dependent name goes on behind its 'template' disambiguator: 'T::template cA<int>'.
+					auto const &Last = Tokens[umint(iPrimaryLast)];
+					bool bOpens = (m_Tokens.f_IsText(Next, "<") && m_Structure.f_IsAngleBracket(umint(iNext))) || m_Tokens.f_IsText(Next, "(");
+					bool bScope
+						= m_Tokens.f_IsText(Next, "::")
+						|| (Next.m_Kind == ECodeTokenKind::mc_Identifier && (m_Tokens.f_IsText(Last, "::") || m_Tokens.f_IsText(Last, "template")))
+					;
+					if (bOpens)
+						iPrimaryLast = fSkipGroup(iNext);
+					else if (bScope)
+						iPrimaryLast = iNext;
+					else
+						break;
+
+					if (iPrimaryLast < 0)
+						break;
+				}
+			}
+
+			if (iPrimaryLast < 0 || umint(iPrimaryLast) > _iLimit)
+				return -1;
+
+			iLast = iPrimaryLast;
+			auto iBehind = fp_NextCode(umint(iPrimaryLast));
+			bool bJoins = false;
+			for (auto pJoin : {"&&", "||", "and", "or"})
+				bJoins = bJoins || (iBehind >= 0 && m_Tokens.f_IsText(Tokens[umint(iBehind)], pJoin));
+
+			if (!bJoins)
+				break;
+
+			iToken = fp_NextCode(umint(iBehind));
+		}
+
+		return iLast;
+	}
+
 	void CFormattingAnalyzer::fp_LayoutStatement(umint _iNode, umint _iIndent)
 	{
 		// Whether a statement broke at its operators is its own: one left over from the
@@ -1024,6 +1247,68 @@ namespace NMib::NDevelop::NPrivate
 			auto iBehind = fp_NextCode(Child.m_iLastToken);
 			auto const *pBehind = iBehind >= 0 ? &Tokens[umint(iBehind)] : nullptr;
 			bool bBodyBehind = pBehind && (m_Tokens.f_IsText(*pBehind, "{") || m_Tokens.f_IsText(*pBehind, ":"));
+
+			// So does the rest of a clause behind a template header, with the declaration it constrains, '}' over '&& cB<T>', and
+			// a requires expression in a clause ends one behind a declaration: 'requires requires' over '{' over '}' over ';', and
+			// '&& requires' over '{'. A concept's definition is an operand, whose body is the statement's.
+			if (!bBodyBehind && pBehind && !m_Tokens.f_IsText(*pBehind, "}"))
+			{
+				auto iRequires = fp_PreviousCode(Child.m_iFirstToken);
+				if (iRequires >= 0 && m_Tokens.f_IsText(Tokens[umint(iRequires)], ")"))
+				{
+					auto iParameters = m_Structure.f_FindNodeClosingAt(umint(iRequires));
+					iRequires = iParameters < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iParameters].m_iFirstToken) : aint(-1);
+				}
+
+				auto iClauseKeyword = iRequires >= 0 ? fp_PreviousCode(umint(iRequires)) : aint(-1);
+				bool bClauseExpression = false;
+				for (auto pLead : {"requires", "&&", "||", "and", "or"})
+					bClauseExpression = bClauseExpression || (iClauseKeyword >= 0 && m_Tokens.f_IsText(Tokens[umint(iClauseKeyword)], pLead));
+				bool bGoesOn = !m_Tokens.f_IsText(*pBehind, ";") && Node.m_bTemplateHeader;
+				if (bClauseExpression || bGoesOn)
+				{
+					// So is a variable's initializer, a returned value and a nested requirement: 'constexpr bool g_b = cA<T> &&
+					// requires { T::a; };', 'return cA<T> || requires { T::a; };'.
+					auto const &First = Tokens[Node.m_iFirstToken];
+					bool bOperand = m_Tokens.f_IsText(First, "return") || m_Tokens.f_IsText(First, "co_return") || m_Tokens.f_IsText(First, "co_yield");
+					if (m_Tokens.f_IsText(First, "requires") && Node.m_iParent < Nodes.f_GetLen())
+					{
+						auto const &Parent = Nodes[Node.m_iParent];
+						bOperand
+							= Parent.m_Kind == ECodeNodeKind::mc_Block
+							&& Parent.m_iParent < Nodes.f_GetLen()
+							&& fp_IsRequirementsBody(Parent.m_iParent, Parent.m_iFirstToken)
+						;
+					}
+
+					for (auto iToken = Node.m_iFirstToken; iToken < Child.m_iFirstToken && !bOperand; ++iToken)
+					{
+						bOperand
+							= m_Tokens.f_IsText(Tokens[iToken], "concept")
+							|| (m_Tokens.f_IsText(Tokens[iToken], "=") && m_TokenDepth[iToken] == m_TokenDepth[Node.m_iFirstToken])
+						;
+					}
+
+					// So is an expression statement's: '[] { ... }() && requires { T::a; };'. A clause starts with a 'requires' of
+					// its own in front, or stands behind a parameter list and its qualifiers: 'void f() const &&' over 'requires'.
+					if (!bOperand && bClauseExpression && !m_Tokens.f_IsText(First, "requires") && !Node.m_bTemplateHeader)
+					{
+						bool bClause = false;
+						for (auto iToken = Node.m_iFirstToken; iToken < umint(iRequires) && !bClause; ++iToken)
+							bClause = m_TokenDepth[iToken] == m_TokenDepth[umint(iRequires)] && m_Tokens.f_IsText(Tokens[iToken], "requires");
+
+						auto iQualified = fp_PreviousCode(umint(iClauseKeyword));
+						while (iQualified >= 0 && (m_Tokens.f_IsText(Tokens[umint(iQualified)], "const") || m_Tokens.f_IsText(Tokens[umint(iQualified)], "volatile")))
+							iQualified = fp_PreviousCode(umint(iQualified));
+
+						bClause = bClause || (iQualified >= 0 && fg_ClosesParameterList(m_Tokens, m_Structure, umint(iQualified)));
+						bOperand = !bClause;
+					}
+
+					bBodyBehind = !bOperand;
+				}
+			}
+
 			for (auto iLater : Node.m_Children)
 			{
 				auto const &Later = Nodes[iLater];
@@ -1369,89 +1654,59 @@ namespace NMib::NDevelop::NPrivate
 			if (!m_Tokens.f_IsText(Tokens[iDeclFirst], "requires"))
 				break;
 
-			// The clause's constraint is a parenthesis or a concept's name, with its scopes, template arguments and call, and
-			// those joined by '&&' and '||': 'requires cA<T> && (cB<T> || cC<T>)'.
-			aint iClauseLast = -1;
-			{
-				auto fSkipGroup = [&](aint _iToken) -> aint
-					{
-						auto iGroup = m_Structure.f_FindNodeOpeningAt(umint(_iToken));
-						return iGroup < Nodes.f_GetLen() ? aint(Nodes[iGroup].m_iLastToken) : aint(-1);
-					}
-				;
-
-				auto iToken = fp_NextCode(iDeclFirst);
-				while (iToken >= 0 && umint(iToken) <= iSignatureLast)
-				{
-					auto const &Token = Tokens[umint(iToken)];
-					aint iPrimaryLast = -1;
-					if (m_Tokens.f_IsText(Token, "("))
-						iPrimaryLast = fSkipGroup(iToken);
-					else if (Token.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Token, "::"))
-					{
-						iPrimaryLast = iToken;
-						for (auto iNext = fp_NextCode(umint(iToken)); iNext >= 0 && umint(iNext) <= iSignatureLast; iNext = fp_NextCode(umint(iPrimaryLast)))
-						{
-							auto const &Next = Tokens[umint(iNext)];
-							bool bOpens = (m_Tokens.f_IsText(Next, "<") && m_Structure.f_IsAngleBracket(umint(iNext))) || m_Tokens.f_IsText(Next, "(");
-							bool bScope = m_Tokens.f_IsText(Next, "::") || (Next.m_Kind == ECodeTokenKind::mc_Identifier && m_Tokens.f_IsText(Tokens[umint(iPrimaryLast)], "::"));
-							if (bOpens)
-								iPrimaryLast = fSkipGroup(iNext);
-							else if (bScope)
-								iPrimaryLast = iNext;
-							else
-								break;
-
-							if (iPrimaryLast < 0)
-								break;
-						}
-					}
-
-					if (iPrimaryLast < 0 || umint(iPrimaryLast) > iSignatureLast)
-					{
-						iClauseLast = -1;
-
-						break;
-					}
-
-					iClauseLast = iPrimaryLast;
-					auto iBehind = fp_NextCode(umint(iPrimaryLast));
-					if (iBehind < 0 || (!m_Tokens.f_IsText(Tokens[umint(iBehind)], "&&") && !m_Tokens.f_IsText(Tokens[umint(iBehind)], "||")))
-						break;
-
-					iToken = fp_NextCode(umint(iBehind));
-				}
-			}
-
+			aint iClauseLast = fp_FindConstraintLast(iDeclFirst, iSignatureLast);
 			aint iClauseEnd = iClauseLast >= 0 ? fp_NextCode(umint(iClauseLast)) : aint(-1);
 			if (iClauseEnd < 0 || umint(iClauseEnd) > iSignatureLast)
 				break;
 
 			// A clause on its own line behind a template header stands at the header's level or one level in, as the source
-			// has it in or not, and one on the header's line takes a line of its own one level in.
-			auto DeclGap = EGap(m_GapState[iDeclFirst]);
-			bool bOwnLine = fp_IsFirstOnLine(iDeclFirst);
+			// has it in or not, and one on the header's line takes a line of its own one level in. A block comment naming it
+			// leads its line: '/*Constraint*/ requires cA<T>'.
+			auto iClauseLead = iDeclFirst;
+			for (auto iBefore = fp_PreviousSignificant(iClauseLead); iBefore > aint(Node.m_iFirstToken); iBefore = fp_PreviousSignificant(iClauseLead))
+			{
+				auto const &Before = Tokens[umint(iBefore)];
+				if (Before.m_Kind != ECodeTokenKind::mc_BlockComment || Before.m_bMultiLine)
+					break;
+
+				iClauseLead = umint(iBefore);
+			}
+
+			auto DeclGap = EGap(m_GapState[iClauseLead]);
+			bool bOwnLine = fp_IsFirstOnLine(iClauseLead);
 			bool bUndecided = DeclGap == EGap::mc_Keep || DeclGap == EGap::mc_Indent || !bOwnLine;
 			bool bProtected = m_ProtectedStart[m_Lines.f_FindLine(Tokens[iDeclFirst].m_iOffset)];
 			if (!m_bProbing && bUndecided && !bProtected && iDeclFirst != Node.m_iFirstToken)
 			{
-				bool bSourceDeeper = fp_GetSourceLineIndent(iDeclFirst) > fp_GetSourceLineIndent(Node.m_iFirstToken);
+				bool bSourceDeeper = fp_GetSourceLineIndent(iClauseLead) > fp_GetSourceLineIndent(Node.m_iFirstToken);
 				auto nClause = !bOwnLine || bSourceDeeper ? _iIndent + nTab : _iIndent;
 				if (!bOwnLine)
 					fp_BreakBefore(iDeclFirst, nClause);
-				else if (fp_GetStatementIndent(iDeclFirst) != nClause)
-					fp_IndentBefore(iDeclFirst, nClause);
+				else if (fp_GetStatementIndent(iClauseLead) != nClause)
+					fp_IndentBefore(iClauseLead, nClause);
 
 				// The clause is laid out as a clause's condition is: on its line where it fits, and otherwise opened at its
-				// outermost break, 'requires' over '(' over the constraints.
-				if (fp_IsRangeJoinable(_iNode, iDeclFirst, umint(iClauseLast)) && fp_FitsInline(iDeclFirst, umint(iClauseLast), nClause))
-					fp_MarkInline(iDeclFirst, umint(iClauseLast));
+				// outermost break, 'requires' over '(' over the constraints. One holding a requires expression keeps its lines,
+				// its body placed as a lambda's.
+				bool bRequirements = false;
+				for (auto iInside = fp_NextCode(iDeclFirst); iInside >= 0 && umint(iInside) <= umint(iClauseLast) && !bRequirements; iInside = fp_NextCode(umint(iInside)))
+					bRequirements = m_Tokens.f_IsText(Tokens[umint(iInside)], "requires");
+
+				if (!bRequirements)
+				{
+					if (fp_IsRangeJoinable(_iNode, iDeclFirst, umint(iClauseLast)) && fp_FitsInline(iClauseLead, umint(iClauseLast), nClause))
+						fp_MarkInline(iDeclFirst, umint(iClauseLast));
+					else
+						fp_LayoutRange(_iNode, iDeclFirst, umint(iClauseLast), nClause, true, true, false);
+				}
 				else
-					fp_LayoutRange(_iNode, iDeclFirst, umint(iClauseLast), nClause, true, true, false);
+					fp_PlaceClauseRequirements(_iNode, iDeclFirst, umint(iClauseLast), nClause, true);
 
 				// What the clause constrains starts a line of its own at the statement's level: 'requires true' over 'void f();'.
 				if (!fp_IsFirstOnLine(umint(iClauseEnd)))
 					fp_BreakBefore(umint(iClauseEnd), _iIndent);
+				else if (fp_GetStatementIndent(umint(iClauseEnd)) != _iIndent)
+					fp_IndentBefore(umint(iClauseEnd), _iIndent);
 			}
 
 			iDeclFirst = umint(iClauseEnd);
@@ -1473,7 +1728,10 @@ namespace NMib::NDevelop::NPrivate
 		if (bFixedLineBreaks)
 		{
 			aint iClause = -1;
+			aint iClauseLead = -1; // What starts the clause's line, a block comment naming it included.
+			aint iClauseOnLine = -1;
 			bool bElsewhere = false;
+			bool bAnyClause = false;
 			for (auto i = fp_NextCode(iDeclFirst); i >= 0 && umint(i) <= iHeadLast; i = fp_NextCode(umint(i)))
 			{
 				if (!m_Tokens.f_IsText(Tokens[umint(i)], "requires"))
@@ -1488,7 +1746,10 @@ namespace NMib::NDevelop::NPrivate
 						, ","
 						, "||"
 						, "&&"
+						, "or"
+						, "and"
 						, "!"
+						, "not"
 						, "?"
 						, ":"
 						, "return"
@@ -1501,11 +1762,95 @@ namespace NMib::NDevelop::NPrivate
 				for (auto pLead : c_pOperandLeads)
 					bExpression |= iLead >= 0 && m_Tokens.f_IsText(Tokens[umint(iLead)], pLead);
 
-				if (!bExpression && m_TokenDepth[umint(i)] == m_TokenDepth[iDeclFirst] && fp_IsFirstOnLine(umint(i)))
+				// Behind a parameter list a '&&' qualifies the function, behind its cv-qualifiers too, and the clause behind it is
+				// the declaration's: 'void f_Call() const &&' over 'requires (cA<T>)'.
+				if (bExpression && m_Tokens.f_IsText(Tokens[umint(iLead)], "&&"))
+				{
+					auto iQualified = fp_PreviousCode(umint(iLead));
+					while (iQualified >= 0 && (m_Tokens.f_IsText(Tokens[umint(iQualified)], "const") || m_Tokens.f_IsText(Tokens[umint(iQualified)], "volatile")))
+						iQualified = fp_PreviousCode(umint(iQualified));
+
+					if (iQualified >= 0 && fg_ClosesParameterList(m_Tokens, m_Structure, umint(iQualified)))
+						bExpression = false;
+
+					// So does one ending a trailing return type: '-> TCFormat &&' over 'requires (cA<T>)'.
+					for (auto iType = iQualified; bExpression && iType >= 0 && umint(iType) > iDeclFirst; iType = fp_PreviousCode(umint(iType)))
+					{
+						if (m_TokenDepth[umint(iType)] != m_TokenDepth[umint(i)])
+							continue;
+
+						auto const &Type = Tokens[umint(iType)];
+						if (m_Tokens.f_IsText(Type, "->"))
+							bExpression = false;
+						else if
+							(
+								Type.m_Kind == ECodeTokenKind::mc_Punctuator
+								&& !m_Tokens.f_IsText(Type, "::")
+								&& !m_Tokens.f_IsText(Type, "*")
+								&& !m_Tokens.f_IsText(Type, "&")
+								&& !m_Tokens.f_IsText(Type, "<")
+								&& !m_Tokens.f_IsText(Type, ">")
+								&& !m_Tokens.f_IsText(Type, ",")
+							)
+						{
+							break;
+						}
+					}
+				}
+
+				// A block comment naming the clause leads its line, and goes with the clause where the layout breaks in front of
+				// it: '/*Constraint*/ requires cA<T>'.
+				auto iLineLead = umint(i);
+				for (auto iBefore = fp_PreviousSignificant(iLineLead); iBefore > aint(iDeclFirst); iBefore = fp_PreviousSignificant(iLineLead))
+				{
+					auto const &Before = Tokens[umint(iBefore)];
+					if (Before.m_Kind != ECodeTokenKind::mc_BlockComment || Before.m_bMultiLine)
+						break;
+
+					iLineLead = umint(iBefore);
+				}
+
+				// A clause behind a lambda's parameters is the lambda's, which the expression's layout places: '[]<typename T>(T _A)'
+				// over 'requires cA<T>'.
+				for (auto iLambda = aint(iDeclFirst); !bExpression && iLambda >= 0 && iLambda < i; iLambda = fp_NextCode(umint(iLambda)))
+				{
+					// One nested in the declaration's brackets, in a default argument or an exception specification, is no clause's.
+					if (!m_Tokens.f_IsText(Tokens[umint(iLambda)], "[") || m_TokenDepth[umint(iLambda)] != m_TokenDepth[umint(i)])
+						continue;
+
+					auto iIntroduced = fp_PreviousCode(umint(iLambda));
+					bExpression = iIntroduced >= 0 && !m_Tokens.f_IsText(Tokens[umint(iIntroduced)], "operator") && fp_IsLambdaIntroducer(umint(iIntroduced));
+				}
+
+				bAnyClause = bAnyClause || !bExpression;
+				if (!bExpression && m_TokenDepth[umint(i)] == m_TokenDepth[iDeclFirst] && (fp_IsFirstOnLine(iLineLead) || fp_IsBreakGap(umint(i))))
 				{
 					iClause = i;
+					iClauseLead = aint(iLineLead);
 
 					break;
+				}
+
+				if (!bExpression && m_TokenDepth[umint(i)] == m_TokenDepth[iDeclFirst] && iClauseOnLine < 0)
+					iClauseOnLine = i;
+
+				// A clause on the declaration's line takes a line of its own, as a template header's clause does: 'void f()'
+				// over 'requires cA<T>'. A block comment in front of it names it and moves with it: '/*Constraint*/ requires cA<T>'.
+				if (!bExpression && m_TokenDepth[umint(i)] == m_TokenDepth[iDeclFirst] && fp_IsFirstOnLine(iDeclFirst))
+				{
+					auto ClauseGap = EGap(m_GapState[umint(i)]);
+					bool bUndecided = ClauseGap == EGap::mc_Keep || ClauseGap == EGap::mc_Indent;
+					bool bProtected = m_ProtectedStart[m_Lines.f_FindLine(Tokens[umint(i)].m_iOffset)];
+					if (bUndecided && !bProtected)
+					{
+						if (!m_bProbing)
+							fp_BreakBefore(umint(i), _iIndent + nTab);
+
+						iClause = i;
+						iClauseLead = i;
+
+						break;
+					}
 				}
 
 				bElsewhere = true;
@@ -1536,67 +1881,165 @@ namespace NMib::NDevelop::NPrivate
 			if (!bWrittenOnOneLine)
 				bOneLineClause = bBrokenInside;
 
-			if (bOneLineClause && !bWrittenOnOneLine)
-				bOneLineClause = fp_IsRangeJoinable(_iNode, umint(iClause), umint(iClauseLast)) && fp_FitsInline(umint(iClause), umint(iClauseLast), _iIndent + nTab);
+			// It is measured at the clause's indent, which a clause written on one line can stand deeper at than in the source, and
+			// without the terminator, which takes a line of its own, and a line comment behind it, which is the trailing comment
+			// rule's to settle.
+			if (bOneLineClause && fp_IsRangeJoinable(_iNode, umint(iClause), umint(iClauseLast)))
+				bOneLineClause = fp_FitsInline(umint(iClauseLead), umint(iClauseLast), _iIndent + nTab);
+			else if (bOneLineClause && !bWrittenOnOneLine)
+				bOneLineClause = false;
 
 			// The clause's line stands one level in from the declaration's.
 			bool bUndecided = false;
 			bool bProtected = false;
 			if (iClause >= 0)
 			{
-				auto ClauseGap = EGap(m_GapState[umint(iClause)]);
+				auto ClauseGap = EGap(m_GapState[umint(iClauseLead)]);
 				bUndecided = ClauseGap == EGap::mc_Keep || ClauseGap == EGap::mc_Indent;
-				bProtected = m_ProtectedStart[m_Lines.f_FindLine(Tokens[umint(iClause)].m_iOffset)];
+				bProtected = m_ProtectedStart[m_Lines.f_FindLine(Tokens[umint(iClauseLead)].m_iOffset)];
 			}
 
-			if (bUndecided && !bProtected && !m_bProbing && fp_GetStatementIndent(umint(iClause)) != _iIndent + nTab)
-				fp_IndentBefore(umint(iClause), _iIndent + nTab);
+			if (bUndecided && !bProtected && !m_bProbing && fp_GetStatementIndent(umint(iClauseLead)) != _iIndent + nTab)
+				fp_IndentBefore(umint(iClauseLead), _iIndent + nTab);
 
+			// The declaration in front of a clause starting a line of its own is laid out as one that ends there. A clause
+			// written across lines is laid out as a clause's condition is, unless it holds a requires expression, whose body
+			// is placed below.
 			auto iBeforeClause = iClause >= 0 ? fp_PreviousCode(umint(iClause)) : aint(-1);
-			if (bOneLineClause && iBeforeClause >= 0 && umint(iBeforeClause) >= iDeclFirst && !bElsewhere)
+			bool bClauseLast = iClause >= 0 && iClauseLast >= 0 && !m_Tokens.f_IsText(Tokens[umint(iClauseLast)], "requires");
+			if (bClauseLast && iBeforeClause >= 0 && umint(iBeforeClause) >= iDeclFirst && !bElsewhere)
 			{
-				if (!bWrittenOnOneLine)
+				bool bRequirements = false;
+				for (auto iInside = fp_NextCode(umint(iClause)); iInside >= 0 && umint(iInside) <= umint(iClauseLast) && !bRequirements; iInside = fp_NextCode(umint(iInside)))
+					bRequirements = m_Tokens.f_IsText(Tokens[umint(iInside)], "requires");
+
+				// What follows the constraint, a pure specifier or a defaulted definition's '= default', keeps its line.
+				auto iConstraintLast = fp_FindConstraintLast(umint(iClause), umint(iClauseLast));
+
+				// One whose bodies all stand in a parenthesis is opened, as every body in an expression is: 'requires' over '('
+				// over 'requires' over '{'.
+				bool bDirectBody = false;
+				for (auto iChild : Node.m_Children)
+				{
+					auto const &Body = Nodes[iChild];
+					bDirectBody = bDirectBody || (Body.m_Kind == ECodeNodeKind::mc_Block && Body.m_iFirstToken > umint(iClause) && Body.m_iLastToken <= umint(iClauseLast));
+				}
+
+				bool bNestedBody = false;
+				for (auto iInside = umint(iClause); bRequirements && !bDirectBody && iInside <= umint(iClauseLast) && !bNestedBody; ++iInside)
+					bNestedBody = m_Tokens.f_IsText(Tokens[iInside], "{");
+
+				if (bNestedBody && !bProtected && !m_bProbing && iConstraintLast >= 0 && fp_IsRangeJoinable(_iNode, umint(iClause), umint(iConstraintLast)))
+					fp_LayoutRange(_iNode, umint(iClause), umint(iConstraintLast), _iIndent + nTab, true, false, true);
+				else if (bOneLineClause && !bWrittenOnOneLine)
 					fp_MarkInline(umint(iClause), umint(iClauseLast));
+				else if (!bOneLineClause && !bRequirements && !bProtected && !m_bProbing && iConstraintLast >= 0)
+				{
+					// A suffix staying on the constraint's line, '= default;', is measured with it.
+					auto iMeasureLast = umint(iConstraintLast);
+					auto iSuffix = fp_NextCode(umint(iConstraintLast));
+					if (iConstraintLast < iClauseLast && iSuffix >= 0 && !fp_IsFirstOnLine(umint(iSuffix)))
+						iMeasureLast = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") ? Node.m_iLastToken : umint(iClauseLast);
+
+					bool bJoinable = fp_IsRangeJoinable(_iNode, umint(iClause), umint(iConstraintLast));
+					if (bJoinable && fp_FitsInline(umint(iClauseLead), iMeasureLast, _iIndent + nTab))
+						fp_MarkInline(umint(iClause), umint(iConstraintLast));
+					else
+					{
+						// What a line comment in the clause leaves on the last line is measured behind it.
+						auto iLastLineFirst = umint(iClause);
+						for (auto i = umint(iClause); i < umint(iConstraintLast); ++i)
+						{
+							if (Tokens[i].m_Kind == ECodeTokenKind::mc_LineComment)
+							{
+								auto iNext = fp_NextCode(i);
+								iLastLineFirst = iNext >= 0 ? umint(iNext) : iLastLineFirst;
+							}
+						}
+
+						// The layout measures from the clause's first token, where the line holds a block comment in front of it
+						// and a suffix behind it as well.
+						auto nLastLineIndent = iLastLineFirst == umint(iClause) ? _iIndent + nTab : _iIndent + 2 * nTab;
+						auto iLineLead = iLastLineFirst == umint(iClause) ? umint(iClauseLead) : iLastLineFirst;
+						bool bMustSplit
+							= fp_FitsInline(iLastLineFirst, umint(iConstraintLast), nLastLineIndent)
+							&& !fp_FitsInline(iLineLead, iMeasureLast, nLastLineIndent)
+						;
+						if (iLastLineFirst != umint(iClause) && bMustSplit)
+							fp_LayoutRange(_iNode, iLastLineFirst, umint(iConstraintLast), nLastLineIndent, true, false, true);
+						else
+							fp_LayoutRange(_iNode, umint(iClause), umint(iConstraintLast), _iIndent + nTab, true, true, bMustSplit);
+					}
+				}
 
 				iSignatureLast = umint(iBeforeClause);
 				iHeadLast = iSignatureLast;
 				bFixedLineBreaks = false;
 			}
 
-			// A requires expression's body in the clause opens under the clause's line: 'requires requires (T _A)' over '{'.
-			for (auto iChild : Node.m_Children)
-			{
-				auto const &Body = Nodes[iChild];
-				bool bInClause = iClause >= 0 && Body.m_iFirstToken > umint(iClause) && iClauseLast >= 0 && Body.m_iLastToken <= umint(iClauseLast);
-				if (bInClause && Body.m_Kind == ECodeNodeKind::mc_Block && fp_IsRequirementsBody(_iNode, Body.m_iFirstToken) && fp_CanPlaceBlock(iChild))
-				{
-					fp_PlaceBody(_iNode, iChild, _iIndent + nTab, true);
-					fp_LayoutNode(iChild, _iIndent + nTab);
+			// A clause that keeps the declaration's line places its requires expressions' bodies the same way.
+			if (iClause >= 0 && iClauseLast >= 0)
+				fp_PlaceClauseRequirements(_iNode, umint(iClause), umint(iClauseLast), _iIndent + nTab, true);
+			else if (iClauseOnLine >= 0 && iClauseLast >= 0)
+				fp_PlaceClauseRequirements(_iNode, umint(iClauseOnLine), umint(iClauseLast), _iIndent + nTab, false);
 
-					// What the clause goes on with behind it starts a line of its own: '}' over '&& cB<T>'.
-					auto iTail = fp_NextCode(Body.m_iLastToken);
-					if (iTail >= 0 && umint(iTail) <= umint(iClauseLast) && !fp_IsFirstOnLine(umint(iTail)))
-						fp_BreakBefore(umint(iTail), _iIndent + nTab);
+			// The terminator behind a requires expression's body takes a line of its own, as it does behind a lambda's: '}' over ';'.
+			auto iBeforeTerminator = fp_PreviousCode(Node.m_iLastToken);
+			if (iBeforeTerminator >= 0 && m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && !m_bProbing && !fp_IsFirstOnLine(Node.m_iLastToken))
+			{
+				for (auto iChild : Node.m_Children)
+				{
+					auto const &Body = Nodes[iChild];
+					if (Body.m_Kind == ECodeNodeKind::mc_Block && Body.m_iLastToken == umint(iBeforeTerminator) && fp_IsRequirementsBody(_iNode, Body.m_iFirstToken))
+						fp_BreakBefore(Node.m_iLastToken, _iIndent);
 				}
+
+				// So does the terminator of a declaration a clause on a line of its own ends, as a split statement's does:
+				// 'requires cA<T>' over ';'. A defaulted definition's keeps its line: 'requires cA<T>' over '= default;'.
+				bool bClauseEnds = iClause >= 0 && iClauseLast >= 0 && fp_FindConstraintLast(umint(iClause), umint(iClauseLast)) == iBeforeTerminator;
+				if (bClauseEnds && !bProtected)
+					fp_BreakBefore(Node.m_iLastToken, _iIndent);
 			}
 
-			// Requires expressions are operands, whose bodies are laid out as lambdas' are.
+			// Requires expressions are operands, whose bodies are laid out as lambdas' are, and a statement holding no clause is
+			// laid out as any other: 'constexpr bool g_b = cA<T> && requires { T::a; };'.
 			if (iClause < 0 && iBlock != TCLimitsInt<umint>::mc_Max && fp_IsRequirementsBody(_iNode, Nodes[iBlock].m_iFirstToken))
+				bFixedLineBreaks = false;
+			else if (!bAnyClause)
 				bFixedLineBreaks = false;
 		}
 
 		// A declaration on its template header's line is measured with the header, from the line's start.
 		auto iElse = fp_LeadingElse(iDeclFirst);
 		umint iLineFirst = iElse >= 0 ? umint(iElse) : iDeclFirst;
-		bool bOnHeaderLine = iDeclFirst != Node.m_iFirstToken && !fp_IsFirstOnLine(iDeclFirst) && fp_IsFirstOnLine(Node.m_iFirstToken);
+		// A comment can start the declaration's line in front of it: '/* A */ void f();' under the header.
+		auto iBeforeDecl = fp_PreviousCode(iDeclFirst);
+		bool bSharesLine = iBeforeDecl >= 0 && m_Lines.f_FindLine(Tokens[umint(iBeforeDecl)].m_iOffset) == m_Lines.f_FindLine(Tokens[iDeclFirst].m_iOffset);
+		bool bOnHeaderLine = iDeclFirst != Node.m_iFirstToken && !fp_IsFirstOnLine(iDeclFirst) && bSharesLine && fp_IsFirstOnLine(Node.m_iFirstToken);
 		if (bOnHeaderLine)
 			iLineFirst = Node.m_iFirstToken;
 
-		bool bJoinable = fp_IsRangeJoinable(_iNode, iDeclFirst, iSignatureLast) && !bFixedLineBreaks && Node.m_Kind != ECodeNodeKind::mc_Unsupported && fp_IsFirstOnLine(iLineFirst);
+		// Block comments naming the declaration can lead its line, and are measured with it: '/* A */ void f();'.
+		auto iMeasureFirst = iLineFirst;
+		for (auto iBefore = fp_PreviousSignificant(iMeasureFirst); !bOnHeaderLine && iBefore >= 0; iBefore = fp_PreviousSignificant(iMeasureFirst))
+		{
+			auto const &Before = Tokens[umint(iBefore)];
+			if (Before.m_Kind != ECodeTokenKind::mc_BlockComment || Before.m_bMultiLine)
+				break;
+
+			iMeasureFirst = umint(iBefore);
+		}
+
+		bool bJoinable
+			= fp_IsRangeJoinable(_iNode, iDeclFirst, iSignatureLast)
+			&& !bFixedLineBreaks
+			&& Node.m_Kind != ECodeNodeKind::mc_Unsupported
+			&& fp_IsFirstOnLine(iMeasureFirst)
+		;
 		if (iInitializerList != TCLimitsInt<umint>::mc_Max)
 			iHeadLast = iSignatureLast;
 
-		bool bFits = bJoinable && fp_FitsInline(iLineFirst, iHeadLast, _iIndent);
+		bool bFits = bJoinable && fp_FitsInline(iMeasureFirst, iHeadLast, _iIndent);
 		// One that does not fit there starts a line of its own at the header's level.
 		if (bOnHeaderLine && !bFits && !m_bProbing)
 		{
@@ -1694,7 +2137,7 @@ namespace NMib::NDevelop::NPrivate
 				if (iClose >= Node.m_iLastToken)
 					return;
 
-				auto iKey = aint(fp_SkipTemplateHeader(Node.m_iFirstToken));
+				auto iKey = aint(fp_SkipHeadIntroducers(Node.m_iFirstToken));
 				if (m_Tokens.f_IsText(Tokens[umint(iKey)], "typedef"))
 					iKey = fp_NextCode(umint(iKey));
 
@@ -1810,6 +2253,23 @@ namespace NMib::NDevelop::NPrivate
 					auto iBrace = Nodes[iBlock].m_iLastToken;
 					if (bHugsBrace && m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";") && fp_FitsInline(iBrace, Node.m_iLastToken, _iIndent))
 						fp_MarkInline(iBrace, Node.m_iLastToken);
+					else if (bHugsBrace && !m_bProbing)
+					{
+						// A tail holding bodies of its own behind the call is laid out as any expression is, its bodies opened:
+						// '}() && requires (T _A)' over '{'.
+						bool bTailBody = false;
+						for (auto iChild : Node.m_Children)
+							bTailBody = bTailBody || (Nodes[iChild].m_Kind == ECodeNodeKind::mc_Block && Nodes[iChild].m_iFirstToken > iBrace);
+
+						bool bTerminated = m_Tokens.f_IsText(Tokens[Node.m_iLastToken], ";");
+						auto iTailLast = bTerminated ? fp_PreviousCode(Node.m_iLastToken) : aint(Node.m_iLastToken);
+						if (bTailBody && iTailLast >= iTail)
+						{
+							fp_LayoutRange(_iNode, umint(iTail), umint(iTailLast), _iIndent, false, false);
+							if (bTerminated && !fp_IsFirstOnLine(Node.m_iLastToken))
+								fp_BreakBefore(Node.m_iLastToken, _iIndent);
+						}
+					}
 
 					return;
 				}
@@ -2058,9 +2518,12 @@ namespace NMib::NDevelop::NPrivate
 				while (iLine > aint(Node.m_iFirstToken) && !fp_IsBreakGap(umint(iLine)))
 					iLine = fp_PreviousCode(umint(iLine));
 
+				// A requires expression's body has no introducer, and stands one level in as it does behind a head it shares a
+				// line with: 'concept cA = cB<T> && requires (T _A)' over '{'.
 				bool bIntroducerLine = iCapture != TCLimitsInt<umint>::mc_Max && iLine > aint(Node.m_iFirstToken);
-				auto nPlace = bIntroducerLine ? m_GapIndent[umint(iLine)] : 0;
-				if (bIntroducerLine && fp_GetStatementIndent(iBrace) != nPlace && fp_CanPlaceBlock(iBlock))
+				bool bRequirements = iCapture == TCLimitsInt<umint>::mc_Max && fp_IsRequirementsBody(_iNode, iBrace);
+				auto nPlace = bIntroducerLine ? m_GapIndent[umint(iLine)] : (bRequirements ? nBodyIndent + nTab : 0);
+				if ((bIntroducerLine || bRequirements) && fp_GetStatementIndent(iBrace) != nPlace && fp_CanPlaceBlock(iBlock))
 				{
 					fp_IndentBefore(iBrace, nPlace);
 					fp_ShiftBlock(iBlock, aint(nPlace) - aint(fp_GetSourceLineIndent(iBrace)));
@@ -2095,10 +2558,20 @@ namespace NMib::NDevelop::NPrivate
 			return false;
 
 		// A '&&' is also a member function's reference qualifier, which a requires clause in parentheses can follow, but a
-		// clause never ends in a brace: '&& requires {'.
+		// clause never ends in a brace: '&& requires {'. Nor does a '&&' qualify anything but a parameter list, behind its
+		// cv-qualifiers too: 'requires true && requires (T _A) {'.
 		auto iLead = fp_PreviousCode(umint(iBeforeBrace));
 		bool bBraceBehind = umint(iBeforeBrace) == umint(fp_PreviousCode(_iBrace));
-		if (iLead >= 0 && bBraceBehind && m_Tokens.f_IsText(Tokens[umint(iLead)], "&&"))
+		auto iQualified = iLead >= 0 ? fp_PreviousCode(umint(iLead)) : aint(-1);
+		while (iQualified >= 0 && (m_Tokens.f_IsText(Tokens[umint(iQualified)], "const") || m_Tokens.f_IsText(Tokens[umint(iQualified)], "volatile")))
+			iQualified = fp_PreviousCode(umint(iQualified));
+
+		// A body that ends the statement is the declaration's, behind a trailing return type's '&&' too: '-> CFoo &&' over
+		// 'requires (cA<T>)' over '{'.
+		bool bRefQualifier = iQualified >= 0 && fg_ClosesParameterList(m_Tokens, m_Structure, umint(iQualified));
+		auto iBody = m_Structure.f_FindNodeOpeningAt(_iBrace);
+		bool bEndsStatement = iBody < m_Structure.f_GetNodes().f_GetLen() && m_Structure.f_GetNodes()[iBody].m_iLastToken == m_Structure.f_GetNodes()[_iNode].m_iLastToken;
+		if (iLead >= 0 && (bBraceBehind || (!bRefQualifier && !bEndsStatement)) && m_Tokens.f_IsText(Tokens[umint(iLead)], "&&"))
 			return true;
 
 		constexpr ch8 const *c_pOperandLeads[] =
@@ -2107,7 +2580,10 @@ namespace NMib::NDevelop::NPrivate
 				, "("
 				, ","
 				, "||"
+				, "or"
+				, "and"
 				, "!"
+				, "not"
 				, "?"
 				, ":"
 				, "return"
