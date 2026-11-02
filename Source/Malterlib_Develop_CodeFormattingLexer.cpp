@@ -918,7 +918,7 @@ namespace
 			return Compact == "__cplusplus" ? ECppCondition::mc_Cpp : ECppCondition::mc_Unknown;
 
 		// Parentheses around the whole condition change nothing: '(defined(__cplusplus))', '!(__cplusplus)'.
-		auto fStripParentheses = [](NStr::CStr _Condition)
+		auto fStripParentheses = [](NStr::CStr &&_Condition)
 			{
 				while (_Condition.f_StartsWith("(") && _Condition.f_EndsWith(")"))
 				{
@@ -936,7 +936,7 @@ namespace
 					_Condition = _Condition.f_Extract(1, _Condition.f_GetLen() - 2);
 				}
 
-				return _Condition;
+				return fg_Move(_Condition);
 			}
 		;
 
