@@ -64,20 +64,26 @@ namespace
 				{
 					auto Capture = co_await (g_CaptureExceptions % "Testing CustomLoader resolution");
 					CStr RootPath = CFile::fs_GetProgramDirectory() / "DevelopVirtualProject";
-					TCMap<CStr, CStr> Files =
+					struct CState
+					{
+						TCMap<CStr, CStr> m_Files;
+						TCVector<CStr> m_Loaded;
+					};
+
+					TCSharedPointer<CState> pState = fg_Construct();
+					pState->m_Files = TCMap<CStr, CStr>
 						{
 							{RootPath / ".editorconfig", "root = true\n[*]\ncustom = Parent\nindent_style = TAB\n"}
 							, {RootPath / "src/.editorconfig", "[*.cpp]\ncustom = Child\nindent_size = 2\n"}
 						}
 					;
-					TCVector<CStr> Loaded;
 					TCActor<CEditorConfigResolver> Resolver = fg_Construct
 						(
-							g_ActorFunctorWeak / [&](CStr _Path) -> TCFuture<TCOptional<CStr>>
+							g_ActorFunctorWeak / [pState](CStr _Path) -> TCFuture<TCOptional<CStr>>
 							{
 								auto Capture = co_await (g_CaptureExceptions % "Loading test configuration");
-								Loaded.f_Insert(_Path);
-								if (auto pContents = Files.f_FindEqual(_Path))
+								pState->m_Loaded.f_Insert(_Path);
+								if (auto pContents = pState->m_Files.f_FindEqual(_Path))
 									co_return *pContents;
 
 								co_return {};
@@ -91,15 +97,15 @@ namespace
 					DMibExpect(Properties["custom"], ==, "Child");
 					DMibExpect(Properties["indent_style"], ==, "tab");
 					DMibExpect(Properties["indent_size"], ==, "2");
-					DMibExpect(Loaded.f_GetLen(), ==, 3);
+					DMibExpect(pState->m_Loaded.f_GetLen(), ==, 3);
 
-					Files[RootPath / "src/.editorconfig"] = "root = true\n[*]\ncustom = Updated\n";
+					pState->m_Files[RootPath / "src/.editorconfig"] = "root = true\n[*]\ncustom = Updated\n";
 					{
 						DMibTestPath("Cached");
 						auto Cached = co_await Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "src/nested/other.cpp");
 
 						DMibExpect(Cached["custom"], ==, "Child");
-						DMibExpect(Loaded.f_GetLen(), ==, 3);
+						DMibExpect(pState->m_Loaded.f_GetLen(), ==, 3);
 					}
 
 					co_await Resolver(&CEditorConfigResolver::f_ClearCache);
@@ -108,7 +114,7 @@ namespace
 
 					DMibExpect(Updated["custom"], ==, "Updated");
 					DMibExpectTrue(Updated.f_FindEqual("indent_style") == nullptr);
-					DMibExpect(Loaded.f_GetLen(), ==, 5);
+					DMibExpect(pState->m_Loaded.f_GetLen(), ==, 5);
 					auto Outside = co_await Resolver(&CEditorConfigResolver::f_Resolve, CFile::fs_GetPath(RootPath) / "outside.cpp").f_Wrap();
 					DMibExpectFalse(Outside);
 
@@ -121,9 +127,9 @@ namespace
 						DMibTestPath("DottedBoundary");
 						TCActor<CEditorConfigResolver> Dotted = fg_Construct
 							(
-								g_ActorFunctorWeak / [&](CStr _Path) -> TCFuture<TCOptional<CStr>>
+								g_ActorFunctorWeak / [pState](CStr _Path) -> TCFuture<TCOptional<CStr>>
 								{
-									if (auto pContents = Files.f_FindEqual(_Path))
+									if (auto pContents = pState->m_Files.f_FindEqual(_Path))
 										co_return *pContents;
 
 									co_return {};
@@ -167,7 +173,7 @@ namespace
 					// A segment keeps its blanks, which name a directory of their own.
 					{
 						DMibTestPath("BlanksInSegment");
-						Files[RootPath / " src /.editorconfig"] = "[*]\ncustom = Spaced\n";
+						pState->m_Files[RootPath / " src /.editorconfig"] = "[*]\ncustom = Spaced\n";
 						auto Spaced = co_await Resolver(&CEditorConfigResolver::f_Resolve, RootPath + "/ src /a.cpp").f_Wrap();
 						DMibAssertTrue(!!Spaced);
 						DMibExpect((*Spaced)["custom"], ==, "Spaced");
@@ -273,12 +279,12 @@ namespace
 				{
 					auto Capture = co_await (g_CaptureExceptions % "Testing Boundary resolution");
 					CStr RootPath = CFile::fs_GetProgramDirectory() / "DevelopBoundaryProject";
-					TCVector<CStr> Loaded;
+					TCSharedPointer<TCVector<CStr>> pLoaded = fg_Construct();
 					TCActor<CEditorConfigResolver> Resolver = fg_Construct
 						(
-							g_ActorFunctorWeak / [&](CStr _Path) -> TCFuture<TCOptional<CStr>>
+							g_ActorFunctorWeak / [pLoaded](CStr _Path) -> TCFuture<TCOptional<CStr>>
 							{
-								Loaded.f_Insert(_Path);
+								pLoaded->f_Insert(_Path);
 								co_return {};
 							}
 							, RootPath
@@ -288,8 +294,8 @@ namespace
 					auto Properties = co_await Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "file.cpp");
 
 					DMibExpectTrue(Properties.f_IsEmpty());
-					DMibExpect(Loaded.f_GetLen(), ==, 1);
-					DMibExpect(Loaded[0], ==, RootPath / ".editorconfig");
+					DMibExpect(pLoaded->f_GetLen(), ==, 1);
+					DMibExpect((*pLoaded)[0], ==, RootPath / ".editorconfig");
 					auto Outside = co_await Resolver(&CEditorConfigResolver::f_Resolve, RootPath).f_Wrap();
 					DMibExpectFalse(Outside);
 
@@ -300,18 +306,23 @@ namespace
 				{
 					auto Capture = co_await (g_CaptureExceptions % "Testing pending loads across cache invalidation");
 					CStr RootPath = CFile::fs_GetProgramDirectory() / "DevelopReentrantProject";
-					TCPromiseFuturePair<void> Started;
-					TCPromiseFuturePair<void> Release;
-					umint nLoads = 0;
+					struct CState
+					{
+						TCPromiseFuturePair<void> m_Started;
+						TCPromiseFuturePair<void> m_Release;
+						umint m_nLoads = 0;
+					};
+
+					TCSharedPointer<CState> pState = fg_Construct();
 					TCActor<CEditorConfigResolver> Resolver = fg_Construct
 						(
-							g_ActorFunctorWeak / [&](CStr _Path) -> TCFuture<TCOptional<CStr>>
+							g_ActorFunctorWeak / [pState](CStr _Path) -> TCFuture<TCOptional<CStr>>
 							{
 								auto Capture = co_await (g_CaptureExceptions % "Loading reentrant test configuration");
-								if (++nLoads == 1)
+								if (++pState->m_nLoads == 1)
 								{
-									Started.m_Promise.f_SetResult();
-									co_await fg_Move(Release.m_Future);
+									pState->m_Started.m_Promise.f_SetResult();
+									co_await fg_Move(pState->m_Release.m_Future);
 
 									co_return "root = true\n[*]\ncustom = Old\n";
 								}
@@ -324,26 +335,26 @@ namespace
 					auto DestroyResolver = co_await fg_AsyncDestroy(Resolver);
 					auto ReleasePending = co_await fg_AsyncDestroy
 						(
-							[&Release]() -> TCFuture<void>
+							[pState]() -> TCFuture<void>
 							{
-								if (!Release.m_Promise.f_IsSet())
-									Release.m_Promise.f_SetResult();
+								if (!pState->m_Release.m_Promise.f_IsSet())
+									pState->m_Release.m_Promise.f_SetResult();
 
 								co_return {};
 							}
 						)
 					;
 					auto First = Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "first.cpp").f_Call();
-					co_await fg_Move(Started.m_Future);
+					co_await fg_Move(pState->m_Started.m_Future);
 
 					auto Second = Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "second.cpp").f_Call();
 					co_await Resolver(&CEditorConfigResolver::f_ClearCache);
 					auto New = co_await Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "new.cpp");
 
 					DMibExpect(New["custom"], ==, "New");
-					DMibExpect(nLoads, ==, 2);
+					DMibExpect(pState->m_nLoads, ==, 2);
 
-					Release.m_Promise.f_SetResult();
+					pState->m_Release.m_Promise.f_SetResult();
 					auto FirstProperties = co_await fg_Move(First);
 					auto SecondProperties = co_await fg_Move(Second);
 					auto Cached = co_await Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "cached.cpp");
@@ -359,17 +370,22 @@ namespace
 				{
 					auto Capture = co_await (g_CaptureExceptions % "Testing shared load failures and retry");
 					CStr RootPath = CFile::fs_GetProgramDirectory() / "DevelopRetryProject";
-					TCPromiseFuturePair<void> Started;
-					TCPromiseFuturePair<void> Release;
-					umint nLoads = 0;
+					struct CState
+					{
+						TCPromiseFuturePair<void> m_Started;
+						TCPromiseFuturePair<void> m_Release;
+						umint m_nLoads = 0;
+					};
+
+					TCSharedPointer<CState> pState = fg_Construct();
 					TCActor<CEditorConfigResolver> Resolver = fg_Construct
 						(
-							g_ActorFunctorWeak / [&](CStr _Path) -> TCFuture<TCOptional<CStr>>
+							g_ActorFunctorWeak / [pState](CStr _Path) -> TCFuture<TCOptional<CStr>>
 							{
-								if (++nLoads == 1)
+								if (++pState->m_nLoads == 1)
 								{
-									Started.m_Promise.f_SetResult();
-									co_await fg_Move(Release.m_Future);
+									pState->m_Started.m_Promise.f_SetResult();
+									co_await fg_Move(pState->m_Release.m_Future);
 
 									co_return DMibErrorInstance("Test load failure");
 								}
@@ -382,17 +398,17 @@ namespace
 					auto DestroyResolver = co_await fg_AsyncDestroy(Resolver);
 					auto ReleasePending = co_await fg_AsyncDestroy
 						(
-							[&Release]() -> TCFuture<void>
+							[pState]() -> TCFuture<void>
 							{
-								if (!Release.m_Promise.f_IsSet())
-									Release.m_Promise.f_SetResult();
+								if (!pState->m_Release.m_Promise.f_IsSet())
+									pState->m_Release.m_Promise.f_SetResult();
 
 								co_return {};
 							}
 						)
 					;
 					auto First = Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "first.cpp").f_Call();
-					co_await fg_Move(Started.m_Future);
+					co_await fg_Move(pState->m_Started.m_Future);
 					auto Second = Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "second.cpp").f_Call();
 					co_await
 						(
@@ -401,14 +417,14 @@ namespace
 							}
 						)
 					;
-					Release.m_Promise.f_SetResult();
+					pState->m_Release.m_Promise.f_SetResult();
 
 					auto FirstResult = co_await fg_Move(First).f_Wrap();
 					auto SecondResult = co_await fg_Move(Second).f_Wrap();
 
 					DMibExpectFalse(FirstResult);
 					DMibExpectFalse(SecondResult);
-					DMibExpect(nLoads, ==, 1);
+					DMibExpect(pState->m_nLoads, ==, 1);
 
 					auto Retried = co_await Resolver(&CEditorConfigResolver::f_Resolve, RootPath / "retry.cpp");
 
