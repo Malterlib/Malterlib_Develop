@@ -5,8 +5,8 @@
 
 namespace NMib::NDevelop::NPrivate
 {
-	template <umint t_nTexts>
-	bool fg_IsAnyText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token, ch8 const * const (&_pTexts)[t_nTexts])
+	template <umint tf_nTexts>
+	bool fg_IsAnyText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token, ch8 const * const (&_pTexts)[tf_nTexts])
 	{
 		for (auto pText : _pTexts)
 		{

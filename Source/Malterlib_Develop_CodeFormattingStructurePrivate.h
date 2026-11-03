@@ -48,8 +48,8 @@ namespace NMib::NDevelop::NPrivate
 		}
 	;
 
-	template <umint t_nTexts>
-	bool fg_IsAnyText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token, ch8 const * const (&_pTexts)[t_nTexts]);
+	template <umint tf_nTexts>
+	bool fg_IsAnyText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token, ch8 const * const (&_pTexts)[tf_nTexts]);
 	bool fg_IsSignificant(ECodeTokenKind _Kind);
 	bool fg_IsAsmSectionSeparator(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken);
 	aint fg_PreviousCode(CCodeTokenStream const &_Tokens, umint _iToken);

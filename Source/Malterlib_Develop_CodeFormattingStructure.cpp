@@ -751,15 +751,20 @@ namespace NMib::NDevelop
 				if (Previous.m_Kind != ECodeTokenKind::mc_Identifier)
 					return false;
 
-				auto fText = [&](aint _i, ch8 const *_pText)
+				auto fText = [&](aint _iSignificant, ch8 const *_pText)
 					{
-						return _i >= 0 && mp_pTokens->f_IsText(Tokens[mp_Significant[umint(_i)]], _pText);
+						return _iSignificant >= 0 && mp_pTokens->f_IsText(Tokens[mp_Significant[umint(_iSignificant)]], _pText);
 					}
 				;
 
-				auto fKey = [&](aint _i)
+				auto fKey = [&](aint _iSignificant)
 					{
-						return fText(_i, "struct") || fText(_i, "class") || fText(_i, "union") || fText(_i, "typedef") || fText(_i, "typename");
+						return fText(_iSignificant, "struct")
+							|| fText(_iSignificant, "class")
+							|| fText(_iSignificant, "union")
+							|| fText(_iSignificant, "typedef")
+							|| fText(_iSignificant, "typename")
+						;
 					}
 				;
 
