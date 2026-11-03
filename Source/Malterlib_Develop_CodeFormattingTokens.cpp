@@ -8,35 +8,35 @@ namespace NMib::NDevelop::NPrivate
 {
 	aint CFormattingAnalyzer::fp_PreviousSignificant(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		aint i = aint(_iToken) - 1;
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		aint iToken = aint(_iToken) - 1;
 
-		while (i >= 0 && Tokens[umint(i)].m_Kind == ECodeTokenKind::mc_Whitespace)
-			--i;
+		while (iToken >= 0 && Tokens[umint(iToken)].m_Kind == ECodeTokenKind::mc_Whitespace)
+			--iToken;
 
-		return i;
+		return iToken;
 	}
 
 	aint CFormattingAnalyzer::fp_NextSignificant(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		umint i = _iToken + 1;
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		umint iToken = _iToken + 1;
 
-		while (i < Tokens.f_GetLen() && Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace)
-			++i;
+		while (iToken < Tokens.f_GetLen() && Tokens[iToken].m_Kind == ECodeTokenKind::mc_Whitespace)
+			++iToken;
 
-		return i < Tokens.f_GetLen() ? aint(i) : -1;
+		return iToken < Tokens.f_GetLen() ? aint(iToken) : -1;
 	}
 
 	// The previous token that carries meaning, skipping layout and comments.
 	aint CFormattingAnalyzer::fp_PreviousCode(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		aint i = aint(_iToken) - 1;
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		aint iToken = aint(_iToken) - 1;
 
-		while (i >= 0)
+		while (iToken >= 0)
 		{
-			switch (Tokens[umint(i)].m_Kind)
+			switch (Tokens[umint(iToken)].m_Kind)
 			{
 			case ECodeTokenKind::mc_ByteOrderMark:
 			case ECodeTokenKind::mc_Whitespace:
@@ -45,10 +45,10 @@ namespace NMib::NDevelop::NPrivate
 			case ECodeTokenKind::mc_LineComment:
 			case ECodeTokenKind::mc_BlockComment:
 			case ECodeTokenKind::mc_Preprocessor:
-				--i;
+				--iToken;
 
 				continue;
-			default: return i;
+			default: return iToken;
 			}
 		}
 
@@ -58,12 +58,12 @@ namespace NMib::NDevelop::NPrivate
 	// The next token that carries meaning, skipping layout and comments.
 	aint CFormattingAnalyzer::fp_NextCode(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		umint i = _iToken + 1;
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		umint iToken = _iToken + 1;
 
-		while (i < Tokens.f_GetLen())
+		while (iToken < Tokens.f_GetLen())
 		{
-			switch (Tokens[i].m_Kind)
+			switch (Tokens[iToken].m_Kind)
 			{
 			case ECodeTokenKind::mc_ByteOrderMark:
 			case ECodeTokenKind::mc_Whitespace:
@@ -72,10 +72,10 @@ namespace NMib::NDevelop::NPrivate
 			case ECodeTokenKind::mc_LineComment:
 			case ECodeTokenKind::mc_BlockComment:
 			case ECodeTokenKind::mc_Preprocessor:
-				++i;
+				++iToken;
 
 				continue;
-			default: return aint(i);
+			default: return aint(iToken);
 			}
 		}
 
@@ -89,21 +89,21 @@ namespace NMib::NDevelop::NPrivate
 
 		auto iPrevious = fp_PreviousSignificant(_iToken);
 
-		return iPrevious < 0 || m_Tokens.f_GetTokens()[umint(iPrevious)].m_bMultiLine;
+		return iPrevious < 0 || mp_Tokens.f_GetTokens()[umint(iPrevious)].m_bMultiLine;
 	}
 
 	// A DSL's array or object, '_o[1, 2]' or '{"Key"_o= 5', the second told by its first key, which the DSL's marker makes one.
 	bool CFormattingAnalyzer::fp_IsDSLData(umint _iNode) const
 	{
-		auto const &Node = m_Structure.f_GetNodes()[_iNode];
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Node = mp_Structure.f_GetNodes()[_iNode];
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 
 		if (Node.m_Kind != ECodeNodeKind::mc_Group)
 			return false;
 
 		auto iMarker = fp_PreviousCode(Node.m_iFirstToken);
 		if (Node.m_Bracket == ECodeBracket::mc_Square)
-			return iMarker >= 0 && m_Tokens.f_HasRole(Tokens[umint(iMarker)], ECodeNameRole::mc_DSLMarker);
+			return iMarker >= 0 && mp_Tokens.f_HasRole(Tokens[umint(iMarker)], ECodeNameRole::mc_DSLMarker);
 
 		auto iFirstElement = fp_NextCode(Node.m_iFirstToken);
 		auto iKeyMarker = iFirstElement >= 0 ? fp_NextCode(umint(iFirstElement)) : aint(-1);
@@ -113,9 +113,9 @@ namespace NMib::NDevelop::NPrivate
 			&& iFirstElement >= 0
 			&& Tokens[umint(iFirstElement)].m_Kind == ECodeTokenKind::mc_StringLiteral
 			&& iKeyMarker >= 0
-			&& m_Tokens.f_HasRole(Tokens[umint(iKeyMarker)], ECodeNameRole::mc_DSLMarker)
+			&& mp_Tokens.f_HasRole(Tokens[umint(iKeyMarker)], ECodeNameRole::mc_DSLMarker)
 			&& iKeyAssign >= 0
-			&& m_Tokens.f_IsText(Tokens[umint(iKeyAssign)], "=")
+			&& mp_Tokens.f_IsText(Tokens[umint(iKeyAssign)], "=")
 		;
 	}
 
@@ -125,14 +125,14 @@ namespace NMib::NDevelop::NPrivate
 	// 'auto tf_pMember' over 'DMibIfNotSupported(, uint32 tf_NameHash)'.
 	bool CFormattingAnalyzer::fp_AreWords(umint _iLeft, umint _iRight) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto const &Left = Tokens[_iLeft];
 		auto const &Right = Tokens[_iRight];
 
 		return Left.m_Kind == ECodeTokenKind::mc_Identifier
 			&& Right.m_Kind == ECodeTokenKind::mc_Identifier
-			&& !m_Tokens.f_HasRole(Left, ECodeNameRole::mc_Macro)
-			&& !m_Tokens.f_HasRole(Right, ECodeNameRole::mc_Macro)
+			&& !mp_Tokens.f_HasRole(Left, ECodeNameRole::mc_Macro)
+			&& !mp_Tokens.f_HasRole(Right, ECodeNameRole::mc_Macro)
 		;
 	}
 
@@ -152,25 +152,25 @@ namespace NMib::NDevelop::NPrivate
 
 		// A function's name behind a call's parenthesis, which no cast's is, stands one space apart: 'GLOBAL(void)' over
 		// 'f(int a)'.
-		auto const &AllTokens = m_Tokens.f_GetTokens();
+		auto const &AllTokens = mp_Tokens.f_GetTokens();
 		auto iRightCall = fp_NextCode(_iRight);
-		bool bNamesCall = iRightCall >= 0 && m_Tokens.f_IsText(AllTokens[umint(iRightCall)], "(");
-		if (m_Tokens.f_IsText(AllTokens[_iLeft], ")") && AllTokens[_iRight].m_Kind == ECodeTokenKind::mc_Identifier && bNamesCall)
+		bool bNamesCall = iRightCall >= 0 && mp_Tokens.f_IsText(AllTokens[umint(iRightCall)], "(");
+		if (mp_Tokens.f_IsText(AllTokens[_iLeft], ")") && AllTokens[_iRight].m_Kind == ECodeTokenKind::mc_Identifier && bNamesCall)
 		{
-			auto iGroup = m_Structure.f_FindNodeClosingAt(_iLeft);
-			auto const &Nodes = m_Structure.f_GetNodes();
+			auto iGroup = mp_Structure.f_FindNodeClosingAt(_iLeft);
+			auto const &Nodes = mp_Structure.f_GetNodes();
 			auto iCallee = iGroup < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iGroup].m_iFirstToken) : aint(-1);
 			if (iCallee >= 0 && AllTokens[umint(iCallee)].m_Kind == ECodeTokenKind::mc_Identifier)
 				return ECodeSpacing::mc_Space;
 		}
 
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 
 		auto fAmbiguous = [&](umint _iToken)
 			{
 				auto const &Token = Tokens[_iToken];
 
-				return m_Tokens.f_IsText(Token, "&") || m_Tokens.f_IsText(Token, "&&") || m_Tokens.f_IsText(Token, "*");
+				return mp_Tokens.f_IsText(Token, "&") || mp_Tokens.f_IsText(Token, "&&") || mp_Tokens.f_IsText(Token, "*");
 			}
 		;
 
@@ -180,9 +180,9 @@ namespace NMib::NDevelop::NPrivate
 					return ECodeSpacing::mc_Preserve;
 
 				bool bSpace = false;
-				for (auto i = umint(_iFrom) + 1; i < umint(_iTo); ++i)
+				for (auto iToken = umint(_iFrom) + 1; iToken < umint(_iTo); ++iToken)
 				{
-					if (Tokens[i].m_Kind != ECodeTokenKind::mc_Whitespace)
+					if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_Whitespace)
 						return ECodeSpacing::mc_Preserve;
 
 					bSpace = true;
@@ -196,7 +196,7 @@ namespace NMib::NDevelop::NPrivate
 		if (fAmbiguous(_iRight))
 		{
 			auto Mirrored = fMirror(aint(_iRight), fp_NextCode(_iRight));
-			if (Mirrored == ECodeSpacing::mc_None && fg_CodeTokensMerge(m_Tokens, Tokens[_iLeft], Tokens[_iRight]))
+			if (Mirrored == ECodeSpacing::mc_None && fg_CodeTokensMerge(mp_Tokens, Tokens[_iLeft], Tokens[_iRight]))
 				return ECodeSpacing::mc_Space;
 
 			return Mirrored;
@@ -208,7 +208,7 @@ namespace NMib::NDevelop::NPrivate
 	// A block comment on one line with nothing else on it, which ends its line as a line comment does.
 	bool CFormattingAnalyzer::fp_IsCommentLine(umint _iToken) const
 	{
-		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		auto const &Token = mp_Tokens.f_GetTokens()[_iToken];
 
 		return Token.m_Kind == ECodeTokenKind::mc_BlockComment && !Token.m_bMultiLine && fp_IsFirstOnLine(_iToken) && fp_IsLastOnLine(_iToken);
 	}
@@ -216,11 +216,11 @@ namespace NMib::NDevelop::NPrivate
 	// Whether a line comment of its own line holds a directive taken out of the code: '//#define DDebug' or '// #endif'.
 	bool CFormattingAnalyzer::fp_IsCommentedDirective(umint _iToken) const
 	{
-		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		auto const &Token = mp_Tokens.f_GetTokens()[_iToken];
 		if (Token.m_Kind != ECodeTokenKind::mc_LineComment || !fp_IsFirstOnLine(_iToken))
 			return false;
 
-		auto pText = m_pSource + Token.m_iOffset;
+		auto pText = mp_pSource + Token.m_iOffset;
 		auto pEnd = pText + Token.m_nLength;
 		auto pChar = pText + 2;
 
@@ -277,14 +277,14 @@ namespace NMib::NDevelop::NPrivate
 	// between where a construct other than a namespace holds it, as a directive there is no level of the code's.
 	aint CFormattingAnalyzer::fp_FindCodeBelowComments(umint _iLast) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 
 		auto fInConstruct = [&](umint _iToken)
 			{
-				auto iNode = m_Structure.f_FindNodeClosingAt(_iToken);
+				auto iNode = mp_Structure.f_FindNodeClosingAt(_iToken);
 				if (iNode >= Nodes.f_GetLen())
-					iNode = m_Structure.f_FindEnclosingNode(_iToken);
+					iNode = mp_Structure.f_FindEnclosingNode(_iToken);
 
 				while (iNode < Nodes.f_GetLen() && iNode && Nodes[iNode].m_Kind == ECodeNodeKind::mc_Statement)
 					iNode = Nodes[iNode].m_iParent;
@@ -298,7 +298,7 @@ namespace NMib::NDevelop::NPrivate
 
 				auto const &First = Tokens[Nodes[iOwner].m_iFirstToken];
 
-				return !m_Tokens.f_IsText(First, "namespace") && !m_Tokens.f_IsText(First, "extern");
+				return !mp_Tokens.f_IsText(First, "namespace") && !mp_Tokens.f_IsText(First, "extern");
 			}
 		;
 
@@ -309,7 +309,7 @@ namespace NMib::NDevelop::NPrivate
 			if (Next.m_Kind == ECodeTokenKind::mc_Whitespace || Next.m_Kind == ECodeTokenKind::mc_Newline)
 				continue;
 
-			if (fp_IsCommentedDirective(iNext) || (Next.m_Kind == ECodeTokenKind::mc_Preprocessor && !m_OpaqueDirective[iNext]))
+			if (fp_IsCommentedDirective(iNext) || (Next.m_Kind == ECodeTokenKind::mc_Preprocessor && !mp_OpaqueDirective[iNext]))
 			{
 				bPastDirective = true;
 
@@ -336,11 +336,11 @@ namespace NMib::NDevelop::NPrivate
 	// place, and the comments move with it.
 	bool CFormattingAnalyzer::fp_StartsLineBehindComments(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		bool bComment = false;
-		for (auto i = aint(_iToken) - 1; i >= 0; --i)
+		for (auto iToken = aint(_iToken) - 1; iToken >= 0; --iToken)
 		{
-			auto const &Token = Tokens[umint(i)];
+			auto const &Token = Tokens[umint(iToken)];
 			if (Token.m_Kind == ECodeTokenKind::mc_Whitespace)
 				continue;
 
@@ -362,12 +362,12 @@ namespace NMib::NDevelop::NPrivate
 	aint CFormattingAnalyzer::fp_LeadingElse(umint _iToken) const
 	{
 		// One the layout joins onto the 'else''s line has no line of its own either.
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		if (!m_Tokens.f_IsText(Tokens[_iToken], "if") || (fp_IsFirstOnLine(_iToken) && EGap(m_GapState[_iToken]) != EGap::mc_Inline))
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		if (!mp_Tokens.f_IsText(Tokens[_iToken], "if") || (fp_IsFirstOnLine(_iToken) && EGap(mp_GapState[_iToken]) != EGap::mc_Inline))
 			return -1;
 
 		auto iElse = fp_PreviousCode(_iToken);
-		if (iElse < 0 || !m_Tokens.f_IsText(Tokens[umint(iElse)], "else") || !fp_IsFirstOnLine(umint(iElse)))
+		if (iElse < 0 || !mp_Tokens.f_IsText(Tokens[umint(iElse)], "else") || !fp_IsFirstOnLine(umint(iElse)))
 			return -1;
 
 		return iElse;
@@ -377,7 +377,7 @@ namespace NMib::NDevelop::NPrivate
 	{
 		auto iNext = fp_NextSignificant(_iToken);
 
-		return iNext < 0 || m_Tokens.f_GetTokens()[umint(iNext)].m_bMultiLine;
+		return iNext < 0 || mp_Tokens.f_GetTokens()[umint(iNext)].m_bMultiLine;
 	}
 
 	// Decides whether an operator token has an operand on the given side. An adjacent
@@ -391,18 +391,18 @@ namespace NMib::NDevelop::NPrivate
 				return false;
 
 			_iToken = umint(iNext);
-			auto const &Next = m_Tokens.f_GetTokens()[_iToken];
+			auto const &Next = mp_Tokens.f_GetTokens()[_iToken];
 
-			return !m_Tokens.f_IsText(Next, ")") && !m_Tokens.f_IsText(Next, "]") && !m_Tokens.f_IsText(Next, "}") && !m_Tokens.f_IsText(Next, ",") && !m_Tokens.f_IsText(Next, ";");
+			return !mp_Tokens.f_IsText(Next, ")") && !mp_Tokens.f_IsText(Next, "]") && !mp_Tokens.f_IsText(Next, "}") && !mp_Tokens.f_IsText(Next, ",") && !mp_Tokens.f_IsText(Next, ";");
 		}
 
-		auto const &Previous = m_Tokens.f_GetTokens()[_iToken];
+		auto const &Previous = mp_Tokens.f_GetTokens()[_iToken];
 
-		return !m_Tokens.f_IsText(Previous, "(")
-			&& !m_Tokens.f_IsText(Previous, "[")
-			&& !m_Tokens.f_IsText(Previous, "{")
-			&& !m_Tokens.f_IsText(Previous, ",")
-			&& !m_Tokens.f_IsText(Previous, ";")
+		return !mp_Tokens.f_IsText(Previous, "(")
+			&& !mp_Tokens.f_IsText(Previous, "[")
+			&& !mp_Tokens.f_IsText(Previous, "{")
+			&& !mp_Tokens.f_IsText(Previous, ",")
+			&& !mp_Tokens.f_IsText(Previous, ";")
 		;
 	}
 
@@ -410,7 +410,7 @@ namespace NMib::NDevelop::NPrivate
 	// own, which the source asks for and the layout keeps; -1 otherwise.
 	aint CFormattingAnalyzer::fp_ContinuesLiteral(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto const &Continuation = Tokens[_iToken];
 		if (Continuation.m_Kind != ECodeTokenKind::mc_StringLiteral || Continuation.m_bMultiLine || !fp_IsFirstOnLine(_iToken))
 			return -1;
@@ -421,7 +421,7 @@ namespace NMib::NDevelop::NPrivate
 				auto const &Token = Tokens[umint(_iToken)];
 
 				return Token.m_Kind == ECodeTokenKind::mc_Newline
-					|| (Token.m_Kind == ECodeTokenKind::mc_Preprocessor && umint(_iToken) < m_OpaqueDirective.f_GetLen() && !m_OpaqueDirective[umint(_iToken)])
+					|| (Token.m_Kind == ECodeTokenKind::mc_Preprocessor && umint(_iToken) < mp_OpaqueDirective.f_GetLen() && !mp_OpaqueDirective[umint(_iToken)])
 				;
 			}
 		;
@@ -440,7 +440,7 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		auto const *pLiteral = iLiteral >= 0 ? &Tokens[umint(iLiteral)] : nullptr;
-		bool bContinues = pLiteral && pLiteral->m_Kind == ECodeTokenKind::mc_StringLiteral && !pLiteral->m_bMultiLine && m_TokenDepth[umint(iLiteral)] == m_TokenDepth[_iToken];
+		bool bContinues = pLiteral && pLiteral->m_Kind == ECodeTokenKind::mc_StringLiteral && !pLiteral->m_bMultiLine && mp_TokenDepth[umint(iLiteral)] == mp_TokenDepth[_iToken];
 
 		return bContinues ? iPrevious : aint(-1);
 	}
@@ -450,7 +450,7 @@ namespace NMib::NDevelop::NPrivate
 	// stands one level in from that line.
 	bool CFormattingAnalyzer::fp_ContinuesValue(umint _iContinued) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto iLead = fp_FindContinuedStringLead(_iContinued);
 		if (iLead < 0)
 			return false;
@@ -459,7 +459,7 @@ namespace NMib::NDevelop::NPrivate
 		if (Lead.m_Kind == ECodeTokenKind::mc_Identifier)
 			return true;
 
-		return m_Tokens.f_IsText(Lead, "=") && !fp_IsKeyAssign(umint(iLead));
+		return mp_Tokens.f_IsText(Lead, "=") && !fp_IsKeyAssign(umint(iLead));
 	}
 
 	// Whether the '=' gives a DSL key its value: '"Key"_o='. The strings a key's value
@@ -468,14 +468,14 @@ namespace NMib::NDevelop::NPrivate
 	{
 		auto iKey = fp_PreviousCode(_iAssign);
 
-		return iKey >= 0 && m_Tokens.f_HasRole(m_Tokens.f_GetTokens()[umint(iKey)], ECodeNameRole::mc_DSLMarker);
+		return iKey >= 0 && mp_Tokens.f_HasRole(mp_Tokens.f_GetTokens()[umint(iKey)], ECodeNameRole::mc_DSLMarker);
 	}
 
 	// The first literal of the run of strings the literal ends, over the lines the run continues: a macro standing
 	// between two literals on a line is part of it, '"a" DFormat " b"' over '"c"' running from '"a"'.
 	umint CFormattingAnalyzer::fp_FindStringRunStart(umint _iLiteral) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto iRun = _iLiteral;
 
 		while (true)
@@ -527,7 +527,7 @@ namespace NMib::NDevelop::NPrivate
 		// One the layout joins onto the line in front has that line's last token in front of it.
 		auto iRun = fp_FindStringRunStart(umint(iPrevious));
 		auto iLead = fp_PreviousCode(iRun);
-		if (iLead < 0 || (fp_SpansLines(umint(iLead), iRun) && EGap(m_GapState[iRun]) != EGap::mc_Inline))
+		if (iLead < 0 || (fp_SpansLines(umint(iLead), iRun) && EGap(mp_GapState[iRun]) != EGap::mc_Inline))
 			return -1;
 
 		return iLead;
@@ -538,7 +538,7 @@ namespace NMib::NDevelop::NPrivate
 		if (_iToken < 0)
 			return false;
 
-		auto const &Token = m_Tokens.f_GetTokens()[umint(_iToken)];
+		auto const &Token = mp_Tokens.f_GetTokens()[umint(_iToken)];
 		switch (Token.m_Kind)
 		{
 		case ECodeTokenKind::mc_Number:
@@ -565,19 +565,19 @@ namespace NMib::NDevelop::NPrivate
 				;
 				for (auto pKeyword : c_pLeadsOperand)
 				{
-					if (m_Tokens.f_IsText(Token, pKeyword))
+					if (mp_Tokens.f_IsText(Token, pKeyword))
 						return false;
 				}
 
 				return true;
 			}
 		case ECodeTokenKind::mc_Punctuator:
-			return m_Tokens.f_IsText(Token, ")")
-				|| m_Tokens.f_IsText(Token, "]")
-				|| m_Tokens.f_IsText(Token, "}")
-				|| m_Tokens.f_IsText(Token, "++")
-				|| m_Tokens.f_IsText(Token, "--")
-				|| (m_Structure.f_IsAngleBracket(umint(_iToken)) && m_Tokens.f_IsText(Token, ">"))
+			return mp_Tokens.f_IsText(Token, ")")
+				|| mp_Tokens.f_IsText(Token, "]")
+				|| mp_Tokens.f_IsText(Token, "}")
+				|| mp_Tokens.f_IsText(Token, "++")
+				|| mp_Tokens.f_IsText(Token, "--")
+				|| (mp_Structure.f_IsAngleBracket(umint(_iToken)) && mp_Tokens.f_IsText(Token, ">"))
 			;
 		default: return false;
 		}
@@ -585,23 +585,29 @@ namespace NMib::NDevelop::NPrivate
 
 	void CFormattingAnalyzer::fp_PrepareTokenDepth()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		m_TokenDepth.f_SetLen(Tokens.f_GetLen());
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		mp_TokenDepth.f_SetLen(Tokens.f_GetLen());
 		umint nDepth = 0;
 
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			bool bClosing
-				= m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]") || m_Tokens.f_IsText(Token, "}") || (m_Structure.f_IsAngleBracket(i) && m_Tokens.f_IsText(Token, ">"))
+				= mp_Tokens.f_IsText(Token, ")")
+				|| mp_Tokens.f_IsText(Token, "]")
+				|| mp_Tokens.f_IsText(Token, "}")
+				|| (mp_Structure.f_IsAngleBracket(iToken) && mp_Tokens.f_IsText(Token, ">"))
 			;
 			if (bClosing && nDepth)
 				--nDepth;
 
-			m_TokenDepth[i] = nDepth;
+			mp_TokenDepth[iToken] = nDepth;
 
 			bool bOpening
-				= m_Tokens.f_IsText(Token, "(") || m_Tokens.f_IsText(Token, "[") || m_Tokens.f_IsText(Token, "{") || (m_Structure.f_IsAngleBracket(i) && m_Tokens.f_IsText(Token, "<"))
+				= mp_Tokens.f_IsText(Token, "(")
+				|| mp_Tokens.f_IsText(Token, "[")
+				|| mp_Tokens.f_IsText(Token, "{")
+				|| (mp_Structure.f_IsAngleBracket(iToken) && mp_Tokens.f_IsText(Token, "<"))
 			;
 			if (bOpening)
 				++nDepth;
@@ -646,16 +652,16 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto nLevel = m_TokenDepth[_iFirst];
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto nLevel = mp_TokenDepth[_iFirst];
 
 		// Assignment is not a split point, and what stands to its left is a declarator, not
 		// an expression: '&' and '*' spell a reference or a pointer there, never an operator.
-		for (umint i = _iLast; i > _iFirst; --i)
+		for (umint iToken = _iLast; iToken > _iFirst; --iToken)
 		{
-			if (m_TokenDepth[i] == nLevel && fp_IsAssignment(i))
+			if (mp_TokenDepth[iToken] == nLevel && fp_IsAssignment(iToken))
 			{
-				_iFirst = i;
+				_iFirst = iToken;
 
 				break;
 			}
@@ -664,72 +670,72 @@ namespace NMib::NDevelop::NPrivate
 		umint nLoosest = 0;
 		for (umint iPass = 0; iPass < 2; ++iPass)
 		{
-			for (umint i = _iFirst; i <= _iLast; ++i)
+			for (umint iToken = _iFirst; iToken <= _iLast; ++iToken)
 			{
-				auto const &Token = Tokens[i];
-				if (Token.m_Kind != ECodeTokenKind::mc_Punctuator || m_TokenDepth[i] != nLevel || m_Structure.f_IsAngleBracket(i))
+				auto const &Token = Tokens[iToken];
+				if (Token.m_Kind != ECodeTokenKind::mc_Punctuator || mp_TokenDepth[iToken] != nLevel || mp_Structure.f_IsAngleBracket(iToken))
 					continue;
 
-				if (fg_IsBlockLiteralCaret(m_Tokens, m_Structure, i))
+				if (fg_IsBlockLiteralCaret(mp_Tokens, mp_Structure, iToken))
 					continue;
 
 				// A trailing return type names a type, which no operation stands in: '-> void *'.
-				if (m_Tokens.f_IsText(Token, "->") && fp_IsTrailingReturnArrow(i))
+				if (mp_Tokens.f_IsText(Token, "->") && fp_IsTrailingReturnArrow(iToken))
 					break;
 
 				umint nPrecedence = 0;
 				for (auto const &Operator : c_Operators)
 				{
-					if (m_Tokens.f_IsText(Token, Operator.m_pText))
+					if (mp_Tokens.f_IsText(Token, Operator.m_pText))
 						nPrecedence = Operator.m_Level;
 				}
 
 				// Without operands on both sides the token is a declarator or a unary form: what
 				// stands in front of an infix operator ends an operand, and an operator, an opener
 				// or a keyword such as 'return' ends none, so '= &Value' takes an address.
-				if (!nPrecedence || i == _iFirst || !fp_EndsOperand(fp_PreviousCode(i)) || !fp_HasOperand(i, false))
+				if (!nPrecedence || iToken == _iFirst || !fp_EndsOperand(fp_PreviousCode(iToken)) || !fp_HasOperand(iToken, false))
 					continue;
 
 				// A colon is the conditional's only behind the '?' it answers; any other one
 				// ends a label, or introduces a base clause, an initializer list or a range.
-				if (m_Tokens.f_IsText(Token, ":"))
+				if (mp_Tokens.f_IsText(Token, ":"))
 				{
 					bool bAnswers = false;
-					for (umint iQuestion = _iFirst; iQuestion < i && !bAnswers; ++iQuestion)
-						bAnswers = m_TokenDepth[iQuestion] == nLevel && m_Tokens.f_IsText(Tokens[iQuestion], "?");
+					for (umint iQuestion = _iFirst; iQuestion < iToken && !bAnswers; ++iQuestion)
+						bAnswers = mp_TokenDepth[iQuestion] == nLevel && mp_Tokens.f_IsText(Tokens[iQuestion], "?");
 
 					if (!bAnswers)
 						continue;
 				}
 
 				// Behind 'operator' the token spells the function's name, not an operation.
-				auto iName = fp_PreviousCode(i);
-				if (iName >= 0 && m_Tokens.f_IsText(Tokens[umint(iName)], "operator"))
+				auto iName = fp_PreviousCode(iToken);
+				if (iName >= 0 && mp_Tokens.f_IsText(Tokens[umint(iName)], "operator"))
 					continue;
 
 				// A '*', '&' or '&&' that declares a pointer or reference is not an operation:
 				// what stands in front of it is a type, and 'TCFoo<int> *' cannot multiply.
-				if (fg_IsDeclaratorToken(m_Tokens, m_Structure, i))
+				if (fg_IsDeclaratorToken(mp_Tokens, mp_Structure, iToken))
 					continue;
 
 				// A '&' or '&&' is the function's ref-qualifier when nothing that could be an
 				// operand follows it: what comes after one is the trailing return type, the
 				// body, a pure specifier, a requires clause, or another qualifier. That is never
 				// a second ref-qualifier, so a '&' behind it takes an address: 'a && &b == p'.
-				if (m_Tokens.f_IsText(Token, "&") || m_Tokens.f_IsText(Token, "&&"))
+				if (mp_Tokens.f_IsText(Token, "&") || mp_Tokens.f_IsText(Token, "&&"))
 				{
-					auto iNext = fp_NextCode(i);
+					auto iNext = fp_NextCode(iToken);
 					auto const *pNext = iNext >= 0 ? &Tokens[umint(iNext)] : nullptr;
-					bool bReference = pNext && (m_Tokens.f_IsText(*pNext, "&") || m_Tokens.f_IsText(*pNext, "&&"));
+					bool bReference = pNext && (mp_Tokens.f_IsText(*pNext, "&") || mp_Tokens.f_IsText(*pNext, "&&"));
 					bool bQualifier
 						= pNext
 						&& !bReference
 						&&
 						(
-							m_Tokens.f_IsText(*pNext, "->")
-							|| m_Tokens.f_IsText(*pNext, "{")
-							|| m_Tokens.f_IsText(*pNext, "=")
-							|| (m_Tokens.f_IsText(*pNext, "requires") && !fg_IsInfixOperator(m_Tokens, m_Structure, i))
+							mp_Tokens.f_IsText(*pNext, "->")
+							|| mp_Tokens.f_IsText(*pNext, "{")
+							|| mp_Tokens.f_IsText(*pNext, "=")
+							|| (mp_Tokens.f_IsText(*pNext, "requires") && !fg_IsInfixOperator(mp_Tokens, mp_Structure, iToken))
 							|| fp_IsFunctionQualifier(umint(iNext))
 						)
 					;
@@ -745,7 +751,7 @@ namespace NMib::NDevelop::NPrivate
 				}
 
 				if (nPrecedence == nLoosest)
-					o_Operators.f_Insert(i);
+					o_Operators.f_Insert(iToken);
 			}
 
 			if (!nLoosest)
@@ -760,7 +766,7 @@ namespace NMib::NDevelop::NPrivate
 		umint nOpen = 0;
 		for (umint iOperator = 0; iOperator < o_Operators.f_GetLen(); ++iOperator)
 		{
-			if (m_Tokens.f_IsText(Tokens[o_Operators[iOperator]], "?"))
+			if (mp_Tokens.f_IsText(Tokens[o_Operators[iOperator]], "?"))
 				++nOpen;
 			else if (!--nOpen)
 			{
@@ -777,11 +783,11 @@ namespace NMib::NDevelop::NPrivate
 	bool CFormattingAnalyzer::fp_IsLambdaIntroducer(umint _iToken) const
 	{
 		auto iNext = fp_NextCode(_iToken);
-		if (iNext < 0 || m_Tokens.f_IsC(m_Tokens.f_GetTokens()[umint(iNext)]) || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iNext)], "["))
+		if (iNext < 0 || mp_Tokens.f_IsC(mp_Tokens.f_GetTokens()[umint(iNext)]) || !mp_Tokens.f_IsText(mp_Tokens.f_GetTokens()[umint(iNext)], "["))
 			return false;
 
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto iNode = m_Structure.f_FindNodeOpeningAt(umint(iNext));
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		auto iNode = mp_Structure.f_FindNodeOpeningAt(umint(iNext));
 		if (iNode >= Nodes.f_GetLen() || Nodes[iNode].m_Kind != ECodeNodeKind::mc_Group)
 			return false;
 
@@ -791,9 +797,9 @@ namespace NMib::NDevelop::NPrivate
 
 		// The capture list is followed by the parameter list, by the body, or by the
 		// lambda's own template parameter list.
-		auto const &After = m_Tokens.f_GetTokens()[umint(iAfter)];
+		auto const &After = mp_Tokens.f_GetTokens()[umint(iAfter)];
 
-		return m_Tokens.f_IsText(After, "(") || m_Tokens.f_IsText(After, "{") || m_Tokens.f_IsText(After, "<");
+		return mp_Tokens.f_IsText(After, "(") || mp_Tokens.f_IsText(After, "{") || mp_Tokens.f_IsText(After, "<");
 	}
 
 	// A template header is spelled 'template <...>'. The space in front of the list is what
@@ -801,26 +807,26 @@ namespace NMib::NDevelop::NPrivate
 	// resolved group and its end has to be found by hand.
 	umint CFormattingAnalyzer::fp_SkipTemplateHeader(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		if (!m_Tokens.f_IsText(Tokens[_iToken], "template"))
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		if (!mp_Tokens.f_IsText(Tokens[_iToken], "template"))
 			return _iToken;
 
 		auto iOpen = fp_NextCode(_iToken);
-		if (iOpen < 0 || !m_Tokens.f_IsText(Tokens[umint(iOpen)], "<"))
+		if (iOpen < 0 || !mp_Tokens.f_IsText(Tokens[umint(iOpen)], "<"))
 			return _iToken;
 
 		umint nDepth = 0;
-		for (auto i = iOpen; i >= 0; i = fp_NextCode(umint(i)))
+		for (auto iToken = iOpen; iToken >= 0; iToken = fp_NextCode(umint(iToken)))
 		{
-			auto const &Token = Tokens[umint(i)];
-			if (m_Tokens.f_IsText(Token, "<"))
+			auto const &Token = Tokens[umint(iToken)];
+			if (mp_Tokens.f_IsText(Token, "<"))
 			{
 				++nDepth;
 
 				continue;
 			}
 
-			if (!m_Tokens.f_IsText(Token, ">"))
+			if (!mp_Tokens.f_IsText(Token, ">"))
 				continue;
 
 			if (nDepth > 1)
@@ -830,7 +836,7 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 			}
 
-			auto iNext = fp_NextCode(umint(i));
+			auto iNext = fp_NextCode(umint(iToken));
 
 			return iNext < 0 ? _iToken : umint(iNext);
 		}
@@ -842,12 +848,12 @@ namespace NMib::NDevelop::NPrivate
 	// 'template <typename t_C>' over 'requires cA<t_C>' over 'struct CFoo'.
 	umint CFormattingAnalyzer::fp_SkipHeadIntroducers(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto iToken = _iToken;
 		for (;;)
 		{
 			auto iNext = fp_SkipTemplateHeader(iToken);
-			if (iNext == iToken && m_Tokens.f_IsText(Tokens[iToken], "requires"))
+			if (iNext == iToken && mp_Tokens.f_IsText(Tokens[iToken], "requires"))
 			{
 				auto iLast = fp_FindConstraintLast(iToken, Tokens.f_GetLen() - 1);
 				auto iBehind = iLast >= 0 ? fp_NextCode(umint(iLast)) : aint(-1);
@@ -869,21 +875,21 @@ namespace NMib::NDevelop::NPrivate
 	// member access: 'fg_Get()->f_Call()'.
 	bool CFormattingAnalyzer::fp_IsTrailingReturnArrow(umint _iToken) const
 	{
-		return fg_IsTrailingReturnArrow(m_Tokens, m_Structure, _iToken);
+		return fg_IsTrailingReturnArrow(mp_Tokens, mp_Structure, _iToken);
 	}
 
 	bool CFormattingAnalyzer::fp_ClosesLambdaIntroducer(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		if (m_Structure.f_IsAngleBracket(_iToken))
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		if (mp_Structure.f_IsAngleBracket(_iToken))
 			return fp_FollowsScope(_iToken);
 
-		if (!m_Tokens.f_IsText(Tokens[_iToken], "]"))
+		if (!mp_Tokens.f_IsText(Tokens[_iToken], "]"))
 			return false;
 
 		// A subscript stands behind what it indexes; a capture list stands on its own, and
 		// behind a keyword it is one however that keyword reads: 'return [&] { ... }'.
-		if (!fg_IsCaptureList(m_Tokens, m_Structure, _iToken))
+		if (!fg_IsCaptureList(mp_Tokens, mp_Structure, _iToken))
 			return false;
 
 		// A bare name behind the list, such as an attribute macro, stands between it and
@@ -901,10 +907,10 @@ namespace NMib::NDevelop::NPrivate
 			return false;
 
 		auto const &After = Tokens[umint(iAfter)];
-		if (m_Tokens.f_IsText(After, "->"))
+		if (mp_Tokens.f_IsText(After, "->"))
 			return fp_IsTrailingReturnArrow(umint(iAfter));
 
-		return m_Tokens.f_IsText(After, "(") || m_Tokens.f_IsText(After, "{") || m_Tokens.f_IsText(After, "<");
+		return mp_Tokens.f_IsText(After, "(") || mp_Tokens.f_IsText(After, "{") || mp_Tokens.f_IsText(After, "<");
 	}
 
 	// The words that may stand between a parameter list and a trailing return type.
@@ -927,13 +933,13 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		auto const &Token = mp_Tokens.f_GetTokens()[_iToken];
 		if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 			return false;
 
 		for (auto pAssignment : c_pAssignments)
 		{
-			if (m_Tokens.f_IsText(Token, pAssignment))
+			if (mp_Tokens.f_IsText(Token, pAssignment))
 				return true;
 		}
 
@@ -955,10 +961,10 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		auto const &Token = mp_Tokens.f_GetTokens()[_iToken];
 		for (auto pQualifier : c_pQualifiers)
 		{
-			if (m_Tokens.f_IsText(Token, pQualifier))
+			if (mp_Tokens.f_IsText(Token, pQualifier))
 				return true;
 		}
 
@@ -971,15 +977,15 @@ namespace NMib::NDevelop::NPrivate
 	// closes with '>' but is part of the name it follows, so it does not end a scope here.
 	bool CFormattingAnalyzer::fp_FollowsScope(umint _iToken) const
 	{
-		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
-		if (m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]"))
+		auto const &Token = mp_Tokens.f_GetTokens()[_iToken];
+		if (mp_Tokens.f_IsText(Token, ")") || mp_Tokens.f_IsText(Token, "]"))
 		{
 			// The brackets behind 'operator' spell the function's name: 'operator ()', 'operator []'.
 			auto iOpen = fp_PreviousCode(_iToken);
-			if (iOpen >= 0 && (m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iOpen)], "(") || m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iOpen)], "[")))
+			if (iOpen >= 0 && (mp_Tokens.f_IsText(mp_Tokens.f_GetTokens()[umint(iOpen)], "(") || mp_Tokens.f_IsText(mp_Tokens.f_GetTokens()[umint(iOpen)], "[")))
 			{
 				auto iKeyword = fp_PreviousCode(umint(iOpen));
-				if (iKeyword >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iKeyword)], "operator"))
+				if (iKeyword >= 0 && mp_Tokens.f_IsText(mp_Tokens.f_GetTokens()[umint(iKeyword)], "operator"))
 					return false;
 			}
 
@@ -988,31 +994,31 @@ namespace NMib::NDevelop::NPrivate
 
 		// A lambda's template parameter list is a scope of its own rather than part of a
 		// name, which is what a template argument list behind an identifier is.
-		if (!m_Structure.f_IsAngleBracket(_iToken))
+		if (!mp_Structure.f_IsAngleBracket(_iToken))
 			return false;
 
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto iNode = m_Structure.f_FindNodeClosingAt(_iToken);
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		auto iNode = mp_Structure.f_FindNodeClosingAt(_iToken);
 		auto const *pNode = iNode < Nodes.f_GetLen() ? &Nodes[iNode] : nullptr;
 		if (!pNode || pNode->m_Kind != ECodeNodeKind::mc_Group || pNode->m_Bracket != ECodeBracket::mc_Angle)
 			return false;
 
 		auto iBefore = fp_PreviousCode(pNode->m_iFirstToken);
 
-		return iBefore >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBefore)], "]");
+		return iBefore >= 0 && mp_Tokens.f_IsText(mp_Tokens.f_GetTokens()[umint(iBefore)], "]");
 	}
 
 	// Whether the parenthesis opening at the token holds the operand of a named cast:
 	// 'static_cast<CFoo &>(_Value)'.
 	bool CFormattingAnalyzer::fp_IsNamedCast(umint _iOpen) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto iClose = fp_PreviousCode(_iOpen);
-		if (iClose < 0 || !m_Structure.f_IsAngleBracket(umint(iClose)) || !m_Tokens.f_IsText(Tokens[umint(iClose)], ">"))
+		if (iClose < 0 || !mp_Structure.f_IsAngleBracket(umint(iClose)) || !mp_Tokens.f_IsText(Tokens[umint(iClose)], ">"))
 			return false;
 
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto iNode = m_Structure.f_FindNodeClosingAt(umint(iClose));
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		auto iNode = mp_Structure.f_FindNodeClosingAt(umint(iClose));
 		auto const *pNode = iNode < Nodes.f_GetLen() ? &Nodes[iNode] : nullptr;
 		if (pNode && pNode->m_Kind == ECodeNodeKind::mc_Group && pNode->m_Bracket == ECodeBracket::mc_Angle)
 		{
@@ -1022,10 +1028,10 @@ namespace NMib::NDevelop::NPrivate
 
 			auto const &Keyword = Tokens[umint(iKeyword)];
 
-			return m_Tokens.f_IsText(Keyword, "static_cast")
-				|| m_Tokens.f_IsText(Keyword, "reinterpret_cast")
-				|| m_Tokens.f_IsText(Keyword, "const_cast")
-				|| m_Tokens.f_IsText(Keyword, "dynamic_cast")
+			return mp_Tokens.f_IsText(Keyword, "static_cast")
+				|| mp_Tokens.f_IsText(Keyword, "reinterpret_cast")
+				|| mp_Tokens.f_IsText(Keyword, "const_cast")
+				|| mp_Tokens.f_IsText(Keyword, "dynamic_cast")
 			;
 		}
 
@@ -1036,21 +1042,21 @@ namespace NMib::NDevelop::NPrivate
 	// Its body stands one level in from the label wherever it is written.
 	aint CFormattingAnalyzer::fp_FindSharedCaseLabel(umint _iToken) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 
 		// The rules that run ahead of the layout find no decision yet, and the gap keeps what the source has.
 		auto iColon = fp_PreviousCode(_iToken);
-		auto Gap = _iToken < m_GapState.f_GetLen() ? EGap(m_GapState[_iToken]) : EGap::mc_Keep;
-		if (iColon < 0 || !m_Tokens.f_IsText(Tokens[umint(iColon)], ":") || fp_IsBreakGap(_iToken) || (fp_IsFirstOnLine(_iToken) && Gap != EGap::mc_Inline))
+		auto Gap = _iToken < mp_GapState.f_GetLen() ? EGap(mp_GapState[_iToken]) : EGap::mc_Keep;
+		if (iColon < 0 || !mp_Tokens.f_IsText(Tokens[umint(iColon)], ":") || fp_IsBreakGap(_iToken) || (fp_IsFirstOnLine(_iToken) && Gap != EGap::mc_Inline))
 			return -1;
 
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto iLabel = m_Structure.f_FindStatementEndingAt(umint(iColon));
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		auto iLabel = mp_Structure.f_FindStatementEndingAt(umint(iColon));
 		if (iLabel >= Nodes.f_GetLen())
 			return -1;
 
 		auto const &First = Tokens[Nodes[iLabel].m_iFirstToken];
-		if (!m_Tokens.f_IsText(First, "case") && !m_Tokens.f_IsText(First, "default"))
+		if (!mp_Tokens.f_IsText(First, "case") && !mp_Tokens.f_IsText(First, "default"))
 			return -1;
 
 		return aint(Nodes[iLabel].m_iFirstToken);
@@ -1061,17 +1067,17 @@ namespace NMib::NDevelop::NPrivate
 	bool CFormattingAnalyzer::fp_StartsBodyBehind(umint _iComment, umint _nColumns) const
 	{
 		auto iBrace = fp_PreviousCode(_iComment);
-		if (iBrace < 0 || !m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iBrace)], "{"))
+		if (iBrace < 0 || !mp_Tokens.f_IsText(mp_Tokens.f_GetTokens()[umint(iBrace)], "{"))
 			return false;
 
-		auto iBlock = m_Structure.f_FindNodeOpeningAt(umint(iBrace));
-		if (iBlock >= m_Structure.f_GetNodes().f_GetLen() || m_Structure.f_GetNodes()[iBlock].m_Kind != ECodeNodeKind::mc_Block)
+		auto iBlock = mp_Structure.f_FindNodeOpeningAt(umint(iBrace));
+		if (iBlock >= mp_Structure.f_GetNodes().f_GetLen() || mp_Structure.f_GetNodes()[iBlock].m_Kind != ECodeNodeKind::mc_Block)
 			return false;
 
-		auto iOffset = m_Tokens.f_GetTokens()[_iComment].m_iOffset;
-		auto iStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(iOffset));
+		auto iOffset = mp_Tokens.f_GetTokens()[_iComment].m_iOffset;
+		auto iStart = mp_Lines.f_GetLineStart(mp_Lines.f_FindLine(iOffset));
 		umint nCommentColumns = 0;
-		if (!fg_MeasureTextColumns(m_pSource + iStart, iOffset - iStart, m_Request.m_Settings.m_nTabWidth, nCommentColumns))
+		if (!fg_MeasureTextColumns(mp_pSource + iStart, iOffset - iStart, mp_Request.m_Settings.m_nTabWidth, nCommentColumns))
 			return false;
 
 		return _nColumns != nCommentColumns;
@@ -1081,14 +1087,14 @@ namespace NMib::NDevelop::NPrivate
 	// stands on its own. The code of a case body on its label's line stands one level in from the label.
 	umint CFormattingAnalyzer::fp_GetTrailedCodeIndent(umint _iComment) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto nIndent = fp_GetSourceLineIndent(_iComment);
-		auto iLineFirst = m_Tokens.f_FindToken(m_Lines.f_GetLineStart(m_Lines.f_FindLine(Tokens[_iComment].m_iOffset)));
+		auto iLineFirst = mp_Tokens.f_FindToken(mp_Lines.f_GetLineStart(mp_Lines.f_FindLine(Tokens[_iComment].m_iOffset)));
 		while (iLineFirst < _iComment && !fg_IsCodeToken(Tokens[iLineFirst]))
 			++iLineFirst;
 
 		if (fp_StartsSharedCaseLabel(iLineFirst, _iComment))
-			return nIndent + m_Request.m_Settings.m_nTabWidth;
+			return nIndent + mp_Request.m_Settings.m_nTabWidth;
 
 		return nIndent;
 	}
@@ -1109,21 +1115,21 @@ namespace NMib::NDevelop::NPrivate
 	// qualifiers and its references can stand in front of them.
 	bool CFormattingAnalyzer::fp_IsStructuredBinding(umint _iNode) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto const &Node = m_Structure.f_GetNodes()[_iNode];
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Node = mp_Structure.f_GetNodes()[_iNode];
 		if (Node.m_Kind != ECodeNodeKind::mc_Group || Node.m_Bracket != ECodeBracket::mc_Square || Node.m_bMessageSend)
 			return false;
 
 		auto iAfter = fp_NextCode(Node.m_iLastToken);
 		auto const *pAfter = iAfter >= 0 ? &Tokens[umint(iAfter)] : nullptr;
-		if (!pAfter || (!m_Tokens.f_IsText(*pAfter, ":") && !m_Tokens.f_IsText(*pAfter, "=")))
+		if (!pAfter || (!mp_Tokens.f_IsText(*pAfter, ":") && !mp_Tokens.f_IsText(*pAfter, "=")))
 			return false;
 
 		auto fQualifier = [&](aint _iToken)
 			{
 				for (auto pQualifier : {"&", "&&", "const", "volatile", "static", "thread_local", "constexpr"})
 				{
-					if (m_Tokens.f_IsText(Tokens[umint(_iToken)], pQualifier))
+					if (mp_Tokens.f_IsText(Tokens[umint(_iToken)], pQualifier))
 						return true;
 				}
 
@@ -1135,7 +1141,7 @@ namespace NMib::NDevelop::NPrivate
 		while (iBefore >= 0 && fQualifier(iBefore))
 			iBefore = fp_PreviousCode(umint(iBefore));
 
-		return iBefore >= 0 && m_Tokens.f_IsText(Tokens[umint(iBefore)], "auto");
+		return iBefore >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBefore)], "auto");
 	}
 
 	// A parenthesised type in front of an operand is a cast: nothing separates the closing
@@ -1143,7 +1149,7 @@ namespace NMib::NDevelop::NPrivate
 	// front of the opening one.
 	bool CFormattingAnalyzer::fp_IsCastGroup(umint _iNode) const
 	{
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 		auto const &Node = Nodes[_iNode];
 		if (Node.m_Bracket != ECodeBracket::mc_Paren)
 			return false;
@@ -1156,7 +1162,7 @@ namespace NMib::NDevelop::NPrivate
 				return false;
 		}
 
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto iBefore = fp_PreviousCode(Node.m_iFirstToken);
 		if (iBefore >= 0)
 		{
@@ -1164,7 +1170,7 @@ namespace NMib::NDevelop::NPrivate
 
 			// An argument list closes a name and a template parameter list closes a lambda's
 			// introducer. What follows either is a call, never a cast.
-			if (Before.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Before, ")") || m_Tokens.f_IsText(Before, "]") || m_Structure.f_IsAngleBracket(umint(iBefore)))
+			if (Before.m_Kind == ECodeTokenKind::mc_Identifier || mp_Tokens.f_IsText(Before, ")") || mp_Tokens.f_IsText(Before, "]") || mp_Structure.f_IsAngleBracket(umint(iBefore)))
 				return false;
 		}
 
@@ -1178,8 +1184,8 @@ namespace NMib::NDevelop::NPrivate
 			|| After.m_Kind == ECodeTokenKind::mc_Number
 			|| After.m_Kind == ECodeTokenKind::mc_StringLiteral
 			|| After.m_Kind == ECodeTokenKind::mc_CharLiteral
-			|| m_Tokens.f_IsText(After, "(")
-			|| fg_IsBlockLiteralCaret(m_Tokens, m_Structure, umint(iAfter))
+			|| mp_Tokens.f_IsText(After, "(")
+			|| fg_IsBlockLiteralCaret(mp_Tokens, mp_Structure, umint(iAfter))
 		;
 	}
 
@@ -1190,26 +1196,26 @@ namespace NMib::NDevelop::NPrivate
 	// holds nothing to give a line to: '(*pFunctor)()'.
 	bool CFormattingAnalyzer::fp_IsYieldedScope(umint _iOpen) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto const &Open = Tokens[_iOpen];
-		if (!m_Tokens.f_IsText(Open, "(") && !m_Tokens.f_IsText(Open, "["))
+		if (!mp_Tokens.f_IsText(Open, "(") && !mp_Tokens.f_IsText(Open, "["))
 			return false;
 
 		auto iBefore = fp_PreviousCode(_iOpen);
 		auto const *pBefore = iBefore >= 0 ? &Tokens[umint(iBefore)] : nullptr;
-		if (!pBefore || (!m_Tokens.f_IsText(*pBefore, ")") && !m_Tokens.f_IsText(*pBefore, "]")))
+		if (!pBefore || (!mp_Tokens.f_IsText(*pBefore, ")") && !mp_Tokens.f_IsText(*pBefore, "]")))
 			return false;
 
 		auto iInner = fp_NextCode(_iOpen);
 		auto const *pInner = iInner >= 0 ? &Tokens[umint(iInner)] : nullptr;
-		if (!pInner || m_Tokens.f_IsText(*pInner, ")") || m_Tokens.f_IsText(*pInner, "]"))
+		if (!pInner || mp_Tokens.f_IsText(*pInner, ")") || mp_Tokens.f_IsText(*pInner, "]"))
 			return false;
 
-		if (m_Tokens.f_IsText(*pBefore, "]") && fg_IsCaptureList(m_Tokens, m_Structure, umint(iBefore)))
+		if (mp_Tokens.f_IsText(*pBefore, "]") && fg_IsCaptureList(mp_Tokens, mp_Structure, umint(iBefore)))
 			return false;
 
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto iGroup = m_Structure.f_FindNodeClosingAt(umint(iBefore));
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		auto iGroup = mp_Structure.f_FindNodeClosingAt(umint(iBefore));
 
 		return iGroup >= Nodes.f_GetLen() || Nodes[iGroup].m_Kind != ECodeNodeKind::mc_Group || !fp_IsCastGroup(iGroup);
 	}

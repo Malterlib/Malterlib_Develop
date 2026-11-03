@@ -52,16 +52,16 @@ namespace NMib::NDevelop::NPrivate
 {
 	void CFormattingAnalyzer::fp_RuleIndentation()
 	{
-		auto const &Settings = m_Request.m_Settings;
-		for (umint iLine = 0; iLine < m_Lines.f_GetLineCount(); ++iLine)
+		auto const &Settings = mp_Request.m_Settings;
+		for (umint iLine = 0; iLine < mp_Lines.f_GetLineCount(); ++iLine)
 		{
-			if (m_ProtectedStart[iLine] || !fp_IsLineSelected(iLine))
+			if (mp_ProtectedStart[iLine] || !fp_IsLineSelected(iLine))
 				continue;
 
-			auto iStart = m_Lines.f_GetLineStart(iLine);
-			auto iEnd = m_Lines.f_GetLineContentEnd(iLine);
+			auto iStart = mp_Lines.f_GetLineStart(iLine);
+			auto iEnd = mp_Lines.f_GetLineContentEnd(iLine);
 			auto iIndent = iStart;
-			while (iIndent < iEnd && fg_IsSpaceOrTab(m_pSource[iIndent]))
+			while (iIndent < iEnd && fg_IsSpaceOrTab(mp_pSource[iIndent]))
 				++iIndent;
 
 			// An all-whitespace line is normalized by the trailing whitespace rule.
@@ -71,8 +71,8 @@ namespace NMib::NDevelop::NPrivate
 			// A line the layout placed takes its indentation from that decision, already
 			// spelled the way this rule would spell it, and a directive's is its own rule's.
 			// So does one the code behind its comments starts. A line behind a line splice is no line the layout writes.
-			auto const &Tokens = m_Tokens.f_GetTokens();
-			auto iToken = m_Tokens.f_FindToken(iIndent);
+			auto const &Tokens = mp_Tokens.f_GetTokens();
+			auto iToken = mp_Tokens.f_FindToken(iIndent);
 			auto iBreak = iToken;
 			while (iBreak && Tokens[iBreak - 1].m_Kind == ECodeTokenKind::mc_Whitespace)
 				--iBreak;
@@ -82,7 +82,7 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 
 			// A comment the layout moves is written where it moves to.
-			if (m_CommentMoved[iToken] && fp_CanShiftCommentLines(iToken, aint(m_CommentIndent[iToken]) - aint(fp_GetSourceLineIndent(iToken))))
+			if (mp_CommentMoved[iToken] && fp_CanShiftCommentLines(iToken, aint(mp_CommentIndent[iToken]) - aint(fp_GetSourceLineIndent(iToken))))
 				continue;
 
 			auto fIsBeforeCode = [&](umint _iToken)
@@ -101,25 +101,25 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 
 			umint nColumns = 0;
-			if (!fg_MeasureTextColumns(m_pSource + iStart, iIndent - iStart, Settings.m_nTabWidth, nColumns))
+			if (!fg_MeasureTextColumns(mp_pSource + iStart, iIndent - iStart, Settings.m_nTabWidth, nColumns))
 				continue;
 
 			CStr Canonical;
 			if (Settings.m_bIndentWithTabs)
 			{
-				for (umint i = 0; i < nColumns / Settings.m_nTabWidth; ++i)
+				for (umint iTab = 0; iTab < nColumns / Settings.m_nTabWidth; ++iTab)
 					Canonical += "\t";
 
-				for (umint i = 0; i < nColumns % Settings.m_nTabWidth; ++i)
+				for (umint iSpace = 0; iSpace < nColumns % Settings.m_nTabWidth; ++iSpace)
 					Canonical += " ";
 			}
 			else
 			{
-				for (umint i = 0; i < nColumns; ++i)
+				for (umint iSpace = 0; iSpace < nColumns; ++iSpace)
 					Canonical += " ";
 			}
 
-			if (fg_IsSameText(Canonical, m_pSource + iStart, iIndent - iStart))
+			if (fg_IsSameText(Canonical, mp_pSource + iStart, iIndent - iStart))
 				continue;
 
 			fp_AddEdit("indentation", iStart, iIndent - iStart, Canonical, Settings.m_bIndentWithTabs ? "indentation must use tabs" : "indentation must use spaces");
@@ -127,7 +127,7 @@ namespace NMib::NDevelop::NPrivate
 
 		// A block comment's lines behind its first keep their columns, which are their text's, spelled the way indentation
 		// is. One a move writes is written where it moves to.
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		NContainer::TCVector<umint> EditStarts;
 		bool bEditStarts = false;
 		for (auto const &Token : Tokens)
@@ -137,21 +137,21 @@ namespace NMib::NDevelop::NPrivate
 
 			if (!bEditStarts)
 			{
-				for (auto const &Edit : m_Edits)
+				for (auto const &Edit : mp_Edits)
 					EditStarts.f_Insert(Edit.m_iOffset);
 
 				EditStarts.f_Sort();
 				bEditStarts = true;
 			}
 
-			for (auto iLine = m_Lines.f_FindLine(Token.m_iOffset) + 1; iLine < m_Lines.f_GetLineCount() && m_Lines.f_GetLineStart(iLine) < Token.f_GetEnd(); ++iLine)
+			for (auto iLine = mp_Lines.f_FindLine(Token.m_iOffset) + 1; iLine < mp_Lines.f_GetLineCount() && mp_Lines.f_GetLineStart(iLine) < Token.f_GetEnd(); ++iLine)
 			{
-				auto iStart = m_Lines.f_GetLineStart(iLine);
+				auto iStart = mp_Lines.f_GetLineStart(iLine);
 				auto iContent = iStart;
-				while (iContent < Token.f_GetEnd() && fg_IsSpaceOrTab(m_pSource[iContent]))
+				while (iContent < Token.f_GetEnd() && fg_IsSpaceOrTab(mp_pSource[iContent]))
 					++iContent;
 
-				auto const *pContent = iContent < Token.f_GetEnd() ? m_pSource + iContent : nullptr;
+				auto const *pContent = iContent < Token.f_GetEnd() ? mp_pSource + iContent : nullptr;
 				bool bBlank = !pContent || *pContent == '\n' || *pContent == '\r';
 				if (bBlank || iContent == iStart || !fp_IsLineSelected(iLine) || fp_IsDisabled(iStart, iContent - iStart))
 					continue;
@@ -160,11 +160,11 @@ namespace NMib::NDevelop::NPrivate
 					continue;
 
 				umint nColumns = 0;
-				if (!fg_MeasureTextColumns(m_pSource + iStart, iContent - iStart, Settings.m_nTabWidth, nColumns))
+				if (!fg_MeasureTextColumns(mp_pSource + iStart, iContent - iStart, Settings.m_nTabWidth, nColumns))
 					continue;
 
 				auto Canonical = fp_MakeIndent(nColumns);
-				if (!fg_IsSameText(Canonical, m_pSource + iStart, iContent - iStart))
+				if (!fg_IsSameText(Canonical, mp_pSource + iStart, iContent - iStart))
 					fp_AddEdit("indentation", iStart, iContent - iStart, Canonical, Settings.m_bIndentWithTabs ? "indentation must use tabs" : "indentation must use spaces");
 			}
 		}
@@ -176,7 +176,7 @@ namespace NMib::NDevelop::NPrivate
 	// file whose conditionals do not pair up keeps its directives as they are.
 	void CFormattingAnalyzer::fp_RuleDirectiveIndentation()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 
 		struct CDirective
 		{
@@ -200,22 +200,22 @@ namespace NMib::NDevelop::NPrivate
 		aint iFirstCode = -1;
 		aint iLastCode = -1;
 
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor)
+			if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_Preprocessor)
 			{
-				if (fg_IsCodeToken(Tokens[i]))
+				if (fg_IsCodeToken(Tokens[iToken]))
 				{
 					if (iFirstCode < 0)
-						iFirstCode = aint(i);
+						iFirstCode = aint(iToken);
 
-					iLastCode = aint(i);
+					iLastCode = aint(iToken);
 				}
 
 				continue;
 			}
 
-			auto Keyword = fp_GetDirectiveKeyword(i);
+			auto Keyword = fp_GetDirectiveKeyword(iToken);
 			bool bOpens = Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef";
 			bool bAlternative = Keyword == "elif" || Keyword == "elifdef" || Keyword == "elifndef" || Keyword == "else";
 			if ((bAlternative || Keyword == "endif") && iGroup == c_iNoGroup)
@@ -223,18 +223,18 @@ namespace NMib::NDevelop::NPrivate
 
 			if (bOpens)
 			{
-				Groups.f_Insert(CGroup{.m_iParent = iGroup, .m_iOpen = i});
+				Groups.f_Insert(CGroup{.m_iParent = iGroup, .m_iOpen = iToken});
 				iGroup = Groups.f_GetLen() - 1;
 			}
 			else if (bAlternative)
 				Groups[iGroup].m_bAlternatives = true;
 
 			if (!Keyword.f_IsEmpty())
-				Directives.f_Insert(CDirective{i, iGroup, bOpens || bAlternative || Keyword == "endif"});
+				Directives.f_Insert(CDirective{iToken, iGroup, bOpens || bAlternative || Keyword == "endif"});
 
 			if (Keyword == "endif")
 			{
-				Groups[iGroup].m_iClose = i;
+				Groups[iGroup].m_iClose = iToken;
 				iGroup = Groups[iGroup].m_iParent;
 			}
 		}
@@ -251,16 +251,16 @@ namespace NMib::NDevelop::NPrivate
 		for (auto const &Directive : Directives)
 		{
 			auto const &Token = Tokens[Directive.m_iToken];
-			auto iLine = m_Lines.f_FindLine(Token.m_iOffset);
-			auto iStart = m_Lines.f_GetLineStart(iLine);
+			auto iLine = mp_Lines.f_FindLine(Token.m_iOffset);
+			auto iStart = mp_Lines.f_GetLineStart(iLine);
 			bool bFirst = true;
 			for (auto iByte = iStart; iByte < Token.m_iOffset && bFirst; ++iByte)
-				bFirst = fg_IsSpaceOrTab(m_pSource[iByte]);
+				bFirst = fg_IsSpaceOrTab(mp_pSource[iByte]);
 
-			if (!bFirst || m_ProtectedStart[iLine] || !fp_IsLineSelected(iLine))
+			if (!bFirst || mp_ProtectedStart[iLine] || !fp_IsLineSelected(iLine))
 				continue;
 
-			auto pText = m_pSource + Token.m_iOffset;
+			auto pText = mp_pSource + Token.m_iOffset;
 			umint iName = 1;
 			while (iName < Token.m_nLength && fg_IsSpaceOrTab(pText[iName]))
 				++iName;
@@ -271,21 +271,21 @@ namespace NMib::NDevelop::NPrivate
 
 			// Indented with spaces the name stands where a tab per level would put it: '#   include' for '#\tinclude'.
 			CStr Canonical = "#";
-			if (m_Request.m_Settings.m_bIndentWithTabs)
+			if (mp_Request.m_Settings.m_bIndentWithTabs)
 			{
 				for (umint iTab = 0; iTab < nDepth; ++iTab)
 					Canonical += "\t";
 			}
 			else
 			{
-				auto nColumns = nDepth * m_Request.m_Settings.m_nTabWidth;
+				auto nColumns = nDepth * mp_Request.m_Settings.m_nTabWidth;
 				auto nSpaces = nColumns > nDepth ? nColumns - 1 : nDepth;
 				for (umint iSpace = 0; iSpace < nSpaces; ++iSpace)
 					Canonical += " ";
 			}
 
 			auto iEnd = Token.m_iOffset + iName;
-			if (!fg_IsSameText(Canonical, m_pSource + iStart, iEnd - iStart) && !fp_IsFormatOff(iStart, iEnd - iStart))
+			if (!fg_IsSameText(Canonical, mp_pSource + iStart, iEnd - iStart) && !fp_IsFormatOff(iStart, iEnd - iStart))
 			{
 				fp_AddEdit
 					(
@@ -350,21 +350,21 @@ namespace NMib::NDevelop::NPrivate
 			TCVector<CContinuation> Continuations;
 			umint nLeast = TCLimitsInt<umint>::mc_Max;
 			bool bMeasured = true;
-			for (auto iLine2 = iLine + 1; bMeasured && iLine2 < m_Lines.f_GetLineCount() && m_Lines.f_GetLineStart(iLine2) < Token.f_GetEnd(); ++iLine2)
+			for (auto iLine2 = iLine + 1; bMeasured && iLine2 < mp_Lines.f_GetLineCount() && mp_Lines.f_GetLineStart(iLine2) < Token.f_GetEnd(); ++iLine2)
 			{
-				auto iLineStart = m_Lines.f_GetLineStart(iLine2);
+				auto iLineStart = mp_Lines.f_GetLineStart(iLine2);
 				auto iContent = iLineStart;
-				while (iContent < Token.f_GetEnd() && fg_IsSpaceOrTab(m_pSource[iContent]))
+				while (iContent < Token.f_GetEnd() && fg_IsSpaceOrTab(mp_pSource[iContent]))
 					++iContent;
 
 				// A line holding nothing but its splice, or nothing at all, has no indentation to keep.
-				auto const *pContent = iContent < Token.f_GetEnd() ? m_pSource + iContent : nullptr;
+				auto const *pContent = iContent < Token.f_GetEnd() ? mp_pSource + iContent : nullptr;
 				bool bEmpty = !pContent || *pContent == '\\' || *pContent == '\n' || *pContent == '\r';
 				if (bEmpty)
 					continue;
 
 				umint nColumns = 0;
-				bMeasured = fg_MeasureTextColumns(m_pSource + iLineStart, iContent - iLineStart, m_Request.m_Settings.m_nTabWidth, nColumns);
+				bMeasured = fg_MeasureTextColumns(mp_pSource + iLineStart, iContent - iLineStart, mp_Request.m_Settings.m_nTabWidth, nColumns);
 				Continuations.f_Insert(CContinuation{iLineStart, iContent, nColumns, fp_IsLineSelected(iLine2)});
 				nLeast = fg_Min(nLeast, nColumns);
 			}
@@ -381,14 +381,14 @@ namespace NMib::NDevelop::NPrivate
 			if (nSelected && nSelected != Continuations.f_GetLen())
 				continue;
 
-			auto nTab = m_Request.m_Settings.m_nTabWidth;
+			auto nTab = mp_Request.m_Settings.m_nTabWidth;
 			auto nBase = (nDepth + 1) * nTab;
 
 			auto fIndent = [&](umint _nColumns)
 				{
 					CStr Indent;
 					umint nSpaces = _nColumns;
-					if (m_Request.m_Settings.m_bIndentWithTabs)
+					if (mp_Request.m_Settings.m_bIndentWithTabs)
 					{
 						for (umint iTab = 0; iTab < _nColumns / nTab; ++iTab)
 							Indent += "\t";
@@ -417,33 +417,33 @@ namespace NMib::NDevelop::NPrivate
 				{
 					// Only a backslash with nothing but blanks behind it splices; one in the text, a comment's 'a\\b', does not.
 					auto iSplice = _iLineEnd;
-					while (iSplice > _iContent && (m_pSource[iSplice - 1] == ' ' || m_pSource[iSplice - 1] == '\t' || m_pSource[iSplice - 1] == '\v' || m_pSource[iSplice - 1] == '\f'))
+					while (iSplice > _iContent && (mp_pSource[iSplice - 1] == ' ' || mp_pSource[iSplice - 1] == '\t' || mp_pSource[iSplice - 1] == '\v' || mp_pSource[iSplice - 1] == '\f'))
 						--iSplice;
 
-					if (iSplice <= _iContent || m_pSource[iSplice - 1] != '\\')
+					if (iSplice <= _iContent || mp_pSource[iSplice - 1] != '\\')
 						return;
 
 					--iSplice;
 					auto iPadding = iSplice;
-					while (iPadding > _iContent && fg_IsSpaceOrTab(m_pSource[iPadding - 1]))
+					while (iPadding > _iContent && fg_IsSpaceOrTab(mp_pSource[iPadding - 1]))
 						--iPadding;
 
 					CStr Text = _Indent;
-					Text.f_AddStr(m_pSource + _iContent, iPadding - _iContent);
+					Text.f_AddStr(mp_pSource + _iContent, iPadding - _iContent);
 					SpliceLines.f_Insert(CSpliceLine{fg_Move(Text), iPadding, iSplice});
 				}
 			;
 
-			fSpliceLine(iEnd, Canonical, m_Lines.f_GetLineContentEnd(iLine));
+			fSpliceLine(iEnd, Canonical, mp_Lines.f_GetLineContentEnd(iLine));
 			for (auto const &Continuation : Continuations)
 			{
 				auto Indent = fIndent(Continuation.m_nColumns - nLeast + nBase);
-				auto iContinuationLine = m_Lines.f_FindLine(Continuation.m_iStart);
-				if (m_Lines.f_GetLineContentEnd(iContinuationLine) < Token.f_GetEnd())
-					fSpliceLine(Continuation.m_iContent, Indent, m_Lines.f_GetLineContentEnd(iContinuationLine));
+				auto iContinuationLine = mp_Lines.f_FindLine(Continuation.m_iStart);
+				if (mp_Lines.f_GetLineContentEnd(iContinuationLine) < Token.f_GetEnd())
+					fSpliceLine(Continuation.m_iContent, Indent, mp_Lines.f_GetLineContentEnd(iContinuationLine));
 
 				auto nLength = Continuation.m_iContent - Continuation.m_iStart;
-				if (!Continuation.m_bSelected || fg_IsSameText(Indent, m_pSource + Continuation.m_iStart, nLength) || fp_IsFormatOff(Continuation.m_iStart, nLength))
+				if (!Continuation.m_bSelected || fg_IsSameText(Indent, mp_pSource + Continuation.m_iStart, nLength) || fp_IsFormatOff(Continuation.m_iStart, nLength))
 					continue;
 
 				fp_AddEdit("directive-indentation", Continuation.m_iStart, nLength, Indent, "a directive's continuation lines stand one level in from it");
@@ -464,16 +464,16 @@ namespace NMib::NDevelop::NPrivate
 
 			for (auto const &Line : SpliceLines)
 			{
-				auto iLineStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Line.m_iSplice));
+				auto iLineStart = mp_Lines.f_GetLineStart(mp_Lines.f_FindLine(Line.m_iSplice));
 				umint nSplice = 0;
 				umint nPrefix = 0;
 				bSplicesMeasured
-					= bSplicesMeasured && fg_MeasureTextColumns(m_pSource + iLineStart, Line.m_iSplice - iLineStart, nTab, nSplice) && fg_MeasureTextColumns(Line.m_Prefix, nTab, nPrefix)
+					= bSplicesMeasured && fg_MeasureTextColumns(mp_pSource + iLineStart, Line.m_iSplice - iLineStart, nTab, nSplice) && fg_MeasureTextColumns(Line.m_Prefix, nTab, nPrefix)
 				;
 
 				umint nWritten = nPrefix;
 				for (auto iPad = Line.m_iPadding; iPad < Line.m_iSplice; ++iPad)
-					nWritten = m_pSource[iPad] == '\t' ? (nWritten / nTab + 1) * nTab : nWritten + 1;
+					nWritten = mp_pSource[iPad] == '\t' ? (nWritten / nTab + 1) * nTab : nWritten + 1;
 
 				bSourceAligned = bSourceAligned && (&Line == &SpliceLines[0] || nSplice == nAligned);
 				bWrittenAligned = bWrittenAligned && (&Line == &SpliceLines[0] || nWritten == nWrittenAligned);
@@ -481,7 +481,7 @@ namespace NMib::NDevelop::NPrivate
 				nWrittenAligned = nWritten;
 				nLongest = fg_Max(nLongest, nPrefix);
 				for (auto iPad = Line.m_iPadding; iPad < Line.m_iSplice; ++iPad)
-					bTabs |= m_pSource[iPad] == '\t';
+					bTabs |= mp_pSource[iPad] == '\t';
 			}
 
 			if (!bSplicesMeasured || (!bSourceAligned && !bWrittenAligned))
@@ -505,7 +505,7 @@ namespace NMib::NDevelop::NPrivate
 				}
 
 				auto nLength = Line.m_iSplice - Line.m_iPadding;
-				if (fg_IsSameText(Padding, m_pSource + Line.m_iPadding, nLength) || fp_IsFormatOff(Line.m_iPadding, nLength))
+				if (fg_IsSameText(Padding, mp_pSource + Line.m_iPadding, nLength) || fp_IsFormatOff(Line.m_iPadding, nLength))
 					continue;
 
 				fp_AddEdit("directive-indentation", Line.m_iPadding, nLength, Padding, "the splices of a directive's lines stay aligned");
@@ -515,23 +515,23 @@ namespace NMib::NDevelop::NPrivate
 
 	void CFormattingAnalyzer::fp_RuleTrailingWhitespace()
 	{
-		if (!m_Request.m_Settings.m_bTrimTrailingWhitespace)
+		if (!mp_Request.m_Settings.m_bTrimTrailingWhitespace)
 			return;
 
-		for (umint iLine = 0; iLine < m_Lines.f_GetLineCount(); ++iLine)
+		for (umint iLine = 0; iLine < mp_Lines.f_GetLineCount(); ++iLine)
 		{
-			if (m_ProtectedEnd[iLine] || !fp_IsLineSelected(iLine))
+			if (mp_ProtectedEnd[iLine] || !fp_IsLineSelected(iLine))
 				continue;
 
-			auto iStart = m_Lines.f_GetLineStart(iLine);
-			auto iEnd = m_Lines.f_GetLineContentEnd(iLine);
+			auto iStart = mp_Lines.f_GetLineStart(iLine);
+			auto iEnd = mp_Lines.f_GetLineContentEnd(iLine);
 			auto iTrim = iEnd;
-			while (iTrim > iStart && fg_IsSpaceOrTab(m_pSource[iTrim - 1]))
+			while (iTrim > iStart && fg_IsSpaceOrTab(mp_pSource[iTrim - 1]))
 				--iTrim;
 
 			// A build system file's name holds the blank it escapes: 'Value\ '.
-			auto const &Tokens = m_Tokens.f_GetTokens();
-			auto iToken = m_Tokens.f_FindToken(iTrim);
+			auto const &Tokens = mp_Tokens.f_GetTokens();
+			auto iToken = mp_Tokens.f_FindToken(iTrim);
 			if (iTrim < iEnd && iToken < Tokens.f_GetLen() && Tokens[iToken].m_iOffset < iTrim && Tokens[iToken].m_Kind == ECodeTokenKind::mc_Identifier)
 				iTrim = fg_Min(Tokens[iToken].f_GetEnd(), iEnd);
 
@@ -545,42 +545,42 @@ namespace NMib::NDevelop::NPrivate
 	void CFormattingAnalyzer::fp_RuleLineEndings()
 	{
 		// A line-ending change rewrites bytes on every line, so it needs a whole-file request.
-		if (!m_bWholeFile || !m_Request.m_Settings.m_EndOfLine)
+		if (!mp_bWholeFile || !mp_Request.m_Settings.m_EndOfLine)
 			return;
 
-		auto Ending = *m_Request.m_Settings.m_EndOfLine;
+		auto Ending = *mp_Request.m_Settings.m_EndOfLine;
 		auto Bytes = fg_GetTextLineEndingBytes(Ending);
-		for (umint iLine = 0; iLine < m_Lines.f_GetLineCount(); ++iLine)
+		for (umint iLine = 0; iLine < mp_Lines.f_GetLineCount(); ++iLine)
 		{
-			auto const &Line = m_Lines.f_GetLine(iLine);
+			auto const &Line = mp_Lines.f_GetLine(iLine);
 			if (Line.m_Ending == ETextLineEnding::mc_None || Line.m_Ending == Ending)
 				continue;
 
-			if (m_ProtectedEnd[iLine])
+			if (mp_ProtectedEnd[iLine])
 				continue;
 
-			fp_AddEdit("line-ending", m_Lines.f_GetLineContentEnd(iLine), m_Lines.f_GetTerminatorLength(iLine), Bytes, "line ending must match end_of_line");
+			fp_AddEdit("line-ending", mp_Lines.f_GetLineContentEnd(iLine), mp_Lines.f_GetTerminatorLength(iLine), Bytes, "line ending must match end_of_line");
 		}
 	}
 
 	void CFormattingAnalyzer::fp_RuleFinalNewline()
 	{
-		if (!m_bWholeFile || !m_Request.m_Settings.m_bInsertFinalNewline || m_Request.m_Source.f_IsEmpty())
+		if (!mp_bWholeFile || !mp_Request.m_Settings.m_bInsertFinalNewline || mp_Request.m_Source.f_IsEmpty())
 			return;
 
-		auto iLast = m_Lines.f_GetLineCount() - 1;
-		if (!m_Lines.f_GetLine(iLast).m_nLength && m_Lines.f_GetLine(iLast).m_Ending == ETextLineEnding::mc_None)
+		auto iLast = mp_Lines.f_GetLineCount() - 1;
+		if (!mp_Lines.f_GetLine(iLast).m_nLength && mp_Lines.f_GetLine(iLast).m_Ending == ETextLineEnding::mc_None)
 			return;
 
 		// A newline behind a trailing backslash makes it a line splice, which joins what stands before it to what would
 		// follow, so the file is told about rather than given one. Blanks behind it splice as well, and the trailing
 		// whitespace rule takes them out anyway.
-		auto const &Source = m_Request.m_Source;
+		auto const &Source = mp_Request.m_Source;
 		auto iTail = Source.f_GetLen();
-		while (iTail > 0 && (m_pSource[iTail - 1] == ' ' || m_pSource[iTail - 1] == '\t' || m_pSource[iTail - 1] == '\v' || m_pSource[iTail - 1] == '\f'))
+		while (iTail > 0 && (mp_pSource[iTail - 1] == ' ' || mp_pSource[iTail - 1] == '\t' || mp_pSource[iTail - 1] == '\v' || mp_pSource[iTail - 1] == '\f'))
 			--iTail;
 
-		if (iTail > 0 && m_pSource[iTail - 1] == '\\')
+		if (iTail > 0 && mp_pSource[iTail - 1] == '\\')
 		{
 			fp_AddDiagnostic("final-newline", iTail - 1, 1, "the file ends in a backslash, which a final newline would make a line splice", false);
 
@@ -592,7 +592,7 @@ namespace NMib::NDevelop::NPrivate
 
 	void CFormattingAnalyzer::fp_EnsureSingleSpace(umint _iToken, bool _bBefore, ch8 const *_pRule, ch8 const *_pExplanation)
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto const &Token = Tokens[_iToken];
 
 		// A gap the layout breaks is the layout's: a space written into it would land on
@@ -613,7 +613,7 @@ namespace NMib::NDevelop::NPrivate
 			auto const &Previous = Tokens[_iToken - 1];
 			if (Previous.m_Kind == ECodeTokenKind::mc_Whitespace)
 			{
-				if (Previous.m_nLength != 1 || m_pSource[Previous.m_iOffset] != ' ')
+				if (Previous.m_nLength != 1 || mp_pSource[Previous.m_iOffset] != ' ')
 					fp_AddEdit(_pRule, Previous.m_iOffset, Previous.m_nLength, " ", _pExplanation);
 
 				return;
@@ -630,7 +630,7 @@ namespace NMib::NDevelop::NPrivate
 		auto const &Next = Tokens[_iToken + 1];
 		if (Next.m_Kind == ECodeTokenKind::mc_Whitespace)
 		{
-			if (Next.m_nLength != 1 || m_pSource[Next.m_iOffset] != ' ')
+			if (Next.m_nLength != 1 || mp_pSource[Next.m_iOffset] != ' ')
 				fp_AddEdit(_pRule, Next.m_iOffset, Next.m_nLength, " ", _pExplanation);
 
 			return;
@@ -644,7 +644,7 @@ namespace NMib::NDevelop::NPrivate
 		if (fp_IsFirstOnLine(_iToken) || fp_IsBreakGap(_iToken))
 			return;
 
-		auto const &Previous = m_Tokens.f_GetTokens()[_iToken - 1];
+		auto const &Previous = mp_Tokens.f_GetTokens()[_iToken - 1];
 		if (Previous.m_Kind != ECodeTokenKind::mc_Whitespace)
 			return;
 
@@ -655,21 +655,21 @@ namespace NMib::NDevelop::NPrivate
 	// asks for it every time it measures a line the gap stands in.
 	ECodeSpacing CFormattingAnalyzer::fp_GetCanonicalSpacing(umint _iLeft, umint _iRight) const
 	{
-		auto nTokens = m_Tokens.f_GetTokens().f_GetLen();
-		if (m_CanonicalSpacing.f_GetLen() != nTokens)
+		auto nTokens = mp_Tokens.f_GetTokens().f_GetLen();
+		if (mp_CanonicalSpacing.f_GetLen() != nTokens)
 		{
-			m_CanonicalSpacing.f_SetLen(nTokens);
-			for (auto &Value : m_CanonicalSpacing)
+			mp_CanonicalSpacing.f_SetLen(nTokens);
+			for (auto &Value : mp_CanonicalSpacing)
 				Value = 0;
 		}
 
 		if (_iRight >= nTokens || fp_PreviousCode(_iRight) != aint(_iLeft))
-			return fg_GetCanonicalSpacing(m_Tokens, m_Structure, _iLeft, _iRight);
+			return fg_GetCanonicalSpacing(mp_Tokens, mp_Structure, _iLeft, _iRight);
 
-		if (!m_CanonicalSpacing[_iRight])
-			m_CanonicalSpacing[_iRight] = uint8(fg_GetCanonicalSpacing(m_Tokens, m_Structure, _iLeft, _iRight)) + 1;
+		if (!mp_CanonicalSpacing[_iRight])
+			mp_CanonicalSpacing[_iRight] = uint8(fg_GetCanonicalSpacing(mp_Tokens, mp_Structure, _iLeft, _iRight)) + 1;
 
-		return ECodeSpacing(m_CanonicalSpacing[_iRight] - 1);
+		return ECodeSpacing(mp_CanonicalSpacing[_iRight] - 1);
 	}
 
 	// The separator the spacing rules write between two tokens on one line, in the order
@@ -679,55 +679,59 @@ namespace NMib::NDevelop::NPrivate
 	// second measures differently.
 	ECodeSpacing CFormattingAnalyzer::fp_GetInlineSpacing(umint _iLeft, umint _iRight) const
 	{
-		auto nTokens = m_Tokens.f_GetTokens().f_GetLen();
-		if (m_InlineSpacing.f_GetLen() != nTokens)
+		auto nTokens = mp_Tokens.f_GetTokens().f_GetLen();
+		if (mp_InlineSpacing.f_GetLen() != nTokens)
 		{
-			m_InlineSpacing.f_SetLen(nTokens);
-			for (auto &Value : m_InlineSpacing)
+			mp_InlineSpacing.f_SetLen(nTokens);
+			for (auto &Value : mp_InlineSpacing)
 				Value = 0;
 		}
 
 		if (_iRight >= nTokens || fp_PreviousCode(_iRight) != aint(_iLeft))
 			return fp_DecideInlineSpacing(_iLeft, _iRight);
 
-		if (!m_InlineSpacing[_iRight])
-			m_InlineSpacing[_iRight] = uint8(fp_DecideInlineSpacing(_iLeft, _iRight)) + 1;
+		if (!mp_InlineSpacing[_iRight])
+			mp_InlineSpacing[_iRight] = uint8(fp_DecideInlineSpacing(_iLeft, _iRight)) + 1;
 
-		return ECodeSpacing(m_InlineSpacing[_iRight] - 1);
+		return ECodeSpacing(mp_InlineSpacing[_iRight] - 1);
 	}
 
 	// What ends the element a comma opens with none in it, and takes no space from the comma: a closer, a template
 	// argument list's included, or a terminator.
 	bool CFormattingAnalyzer::fp_ClosesBehindComma(umint _iToken) const
 	{
-		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		auto const &Token = mp_Tokens.f_GetTokens()[_iToken];
 
-		return m_Tokens.f_IsText(Token, ")")
-			|| m_Tokens.f_IsText(Token, "]")
-			|| m_Tokens.f_IsText(Token, "}")
-			|| m_Tokens.f_IsText(Token, ";")
-			|| (m_Tokens.f_IsText(Token, ">") && m_Structure.f_IsAngleBracket(_iToken))
+		return mp_Tokens.f_IsText(Token, ")")
+			|| mp_Tokens.f_IsText(Token, "]")
+			|| mp_Tokens.f_IsText(Token, "}")
+			|| mp_Tokens.f_IsText(Token, ";")
+			|| (mp_Tokens.f_IsText(Token, ">") && mp_Structure.f_IsAngleBracket(_iToken))
 		;
 	}
 
 	ECodeSpacing CFormattingAnalyzer::fp_DecideInlineSpacing(umint _iLeft, umint _iRight) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto const &Left = Tokens[_iLeft];
 		auto const &Right = Tokens[_iRight];
 		bool bClause
-			= m_Tokens.f_IsText(Left, "if") || m_Tokens.f_IsText(Left, "for") || m_Tokens.f_IsText(Left, "while") || m_Tokens.f_IsText(Left, "switch") || m_Tokens.f_IsText(Left, "catch")
+			= mp_Tokens.f_IsText(Left, "if")
+			|| mp_Tokens.f_IsText(Left, "for")
+			|| mp_Tokens.f_IsText(Left, "while")
+			|| mp_Tokens.f_IsText(Left, "switch")
+			|| mp_Tokens.f_IsText(Left, "catch")
 		;
-		if (bClause && m_Tokens.f_IsText(Right, "("))
+		if (bClause && mp_Tokens.f_IsText(Right, "("))
 			return ECodeSpacing::mc_Space;
 
-		if (m_Structure.f_IsAngleBracket(_iLeft) && m_Structure.f_IsAngleBracket(_iRight) && m_Tokens.f_IsText(Left, ">") && m_Tokens.f_IsText(Right, ">"))
+		if (mp_Structure.f_IsAngleBracket(_iLeft) && mp_Structure.f_IsAngleBracket(_iRight) && mp_Tokens.f_IsText(Left, ">") && mp_Tokens.f_IsText(Right, ">"))
 			return ECodeSpacing::mc_None;
 
-		if (m_Tokens.f_IsText(Right, ","))
+		if (mp_Tokens.f_IsText(Right, ","))
 			return ECodeSpacing::mc_None;
 
-		if (m_Tokens.f_IsText(Left, ","))
+		if (mp_Tokens.f_IsText(Left, ","))
 		{
 			// The comma rule leaves the gap in front of a closer to the standard's spelling.
 			if (fp_ClosesBehindComma(_iRight))
@@ -738,11 +742,11 @@ namespace NMib::NDevelop::NPrivate
 
 		auto fSpacedOperator = [&](umint _iOperator)
 			{
-				if (!fg_IsSpacedOperator(m_Tokens, Tokens[_iOperator]))
+				if (!fg_IsSpacedOperator(mp_Tokens, Tokens[_iOperator]))
 					return false;
 
 				auto iPrevious = fp_PreviousCode(_iOperator);
-				if (iPrevious >= 0 && m_Tokens.f_IsText(Tokens[umint(iPrevious)], "operator"))
+				if (iPrevious >= 0 && mp_Tokens.f_IsText(Tokens[umint(iPrevious)], "operator"))
 					return false;
 
 				return iPrevious >= 0 && fp_HasOperand(umint(iPrevious), true) && fp_HasOperand(_iOperator, false);
@@ -760,35 +764,35 @@ namespace NMib::NDevelop::NPrivate
 	// declaring a function: 'TCUniquePointer<CFoo> pFoo(fg_Construct())'.
 	bool CFormattingAnalyzer::fp_IsInFunctionBody(umint _iStatement) const
 	{
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 		auto iBlock = Nodes[_iStatement].m_iParent;
 
-		return iBlock < Nodes.f_GetLen() && fg_IsFunctionBody(m_Tokens, m_Structure, iBlock);
+		return iBlock < Nodes.f_GetLen() && fg_IsFunctionBody(mp_Tokens, mp_Structure, iBlock);
 	}
 
 	void CFormattingAnalyzer::fp_RuleTokenSpacing()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
 			{
 				bool bClause
-					= m_Tokens.f_IsText(Token, "if")
-					|| m_Tokens.f_IsText(Token, "for")
-					|| m_Tokens.f_IsText(Token, "while")
-					|| m_Tokens.f_IsText(Token, "switch")
-					|| m_Tokens.f_IsText(Token, "catch")
+					= mp_Tokens.f_IsText(Token, "if")
+					|| mp_Tokens.f_IsText(Token, "for")
+					|| mp_Tokens.f_IsText(Token, "while")
+					|| mp_Tokens.f_IsText(Token, "switch")
+					|| mp_Tokens.f_IsText(Token, "catch")
 				;
 				if (!bClause)
 					continue;
 
-				auto iNext = fp_NextSignificant(i);
-				if (iNext < 0 || !m_Tokens.f_IsText(Tokens[umint(iNext)], "("))
+				auto iNext = fp_NextSignificant(iToken);
+				if (iNext < 0 || !mp_Tokens.f_IsText(Tokens[umint(iNext)], "("))
 					continue;
 
-				fp_EnsureSingleSpace(i, false, "clause-space", "a clause keyword and its parenthesis are separated by one space");
+				fp_EnsureSingleSpace(iToken, false, "clause-space", "a clause keyword and its parenthesis are separated by one space");
 
 				continue;
 			}
@@ -798,118 +802,118 @@ namespace NMib::NDevelop::NPrivate
 
 			// Two nested template argument lists close as one '>>', unless the layout puts
 			// the second closer on a line of its own.
-			if (m_Structure.f_IsAngleBracket(i) && m_Tokens.f_IsText(Token, ">"))
+			if (mp_Structure.f_IsAngleBracket(iToken) && mp_Tokens.f_IsText(Token, ">"))
 			{
-				auto iPrevious = fp_PreviousCode(i);
-				bool bBreak = fp_IsBreakGap(i);
-				if (!bBreak && iPrevious >= 0 && m_Structure.f_IsAngleBracket(umint(iPrevious)) && m_Tokens.f_IsText(Tokens[umint(iPrevious)], ">"))
-					fp_RemoveSpaceBefore(i, "angle-space", "nested template argument lists close as one '>>'");
+				auto iPrevious = fp_PreviousCode(iToken);
+				bool bBreak = fp_IsBreakGap(iToken);
+				if (!bBreak && iPrevious >= 0 && mp_Structure.f_IsAngleBracket(umint(iPrevious)) && mp_Tokens.f_IsText(Tokens[umint(iPrevious)], ">"))
+					fp_RemoveSpaceBefore(iToken, "angle-space", "nested template argument lists close as one '>>'");
 
 				continue;
 			}
 
 			// 'operator ,' names a function, and is spaced as every operator's name is.
-			auto iBeforeComma = m_Tokens.f_IsText(Token, ",") ? fp_PreviousCode(i) : aint(-1);
-			bool bOperatorName = iBeforeComma >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeComma)], "operator");
-			if (m_Tokens.f_IsText(Token, ",") && !bOperatorName)
+			auto iBeforeComma = mp_Tokens.f_IsText(Token, ",") ? fp_PreviousCode(iToken) : aint(-1);
+			bool bOperatorName = iBeforeComma >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBeforeComma)], "operator");
+			if (mp_Tokens.f_IsText(Token, ",") && !bOperatorName)
 			{
-				fp_RemoveSpaceBefore(i, "comma-space", "the comma operator has no space before it");
+				fp_RemoveSpaceBefore(iToken, "comma-space", "the comma operator has no space before it");
 
-				auto iNext = fp_NextSignificant(i);
+				auto iNext = fp_NextSignificant(iToken);
 				auto const *pNext = iNext >= 0 ? &Tokens[umint(iNext)] : nullptr;
 				if (pNext && !pNext->m_bMultiLine && pNext->m_Kind != ECodeTokenKind::mc_Newline)
 				{
 					// An empty element between two commas leaves the second its rule, no space before it: 'f(a,,b)'.
 					bool bClosing = fp_ClosesBehindComma(umint(iNext));
-					if (!bClosing && !m_Tokens.f_IsText(*pNext, ","))
-						fp_EnsureSingleSpace(i, false, "comma-space", "the comma operator has one space after it");
+					if (!bClosing && !mp_Tokens.f_IsText(*pNext, ","))
+						fp_EnsureSingleSpace(iToken, false, "comma-space", "the comma operator has one space after it");
 				}
 
 				continue;
 			}
 
-			if (!fg_IsSpacedOperator(m_Tokens, Token))
+			if (!fg_IsSpacedOperator(mp_Tokens, Token))
 				continue;
 
 			// An operator name is part of a declarator, not an expression operator.
-			auto iPrevious = fp_PreviousCode(i);
-			if (iPrevious >= 0 && m_Tokens.f_IsText(Tokens[umint(iPrevious)], "operator"))
+			auto iPrevious = fp_PreviousCode(iToken);
+			if (iPrevious >= 0 && mp_Tokens.f_IsText(Tokens[umint(iPrevious)], "operator"))
 				continue;
 
 			// A macro argument such as DMibExpect(Value, ==, 2) passes the operator as a
 			// bare token. Without both operands it is not in an infix position.
-			if (iPrevious < 0 || !fp_HasOperand(umint(iPrevious), true) || !fp_HasOperand(i, false))
+			if (iPrevious < 0 || !fp_HasOperand(umint(iPrevious), true) || !fp_HasOperand(iToken, false))
 				continue;
 
-			fp_EnsureSingleSpace(i, true, "operator-space", "binary operators have one space before them");
-			fp_EnsureSingleSpace(i, false, "operator-space", "binary operators have one space after them");
+			fp_EnsureSingleSpace(iToken, true, "operator-space", "binary operators have one space before them");
+			fp_EnsureSingleSpace(iToken, false, "operator-space", "binary operators have one space after them");
 		}
 
 		// Every other pair of tokens on one line takes the spelling the standard settles
 		// for it, where it settles one: a member access and a scope marker hug their
 		// operands, a keyword stands apart from its parenthesis. A gap the layout breaks
 		// is its own, and one holding anything but spaces is not on one line.
-		for (umint i = 1; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 1; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			if (!fg_IsCodeToken(Tokens[i]))
+			if (!fg_IsCodeToken(Tokens[iToken]))
 				continue;
 
-			auto iPrevious = fp_PreviousCode(i);
-			if (iPrevious < 0 || fp_IsBreakGap(i))
+			auto iPrevious = fp_PreviousCode(iToken);
+			if (iPrevious < 0 || fp_IsBreakGap(iToken))
 				continue;
 
 			bool bOneLine = true;
-			for (auto iGap = umint(iPrevious) + 1; iGap < i; ++iGap)
+			for (auto iGap = umint(iPrevious) + 1; iGap < iToken; ++iGap)
 				bOneLine &= Tokens[iGap].m_Kind == ECodeTokenKind::mc_Whitespace;
 
 			if (!bOneLine)
 				continue;
 
-			auto Spacing = fp_GetCanonicalSpacing(umint(iPrevious), i);
+			auto Spacing = fp_GetCanonicalSpacing(umint(iPrevious), iToken);
 
 			// A '/' kept tight between two names is tight on one side only once the layout breaks the other, where the
 			// next pass spaces it.
-			if (Spacing == ECodeSpacing::mc_Preserve && m_Tokens.f_IsText(Tokens[umint(iPrevious)], "/") && fp_IsBreakGap(umint(iPrevious)))
+			if (Spacing == ECodeSpacing::mc_Preserve && mp_Tokens.f_IsText(Tokens[umint(iPrevious)], "/") && fp_IsBreakGap(umint(iPrevious)))
 				Spacing = ECodeSpacing::mc_Space;
-			else if (Spacing == ECodeSpacing::mc_Preserve && m_Tokens.f_IsText(Tokens[i], "/"))
+			else if (Spacing == ECodeSpacing::mc_Preserve && mp_Tokens.f_IsText(Tokens[iToken], "/"))
 			{
-				auto iNext = fp_NextCode(i);
+				auto iNext = fp_NextCode(iToken);
 				if (iNext >= 0 && fp_IsBreakGap(umint(iNext)))
 					Spacing = ECodeSpacing::mc_Space;
 			}
 
 			if (Spacing == ECodeSpacing::mc_Space)
-				fp_EnsureSingleSpace(i, true, "token-space", "these tokens are written with one space between them");
+				fp_EnsureSingleSpace(iToken, true, "token-space", "these tokens are written with one space between them");
 			else if (Spacing == ECodeSpacing::mc_None)
-				fp_RemoveSpaceBefore(i, "token-space", "these tokens are written without a space between them");
+				fp_RemoveSpaceBefore(iToken, "token-space", "these tokens are written without a space between them");
 		}
 
 		// A comment trailing code stands one space behind it; columns aligned with tabs drift
 		// apart as soon as the code in front of them is respaced. A block comment on one line
 		// trails its code where it ends the line, or stands in front of the separator behind it.
-		for (umint i = 1; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 1; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			bool bTrailing = Token.m_Kind == ECodeTokenKind::mc_LineComment;
 			if (Token.m_Kind == ECodeTokenKind::mc_BlockComment && !Token.m_bMultiLine)
 			{
-				auto iAfter = i + 1;
+				auto iAfter = iToken + 1;
 				while (iAfter < Tokens.f_GetLen() && Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Whitespace)
 					++iAfter;
 
-				auto iBefore = fp_PreviousSignificant(i);
+				auto iBefore = fp_PreviousSignificant(iToken);
 				bool bPreviousCode = iBefore >= 0 && fg_IsCodeToken(Tokens[umint(iBefore)]);
-				bTrailing = bPreviousCode && (iAfter >= Tokens.f_GetLen() || Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Newline) && !fp_IsNameComment(i);
+				bTrailing = bPreviousCode && (iAfter >= Tokens.f_GetLen() || Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Newline) && !fp_IsNameComment(iToken);
 
 				// So does one behind an operand in front of its separator, which ends its line once the separator moves.
-				bTrailing = bTrailing || fp_IsTrailingBlockComment(i);
+				bTrailing = bTrailing || fp_IsTrailingBlockComment(iToken);
 			}
 
 			// A byte order mark in front is no code the comment trails: it leads the file's first line.
-			auto iLeading = fp_PreviousSignificant(i);
+			auto iLeading = fp_PreviousSignificant(iToken);
 			bool bBehindMark = iLeading >= 0 && Tokens[umint(iLeading)].m_Kind == ECodeTokenKind::mc_ByteOrderMark;
-			if (bTrailing && !bBehindMark && !fp_IsFirstOnLine(i))
-				fp_EnsureSingleSpace(i, true, "comment-space", "a trailing comment stands one space behind its code");
+			if (bTrailing && !bBehindMark && !fp_IsFirstOnLine(iToken))
+				fp_EnsureSingleSpace(iToken, true, "comment-space", "a trailing comment stands one space behind its code");
 		}
 	}
 
@@ -920,14 +924,14 @@ namespace NMib::NDevelop::NPrivate
 	// kind ends it. A line the alignment makes too long is left for the line length check to report.
 	void CFormattingAnalyzer::fp_AlignListColumns()
 	{
-		auto const *pStyle = m_Request.m_pStyle.f_Get();
-		if (!pStyle || (!pStyle->m_bAlignTrailingComments && !pStyle->m_bAlignEnumValues) || !m_Structure.f_IsComplete())
+		auto const *pStyle = mp_Request.m_pStyle.f_Get();
+		if (!pStyle || (!pStyle->m_bAlignTrailingComments && !pStyle->m_bAlignEnumValues) || !mp_Structure.f_IsComplete())
 			return;
 
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto const &Source = m_Request.m_Source;
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		auto const &Source = mp_Request.m_Source;
+		auto nTab = mp_Request.m_Settings.m_nTabWidth;
 
 		TCVector<CCodeFormattingEdit> Plan;
 		TCVector<umint> Sources;
@@ -1019,14 +1023,14 @@ namespace NMib::NDevelop::NPrivate
 
 		// The edits the other rules made, by offset. The alignment's own edits come later, each in a gap of its own.
 		TCVector<umint> EditsByOffset;
-		for (umint iEdit = 0; iEdit < m_Edits.f_GetLen(); ++iEdit)
+		for (umint iEdit = 0; iEdit < mp_Edits.f_GetLen(); ++iEdit)
 			EditsByOffset.f_Insert(iEdit);
 
 		EditsByOffset.f_Sort
 			(
 				[&](umint _iLeft, umint _iRight)
 				{
-					return m_Edits[_iLeft].m_iOffset <=> m_Edits[_iRight].m_iOffset;
+					return mp_Edits[_iLeft].m_iOffset <=> mp_Edits[_iRight].m_iOffset;
 				}
 			)
 		;
@@ -1042,20 +1046,20 @@ namespace NMib::NDevelop::NPrivate
 				while (iLow < iHigh)
 				{
 					auto iMiddle = iLow + (iHigh - iLow) / 2;
-					if (m_Edits[EditsByOffset[iMiddle]].m_iOffset < _iStart)
+					if (mp_Edits[EditsByOffset[iMiddle]].m_iOffset < _iStart)
 						iLow = iMiddle + 1;
 					else
 						iHigh = iMiddle;
 				}
 
-				for (auto iIndex = iLow; iIndex < EditsByOffset.f_GetLen() && m_Edits[EditsByOffset[iIndex]].m_iOffset <= _iEnd; ++iIndex)
+				for (auto iIndex = iLow; iIndex < EditsByOffset.f_GetLen() && mp_Edits[EditsByOffset[iIndex]].m_iOffset <= _iEnd; ++iIndex)
 				{
 					auto iEdit = EditsByOffset[iIndex];
-					if (m_Edits[iEdit].f_GetEnd() <= _iEnd)
-						m_EditDropped[iEdit] = 1;
+					if (mp_Edits[iEdit].f_GetEnd() <= _iEnd)
+						mp_EditDropped[iEdit] = 1;
 				}
 
-				if (!fg_IsSameText(_Padding, m_pSource + _iStart, _iEnd - _iStart))
+				if (!fg_IsSameText(_Padding, mp_pSource + _iStart, _iEnd - _iStart))
 					fp_AddEdit(_pRule, _iStart, _iEnd - _iStart, _Padding, _pExplanation);
 			}
 		;
@@ -1087,9 +1091,9 @@ namespace NMib::NDevelop::NPrivate
 							if (!_Entry.m_iAssign)
 								return false;
 
-							for (auto i = umint(fp_PreviousCode(_Entry.m_iAssign)) + 1; i < _Entry.m_iAssign; ++i)
+							for (auto iToken = umint(fp_PreviousCode(_Entry.m_iAssign)) + 1; iToken < _Entry.m_iAssign; ++iToken)
 							{
-								if (Tokens[i].m_Kind != ECodeTokenKind::mc_Whitespace)
+								if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_Whitespace)
 									return false;
 							}
 
@@ -1144,9 +1148,9 @@ namespace NMib::NDevelop::NPrivate
 						auto Prefix = Indent + fPadding(nIndent, _nColumn);
 						for (auto iLine : _Entry.m_Continuation)
 						{
-							auto iStart = m_Lines.f_GetLineStart(iLine);
+							auto iStart = mp_Lines.f_GetLineStart(iLine);
 							auto iIndent = iStart;
-							while (fg_IsSpaceOrTab(m_pSource[iIndent]))
+							while (fg_IsSpaceOrTab(mp_pSource[iIndent]))
 								++iIndent;
 
 							fReplaceGap(iStart, iIndent, Prefix, "comment-align", "a comment continued below the entry it trails aligns with it");
@@ -1248,23 +1252,23 @@ namespace NMib::NDevelop::NPrivate
 				// The comment lines below indented past the entry's own line continue its comment, as
 				// fp_AlignContinuations reads them.
 				auto nCodeIndent = fp_GetSourceLineIndent(iNext);
-				for (auto iLine = m_Lines.f_FindLine(Tokens[iNext].m_iOffset) + 1; iLine < m_Lines.f_GetLineCount(); ++iLine)
+				for (auto iLine = mp_Lines.f_FindLine(Tokens[iNext].m_iOffset) + 1; iLine < mp_Lines.f_GetLineCount(); ++iLine)
 				{
-					auto iStart = m_Lines.f_GetLineStart(iLine);
-					auto iEnd = m_Lines.f_GetLineContentEnd(iLine);
+					auto iStart = mp_Lines.f_GetLineStart(iLine);
+					auto iEnd = mp_Lines.f_GetLineContentEnd(iLine);
 					auto iIndent = iStart;
-					while (iIndent < iEnd && fg_IsSpaceOrTab(m_pSource[iIndent]))
+					while (iIndent < iEnd && fg_IsSpaceOrTab(mp_pSource[iIndent]))
 						++iIndent;
 
-					if (iIndent == iEnd || m_ProtectedStart[iLine])
+					if (iIndent == iEnd || mp_ProtectedStart[iLine])
 						break;
 
-					auto const &Comment = Tokens[m_Tokens.f_FindToken(iIndent)];
+					auto const &Comment = Tokens[mp_Tokens.f_FindToken(iIndent)];
 					umint nColumns = 0;
 					if (Comment.m_Kind != ECodeTokenKind::mc_LineComment || Comment.m_iOffset != iIndent)
 						break;
 
-					if (!fg_MeasureTextColumns(m_pSource + iStart, iIndent - iStart, nTab, nColumns) || nColumns <= nCodeIndent)
+					if (!fg_MeasureTextColumns(mp_pSource + iStart, iIndent - iStart, nTab, nColumns) || nColumns <= nCodeIndent)
 						break;
 
 					o_Entry.m_Continuation.f_Insert(iLine);
@@ -1284,15 +1288,15 @@ namespace NMib::NDevelop::NPrivate
 
 			// A typedef names the record its class key defines: 'typedef struct { ... } CFoo;'.
 			auto iKey = fp_SkipHeadIntroducers(Owner.m_iFirstToken);
-			if (m_Tokens.f_IsText(Tokens[iKey], "typedef"))
+			if (mp_Tokens.f_IsText(Tokens[iKey], "typedef"))
 			{
 				auto iDefined = fp_NextCode(iKey);
 				iKey = iDefined >= 0 ? umint(iDefined) : iKey;
 			}
 
 			auto const &Key = Tokens[iKey];
-			bool bEnum = m_Structure.f_IsEnumBody(iNode);
-			bool bRecord = m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "union") || Owner.m_bObjectiveCHeader;
+			bool bEnum = mp_Structure.f_IsEnumBody(iNode);
+			bool bRecord = mp_Tokens.f_IsText(Key, "struct") || mp_Tokens.f_IsText(Key, "class") || mp_Tokens.f_IsText(Key, "union") || Owner.m_bObjectiveCHeader;
 			if (!bEnum && !bRecord)
 				continue;
 
@@ -1317,30 +1321,30 @@ namespace NMib::NDevelop::NPrivate
 				if (iFirst < 0 || umint(iFirst) >= Body.m_iLastToken)
 					continue;
 
-				auto nLevel = m_TokenDepth[umint(iFirst)];
+				auto nLevel = mp_TokenDepth[umint(iFirst)];
 				auto iStart = umint(iFirst);
 				umint iAssign = 0;
-				for (auto i = umint(iFirst); i <= Body.m_iLastToken; ++i)
+				for (auto iToken = umint(iFirst); iToken <= Body.m_iLastToken; ++iToken)
 				{
-					auto const &Token = Tokens[i];
+					auto const &Token = Tokens[iToken];
 					if (!fg_IsCodeToken(Token))
 						continue;
 
-					bool bEnd = i == Body.m_iLastToken || (i > iStart && m_TokenDepth[i] == nLevel && m_Tokens.f_IsText(Token, ","));
+					bool bEnd = iToken == Body.m_iLastToken || (iToken > iStart && mp_TokenDepth[iToken] == nLevel && mp_Tokens.f_IsText(Token, ","));
 					if (bEnd)
 					{
-						auto iLast = fp_PreviousCode(i);
+						auto iLast = fp_PreviousCode(iToken);
 						if (iLast >= 0 && umint(iLast) >= iStart)
 							fAdd(iStart, umint(iLast), iAssign, true);
 
-						iStart = i;
+						iStart = iToken;
 						iAssign = 0;
 
 						continue;
 					}
 
-					if (!iAssign && m_TokenDepth[i] == nLevel && m_Tokens.f_IsText(Token, "="))
-						iAssign = i;
+					if (!iAssign && mp_TokenDepth[iToken] == nLevel && mp_Tokens.f_IsText(Token, "="))
+						iAssign = iToken;
 				}
 			}
 			else
@@ -1353,24 +1357,24 @@ namespace NMib::NDevelop::NPrivate
 
 					// A field is declared by one statement ending in its terminator with no parameter list in front of
 					// an initializer; a function, a type or an alias is an entry of another kind.
-					bool bField = m_Tokens.f_IsText(Tokens[Member.m_iLastToken], ";");
+					bool bField = mp_Tokens.f_IsText(Tokens[Member.m_iLastToken], ";");
 					for (auto pKeyword : {"using", "typedef", "template", "friend", "static_assert"})
-						bField &= !m_Tokens.f_IsText(Tokens[Member.m_iFirstToken], pKeyword);
+						bField &= !mp_Tokens.f_IsText(Tokens[Member.m_iFirstToken], pKeyword);
 
 					// A class key declares a field where a name follows the type it names and no body defines that type:
 					// 'struct ares_addr addr;', where 'struct CFoo;' and 'struct CFoo { ... };' declare a type.
-					auto nLevel = m_TokenDepth[Member.m_iFirstToken];
+					auto nLevel = mp_TokenDepth[Member.m_iFirstToken];
 					bool bClassKey = false;
 					for (auto pKeyword : {"struct", "class", "union", "enum"})
-						bClassKey |= m_Tokens.f_IsText(Tokens[Member.m_iFirstToken], pKeyword);
+						bClassKey |= mp_Tokens.f_IsText(Tokens[Member.m_iFirstToken], pKeyword);
 
 					if (bField && bClassKey)
 					{
 						aint iName = -1;
-						for (auto i = Member.m_iFirstToken + 1; i <= Member.m_iLastToken; ++i)
+						for (auto iToken = Member.m_iFirstToken + 1; iToken <= Member.m_iLastToken; ++iToken)
 						{
-							auto const &Token = Tokens[i];
-							if (m_Tokens.f_IsText(Token, "{"))
+							auto const &Token = Tokens[iToken];
+							if (mp_Tokens.f_IsText(Token, "{"))
 							{
 								iName = -1;
 
@@ -1378,11 +1382,11 @@ namespace NMib::NDevelop::NPrivate
 							}
 
 							bool bEnds
-								= m_TokenDepth[i] == nLevel
-								&& (m_Tokens.f_IsText(Token, ";") || m_Tokens.f_IsText(Token, "[") || m_Tokens.f_IsText(Token, "=") || m_Tokens.f_IsText(Token, ":"))
+								= mp_TokenDepth[iToken] == nLevel
+								&& (mp_Tokens.f_IsText(Token, ";") || mp_Tokens.f_IsText(Token, "[") || mp_Tokens.f_IsText(Token, "=") || mp_Tokens.f_IsText(Token, ":"))
 							;
 							if (bEnds && iName < 0)
-								iName = fp_PreviousCode(i);
+								iName = fp_PreviousCode(iToken);
 						}
 
 						auto iBeforeName = iName >= 0 ? fp_PreviousCode(umint(iName)) : aint(-1);
@@ -1390,19 +1394,19 @@ namespace NMib::NDevelop::NPrivate
 							= iName >= 0
 							&& Tokens[umint(iName)].m_Kind == ECodeTokenKind::mc_Identifier
 							&& iBeforeName > aint(Member.m_iFirstToken)
-							&& !m_Tokens.f_IsText(Tokens[umint(iBeforeName)], "::")
+							&& !mp_Tokens.f_IsText(Tokens[umint(iBeforeName)], "::")
 						;
 					}
 
-					for (auto i = Member.m_iFirstToken; bField && i <= Member.m_iLastToken; ++i)
+					for (auto iToken = Member.m_iFirstToken; bField && iToken <= Member.m_iLastToken; ++iToken)
 					{
-						if (m_TokenDepth[i] != nLevel)
+						if (mp_TokenDepth[iToken] != nLevel)
 							continue;
 
-						if (m_Tokens.f_IsText(Tokens[i], "="))
+						if (mp_Tokens.f_IsText(Tokens[iToken], "="))
 							break;
 
-						bField = !m_Tokens.f_IsText(Tokens[i], "(");
+						bField = !mp_Tokens.f_IsText(Tokens[iToken], "(");
 					}
 
 					fAdd(Member.m_iFirstToken, Member.m_iLastToken, 0, bField);
@@ -1429,31 +1433,31 @@ namespace NMib::NDevelop::NPrivate
 
 	void CFormattingAnalyzer::fp_RemoveFollowingBlankLines(umint _iToken, ch8 const *_pRule, ch8 const *_pExplanation)
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		umint i = _iToken + 1;
-		while (i < Tokens.f_GetLen() && Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace)
-			++i;
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		umint iToken = _iToken + 1;
+		while (iToken < Tokens.f_GetLen() && Tokens[iToken].m_Kind == ECodeTokenKind::mc_Whitespace)
+			++iToken;
 
-		if (i >= Tokens.f_GetLen() || Tokens[i].m_Kind != ECodeTokenKind::mc_Newline)
+		if (iToken >= Tokens.f_GetLen() || Tokens[iToken].m_Kind != ECodeTokenKind::mc_Newline)
 			return;
 
-		auto iBlankStart = Tokens[i].f_GetEnd();
+		auto iBlankStart = Tokens[iToken].f_GetEnd();
 		auto iBlankEnd = iBlankStart;
-		++i;
-		while (i < Tokens.f_GetLen())
+		++iToken;
+		while (iToken < Tokens.f_GetLen())
 		{
-			if (Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace)
+			if (Tokens[iToken].m_Kind == ECodeTokenKind::mc_Whitespace)
 			{
-				++i;
+				++iToken;
 
 				continue;
 			}
 
-			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Newline)
+			if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_Newline)
 				break;
 
-			iBlankEnd = Tokens[i].f_GetEnd();
-			++i;
+			iBlankEnd = Tokens[iToken].f_GetEnd();
+			++iToken;
 		}
 
 		if (iBlankEnd == iBlankStart)
@@ -1464,22 +1468,22 @@ namespace NMib::NDevelop::NPrivate
 
 	void CFormattingAnalyzer::fp_RuleBlankLines()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		m_BlankBefore.f_SetLen(Tokens.f_GetLen());
-		for (auto &bBlank : m_BlankBefore)
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		mp_BlankBefore.f_SetLen(Tokens.f_GetLen());
+		for (auto &bBlank : mp_BlankBefore)
 			bBlank = 0;
 
 		// One blank line separates what it separates; a second adds nothing. The first of a
 		// run stays, and the rules below take that one too where none belongs.
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Newline)
+			if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_Newline)
 				continue;
 
 			umint nNewlines = 1;
 			umint iKeepEnd = 0;
 			umint iRunEnd = 0;
-			umint iNext = i + 1;
+			umint iNext = iToken + 1;
 			for (; iNext < Tokens.f_GetLen(); ++iNext)
 			{
 				auto const &Next = Tokens[iNext];
@@ -1498,14 +1502,14 @@ namespace NMib::NDevelop::NPrivate
 			if (nNewlines > 2)
 				fp_AddEdit("blank-line", iKeepEnd, iRunEnd - iKeepEnd, {}, "one blank line separates, and a second adds nothing");
 
-			i = iNext - 1;
+			iToken = iNext - 1;
 		}
 
 		// A function's body, and a type's definition, is set off from what follows it by a
 		// blank line, unless that is the end of the scope it stands in. A directive behind
 		// the body belongs to a conditional whose lines are its own.
-		auto const &Nodes = m_Structure.f_GetNodes();
-		for (umint iNode = 0; m_Structure.f_IsComplete() && iNode < Nodes.f_GetLen(); ++iNode)
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		for (umint iNode = 0; mp_Structure.f_IsComplete() && iNode < Nodes.f_GetLen(); ++iNode)
 		{
 			auto const &Node = Nodes[iNode];
 			if (Node.m_Kind != ECodeNodeKind::mc_Statement || Node.m_iParent >= Nodes.f_GetLen())
@@ -1535,14 +1539,14 @@ namespace NMib::NDevelop::NPrivate
 			{
 				auto iKey = fp_SkipHeadIntroducers(Node.m_iFirstToken);
 				bool bTypedef = false;
-				if (auto iBehind = fp_NextCode(iKey); iBehind >= 0 && m_Tokens.f_IsText(Tokens[iKey], "typedef"))
+				if (auto iBehind = fp_NextCode(iKey); iBehind >= 0 && mp_Tokens.f_IsText(Tokens[iKey], "typedef"))
 				{
 					iKey = umint(iBehind);
 					bTypedef = true;
 				}
 
 				auto const &Key = Tokens[iKey];
-				bool bClassKey = m_Tokens.f_IsText(Key, "struct") || m_Tokens.f_IsText(Key, "class") || m_Tokens.f_IsText(Key, "union") || m_Tokens.f_IsText(Key, "enum");
+				bool bClassKey = mp_Tokens.f_IsText(Key, "struct") || mp_Tokens.f_IsText(Key, "class") || mp_Tokens.f_IsText(Key, "union") || mp_Tokens.f_IsText(Key, "enum");
 				for (auto iChild : Node.m_Children)
 				{
 					auto const &Child = Nodes[iChild];
@@ -1551,14 +1555,14 @@ namespace NMib::NDevelop::NPrivate
 
 					auto iBehindBody = fp_NextCode(Child.m_iLastToken);
 					bool bInitializer = !bTypedef && iBehindBody >= 0 && umint(iBehindBody) < Node.m_iLastToken;
-					for (auto i = iKey; i < Child.m_iFirstToken && !bInitializer; ++i)
-						bInitializer = m_TokenDepth[i] == m_TokenDepth[iKey] && m_Tokens.f_IsText(Tokens[i], "=");
+					for (auto iToken = iKey; iToken < Child.m_iFirstToken && !bInitializer; ++iToken)
+						bInitializer = mp_TokenDepth[iToken] == mp_TokenDepth[iKey] && mp_Tokens.f_IsText(Tokens[iToken], "=");
 
 					bTypeDefinition |= !bInitializer;
 				}
 			}
 
-			bool bFunction = bBody && iParameters != TCLimitsInt<umint>::mc_Max && fg_ClosesParameterList(m_Tokens, m_Structure, iParameters);
+			bool bFunction = bBody && iParameters != TCLimitsInt<umint>::mc_Max && fg_ClosesParameterList(mp_Tokens, mp_Structure, iParameters);
 			if (!bFunction && !bTypeDefinition)
 				continue;
 
@@ -1583,8 +1587,8 @@ namespace NMib::NDevelop::NPrivate
 				{
 					// The comment lines continuing the one trailing the body below it, written further in than its code, go with it.
 					umint nColumns = 0;
-					auto iStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Next.m_iOffset));
-					if (!fg_MeasureTextColumns(m_pSource + iStart, Next.m_iOffset - iStart, m_Request.m_Settings.m_nTabWidth, nColumns))
+					auto iStart = mp_Lines.f_GetLineStart(mp_Lines.f_FindLine(Next.m_iOffset));
+					if (!fg_MeasureTextColumns(mp_pSource + iStart, Next.m_iOffset - iStart, mp_Request.m_Settings.m_nTabWidth, nColumns))
 						break;
 
 					if (nColumns <= fp_GetTrailedCodeIndent(iTrailing) || fp_StartsBodyBehind(iTrailing, nColumns))
@@ -1599,7 +1603,7 @@ namespace NMib::NDevelop::NPrivate
 			// A brace behind the block says the block was no body: a requires expression's
 			// requirements end in one, with the function's body below them.
 			auto const *pNext = iNext < Tokens.f_GetLen() ? &Tokens[iNext] : nullptr;
-			bool bEndsScope = pNext && (m_Tokens.f_IsText(*pNext, "}") || m_Tokens.f_IsText(*pNext, "{"));
+			bool bEndsScope = pNext && (mp_Tokens.f_IsText(*pNext, "}") || mp_Tokens.f_IsText(*pNext, "{"));
 
 			// A conditional's directive belongs to lines of its own and a pragma to the code it
 			// brackets; any other, a '#define' behind a type included, is set off like code.
@@ -1619,7 +1623,7 @@ namespace NMib::NDevelop::NPrivate
 			if (Tokens[iNext].m_Kind == ECodeTokenKind::mc_Identifier)
 			{
 				auto iOpen = fp_NextCode(iNext);
-				bool bMacro = m_Tokens.f_HasRole(Tokens[iNext], ECodeNameRole::mc_Macro) && iOpen >= 0 && m_Tokens.f_IsText(Tokens[umint(iOpen)], "(");
+				bool bMacro = mp_Tokens.f_HasRole(Tokens[iNext], ECodeNameRole::mc_Macro) && iOpen >= 0 && mp_Tokens.f_IsText(Tokens[umint(iOpen)], "(");
 				if (bMacro)
 					continue;
 			}
@@ -1633,33 +1637,33 @@ namespace NMib::NDevelop::NPrivate
 					++iCode;
 
 				if (iCode < Tokens.f_GetLen() && fg_IsCodeToken(Tokens[iCode]))
-					m_BlankBefore[iCode] = 1;
+					mp_BlankBefore[iCode] = 1;
 
 				continue;
 			}
 
 			// A blank line would part a NOLINTNEXTLINE from the line it suppresses.
 			auto const &Suppressed = fp_GetSuppressedLines();
-			auto iLineAfter = m_Lines.f_FindLine(Tokens[iNewline].f_GetEnd());
+			auto iLineAfter = mp_Lines.f_FindLine(Tokens[iNewline].f_GetEnd());
 			if (iLineAfter < Suppressed.f_GetLen() && Suppressed[iLineAfter])
 				continue;
 
 			// The newline is written in the line ending the configuration asks for, which takes the line-ending rule's edit of it
 			// over rather than leaving the two to compete.
 			auto const &NewlineToken = Tokens[iNewline];
-			CStr Newline = m_Request.m_Settings.m_EndOfLine ? CStr(fg_GetTextLineEndingBytes(*m_Request.m_Settings.m_EndOfLine)) : m_Tokens.f_GetText(NewlineToken);
+			CStr Newline = mp_Request.m_Settings.m_EndOfLine ? CStr(fg_GetTextLineEndingBytes(*mp_Request.m_Settings.m_EndOfLine)) : mp_Tokens.f_GetText(NewlineToken);
 			CStr Rule = bFunction ? "function-blank-line" : "type-blank-line";
 			CStr Explanation = bFunction ? "a blank line follows a function's body" : "a blank line follows a type's definition";
 			bool bTaken = false;
-			for (umint iEdit = 0; iEdit < m_Edits.f_GetLen() && !bTaken; ++iEdit)
+			for (umint iEdit = 0; iEdit < mp_Edits.f_GetLen() && !bTaken; ++iEdit)
 			{
-				auto &Edit = m_Edits[iEdit];
+				auto &Edit = mp_Edits[iEdit];
 				if (Edit.m_Rule != "line-ending" || Edit.m_iOffset != NewlineToken.m_iOffset || Edit.m_nLength != NewlineToken.m_nLength)
 					continue;
 
 				Edit.m_Replacement = Newline + Newline;
 				Edit.m_Rule = Rule;
-				m_EditExplanations[iEdit] = Explanation;
+				mp_EditExplanations[iEdit] = Explanation;
 				bTaken = true;
 			}
 
@@ -1667,22 +1671,22 @@ namespace NMib::NDevelop::NPrivate
 				fp_AddEdit(Rule, NewlineToken.m_iOffset, NewlineToken.m_nLength, Newline + Newline, Explanation);
 		}
 
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			auto const &Token = Tokens[i];
-			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && m_Tokens.f_IsText(Token, "{"))
+			auto const &Token = Tokens[iToken];
+			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && mp_Tokens.f_IsText(Token, "{"))
 			{
-				fp_RemoveFollowingBlankLines(i, "block-blank-line", "no blank line follows an opening brace");
+				fp_RemoveFollowingBlankLines(iToken, "block-blank-line", "no blank line follows an opening brace");
 
 				continue;
 			}
 
 			// Nor does one stand in front of the closing brace, whatever ends the line above it.
-			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && m_Tokens.f_IsText(Token, "}"))
+			if (Token.m_Kind == ECodeTokenKind::mc_Punctuator && mp_Tokens.f_IsText(Token, "}"))
 			{
 				umint iFirstNewline = TCLimitsInt<umint>::mc_Max;
 				umint iLastNewline = TCLimitsInt<umint>::mc_Max;
-				for (umint iGap = i; iGap; --iGap)
+				for (umint iGap = iToken; iGap; --iGap)
 				{
 					auto const &Gap = Tokens[iGap - 1];
 					if (Gap.m_Kind == ECodeTokenKind::mc_Newline)
@@ -1711,15 +1715,15 @@ namespace NMib::NDevelop::NPrivate
 			// the section in front of it, and its members follow it at once. The first in a
 			// class stands under the opening brace, and one with a comment or a directive
 			// above it keeps the lines around that.
-			if (m_Tokens.f_IsText(Token, "public") || m_Tokens.f_IsText(Token, "private") || m_Tokens.f_IsText(Token, "protected"))
+			if (mp_Tokens.f_IsText(Token, "public") || mp_Tokens.f_IsText(Token, "private") || mp_Tokens.f_IsText(Token, "protected"))
 			{
-				auto iColon = fp_NextCode(i);
-				auto iBefore = fp_PreviousCode(i);
-				if (iColon < 0 || iBefore < 0 || !m_Tokens.f_IsText(Tokens[umint(iColon)], ":"))
+				auto iColon = fp_NextCode(iToken);
+				auto iBefore = fp_PreviousCode(iToken);
+				if (iColon < 0 || iBefore < 0 || !mp_Tokens.f_IsText(Tokens[umint(iColon)], ":"))
 					continue;
 
 				auto const &Before = Tokens[umint(iBefore)];
-				bool bLabel = m_Tokens.f_IsText(Before, "{") || m_Tokens.f_IsText(Before, "}") || m_Tokens.f_IsText(Before, ";") || m_Tokens.f_IsText(Before, ":");
+				bool bLabel = mp_Tokens.f_IsText(Before, "{") || mp_Tokens.f_IsText(Before, "}") || mp_Tokens.f_IsText(Before, ";") || mp_Tokens.f_IsText(Before, ":");
 				if (!bLabel)
 					continue;
 
@@ -1727,16 +1731,16 @@ namespace NMib::NDevelop::NPrivate
 
 				// One standing right behind another opens a section that holds nothing, and
 				// follows the label above it the way a member does.
-				auto iLabel = m_Tokens.f_IsText(Before, ":") ? fp_PreviousCode(umint(iBefore)) : aint(-1);
+				auto iLabel = mp_Tokens.f_IsText(Before, ":") ? fp_PreviousCode(umint(iBefore)) : aint(-1);
 				auto const *pLabel = iLabel >= 0 ? &Tokens[umint(iLabel)] : nullptr;
-				bool bAfterLabel = pLabel && (m_Tokens.f_IsText(*pLabel, "public") || m_Tokens.f_IsText(*pLabel, "private") || m_Tokens.f_IsText(*pLabel, "protected"));
-				if (m_Tokens.f_IsText(Before, "{") || bAfterLabel)
+				bool bAfterLabel = pLabel && (mp_Tokens.f_IsText(*pLabel, "public") || mp_Tokens.f_IsText(*pLabel, "private") || mp_Tokens.f_IsText(*pLabel, "protected"));
+				if (mp_Tokens.f_IsText(Before, "{") || bAfterLabel)
 					continue;
 
 				umint nNewlines = 0;
 				umint iNewline = 0;
 				bool bPlain = true;
-				for (umint iGap = umint(iBefore) + 1; iGap < i; ++iGap)
+				for (umint iGap = umint(iBefore) + 1; iGap < iToken; ++iGap)
 				{
 					if (Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline)
 					{
@@ -1754,34 +1758,34 @@ namespace NMib::NDevelop::NPrivate
 				// the layout, which writes the blank one with it.
 				if (!nNewlines)
 				{
-					m_BlankBefore[i] = 1;
+					mp_BlankBefore[iToken] = 1;
 
 					continue;
 				}
 
 				auto const &NewlineToken = Tokens[iNewline];
-				auto Newline = m_Tokens.f_GetText(NewlineToken);
+				auto Newline = mp_Tokens.f_GetText(NewlineToken);
 				fp_AddEdit("access-blank-line", NewlineToken.m_iOffset, NewlineToken.m_nLength, Newline + Newline, "a blank line stands in front of an access specifier");
 
 				continue;
 			}
 
-			bool bCase = m_Tokens.f_IsText(Token, "case");
-			if (!bCase && !m_Tokens.f_IsText(Token, "default"))
+			bool bCase = mp_Tokens.f_IsText(Token, "case");
+			if (!bCase && !mp_Tokens.f_IsText(Token, "default"))
 				continue;
 
 			// A label follows the end of the previous statement or the start of the switch body.
-			auto iPrevious = fp_PreviousCode(i);
+			auto iPrevious = fp_PreviousCode(iToken);
 			if (iPrevious < 0)
 				continue;
 
 			auto const &Previous = Tokens[umint(iPrevious)];
-			bool bLabelContext = m_Tokens.f_IsText(Previous, "{") || m_Tokens.f_IsText(Previous, "}") || m_Tokens.f_IsText(Previous, ";") || m_Tokens.f_IsText(Previous, ":");
+			bool bLabelContext = mp_Tokens.f_IsText(Previous, "{") || mp_Tokens.f_IsText(Previous, "}") || mp_Tokens.f_IsText(Previous, ";") || mp_Tokens.f_IsText(Previous, ":");
 			if (!bLabelContext)
 				continue;
 
 			// Scan to the label's colon. A conditional operator makes the colon ambiguous.
-			umint iColon = i + 1;
+			umint iColon = iToken + 1;
 			umint nDepth = 0;
 			bool bFound = false;
 			while (iColon < Tokens.f_GetLen())
@@ -1789,18 +1793,18 @@ namespace NMib::NDevelop::NPrivate
 				auto const &Candidate = Tokens[iColon];
 				if (Candidate.m_Kind == ECodeTokenKind::mc_Punctuator)
 				{
-					if (m_Tokens.f_IsText(Candidate, "(") || m_Tokens.f_IsText(Candidate, "[") || m_Tokens.f_IsText(Candidate, "{"))
+					if (mp_Tokens.f_IsText(Candidate, "(") || mp_Tokens.f_IsText(Candidate, "[") || mp_Tokens.f_IsText(Candidate, "{"))
 						++nDepth;
-					else if (m_Tokens.f_IsText(Candidate, ")") || m_Tokens.f_IsText(Candidate, "]") || m_Tokens.f_IsText(Candidate, "}"))
+					else if (mp_Tokens.f_IsText(Candidate, ")") || mp_Tokens.f_IsText(Candidate, "]") || mp_Tokens.f_IsText(Candidate, "}"))
 					{
 						if (!nDepth)
 							break;
 
 						--nDepth;
 					}
-					else if (!nDepth && (m_Tokens.f_IsText(Candidate, "?") || m_Tokens.f_IsText(Candidate, ";")))
+					else if (!nDepth && (mp_Tokens.f_IsText(Candidate, "?") || mp_Tokens.f_IsText(Candidate, ";")))
 						break;
-					else if (!nDepth && m_Tokens.f_IsText(Candidate, ":"))
+					else if (!nDepth && mp_Tokens.f_IsText(Candidate, ":"))
 					{
 						bFound = true;
 
@@ -1823,14 +1827,14 @@ namespace NMib::NDevelop::NPrivate
 	// can shorten it; what stands in front of it counts.
 	void CFormattingAnalyzer::fp_DiagnoseLineLength(NContainer::TCVector<CCodeFormattingEdit> const &_Edits)
 	{
-		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		auto nMaxColumns = mp_Request.m_Settings.m_nMaxColumns;
 		if (!nMaxColumns)
 			return;
 
-		auto Formatted = fg_ApplyCodeFormattingEdits(m_Request.m_Source, _Edits);
+		auto Formatted = fg_ApplyCodeFormattingEdits(mp_Request.m_Source, _Edits);
 		CTextLineMap Lines(Formatted);
 		auto pFormatted = Formatted.f_GetStr();
-		auto Language = m_Request.m_Settings.f_GetLanguage();
+		auto Language = mp_Request.m_Settings.f_GetLanguage();
 		TCUniquePointer<CCodeTokenStream> pStringTokens;
 		if (Language == ECodeLanguage::mc_BuildSystem)
 			pStringTokens = fg_Construct(Formatted, nullptr, Language);
@@ -1875,19 +1879,19 @@ namespace NMib::NDevelop::NPrivate
 			}
 
 			umint nColumns = 0;
-			bool bMeasured = fg_MeasureTextColumns(pFormatted + iStart, nLength, m_Request.m_Settings.m_nTabWidth, nColumns);
+			bool bMeasured = fg_MeasureTextColumns(pFormatted + iStart, nLength, mp_Request.m_Settings.m_nTabWidth, nColumns);
 			if (bMeasured && nColumns <= nMaxColumns)
 				continue;
 
 			umint nCodeColumns = 0;
-			if (pStringTokens && fg_MeasureTextColumns(fWithoutEndingString(iStart, nLength), m_Request.m_Settings.m_nTabWidth, nCodeColumns) && nCodeColumns <= nMaxColumns)
+			if (pStringTokens && fg_MeasureTextColumns(fWithoutEndingString(iStart, nLength), mp_Request.m_Settings.m_nTabWidth, nCodeColumns) && nCodeColumns <= nMaxColumns)
 				continue;
 
 			// Several lines of the result can come from one line of the source, which is
 			// then named once.
 			// A region the formatter is turned off for keeps its lines as written, long ones too.
-			auto iSource = m_Lines.f_FindLine(fg_MapOffsetToOriginal(ToOriginal, Lines.f_GetLineStart(iLine)));
-			if (iSource == iReported || !fp_IsLineSelected(iSource) || fp_IsFormatOff(m_Lines.f_GetLineStart(iSource), m_Lines.f_GetLine(iSource).m_nLength))
+			auto iSource = mp_Lines.f_FindLine(fg_MapOffsetToOriginal(ToOriginal, Lines.f_GetLineStart(iLine)));
+			if (iSource == iReported || !fp_IsLineSelected(iSource) || fp_IsFormatOff(mp_Lines.f_GetLineStart(iSource), mp_Lines.f_GetLine(iSource).m_nLength))
 				continue;
 
 			iReported = iSource;
@@ -1897,7 +1901,7 @@ namespace NMib::NDevelop::NPrivate
 				? "line length {} exceeds max_line_length = {}"_f << nColumns << nMaxColumns
 				: "line length overflows the column counter and exceeds max_line_length = {}"_f << nMaxColumns
 			;
-			fp_AddDiagnostic("line-length", m_Lines.f_GetLineStart(iSource), m_Lines.f_GetLine(iSource).m_nLength, Explanation, false);
+			fp_AddDiagnostic("line-length", mp_Lines.f_GetLineStart(iSource), mp_Lines.f_GetLine(iSource).m_nLength, Explanation, false);
 		}
 	}
 }

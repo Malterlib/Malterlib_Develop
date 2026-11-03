@@ -41,9 +41,9 @@ namespace NMib::NDevelop
 			umint nContinuation = Lead >= 0xF0 && Lead < 0xF8 ? 3 : Lead >= 0xE0 && Lead < 0xF0 ? 2 : Lead >= 0xC0 && Lead < 0xE0 ? 1 : 0;
 			uch32 CodePoint = nContinuation == 3 ? Lead & 0x07 : nContinuation == 2 ? Lead & 0x0F : Lead & 0x1F;
 			bool bValid = nContinuation && o_iByte + nContinuation < _nLength;
-			for (umint i = 1; bValid && i <= nContinuation; ++i)
+			for (umint iContinuation = 1; bValid && iContinuation <= nContinuation; ++iContinuation)
 			{
-				auto Continuation = uch8(_pText[o_iByte + i]);
+				auto Continuation = uch8(_pText[o_iByte + iContinuation]);
 				bValid = (Continuation & 0xC0) == 0x80;
 				CodePoint = (CodePoint << 6) | (Continuation & 0x3F);
 			}
@@ -66,10 +66,10 @@ namespace NMib::NDevelop
 			auto pOther = _Other.f_GetStr();
 			umint nOther = _Other.f_GetLen();
 
-			for (umint i = 0; i < _nLength && i < nOther; ++i)
+			for (umint iChar = 0; iChar < _nLength && iChar < nOther; ++iChar)
 			{
-				if (_pName[i] != pOther[i])
-					return uch8(_pName[i]) <=> uch8(pOther[i]);
+				if (_pName[iChar] != pOther[iChar])
+					return uch8(_pName[iChar]) <=> uch8(pOther[iChar]);
 			}
 
 			return _nLength <=> nOther;
@@ -230,9 +230,9 @@ namespace NMib::NDevelop
 				umint nEntry = Entry.f_GetLen();
 				bool bPattern = false;
 
-				for (umint i = 0; i < nEntry; ++i)
+				for (umint iChar = 0; iChar < nEntry; ++iChar)
 				{
-					auto Character = pEntry[i];
+					auto Character = pEntry[iChar];
 					bPattern |= Character == '.' || Character == '[' || Character == '*';
 				}
 
@@ -254,16 +254,16 @@ namespace NMib::NDevelop
 
 				auto pCodePoints = CodePoints.f_GetArray();
 				auto nCodePoints = CodePoints.f_GetLen();
-				for (umint i = 0; i < nCodePoints;)
+				for (umint iCodePoint = 0; iCodePoint < nCodePoints;)
 				{
-					auto Character = pCodePoints[i];
+					auto Character = pCodePoints[iCodePoint];
 					if (Character == '*')
 					{
 						if (Pattern.m_Atoms.f_IsEmpty() || Pattern.m_Atoms.f_GetLast().m_bRepeat)
 							DMibError("'*' repeats nothing in pattern '{}'"_f << Entry);
 
 						Pattern.m_Atoms.f_GetLast().m_bRepeat = true;
-						++i;
+						++iCodePoint;
 
 						continue;
 					}
@@ -272,7 +272,7 @@ namespace NMib::NDevelop
 					if (Character == '.')
 					{
 						Atom.m_bAny = true;
-						++i;
+						++iCodePoint;
 
 						continue;
 					}
@@ -280,34 +280,34 @@ namespace NMib::NDevelop
 					if (Character != '[')
 					{
 						Atom.m_Ranges.f_Insert(CRange{Character, Character});
-						++i;
+						++iCodePoint;
 
 						continue;
 					}
 
-					++i;
-					while (i < nCodePoints && pCodePoints[i] != ']')
+					++iCodePoint;
+					while (iCodePoint < nCodePoints && pCodePoints[iCodePoint] != ']')
 					{
-						auto Low = pCodePoints[i];
+						auto Low = pCodePoints[iCodePoint];
 						CRange Range{Low, Low};
-						if (i + 2 < nCodePoints && pCodePoints[i + 1] == '-' && pCodePoints[i + 2] != ']')
+						if (iCodePoint + 2 < nCodePoints && pCodePoints[iCodePoint + 1] == '-' && pCodePoints[iCodePoint + 2] != ']')
 						{
-							Range.m_High = pCodePoints[i + 2];
+							Range.m_High = pCodePoints[iCodePoint + 2];
 							if (Range.m_High < Low)
 								DMibError("Reversed range in pattern '{}'"_f << Entry);
 
-							i += 3;
+							iCodePoint += 3;
 						}
 						else
-							++i;
+							++iCodePoint;
 
 						Atom.m_Ranges.f_Insert(Range);
 					}
 
-					if (i >= nCodePoints || Atom.m_Ranges.f_IsEmpty())
+					if (iCodePoint >= nCodePoints || Atom.m_Ranges.f_IsEmpty())
 						DMibError("Unterminated or empty class in pattern '{}'"_f << Entry);
 
-					++i;
+					++iCodePoint;
 				}
 
 				// The matcher follows every place in the pattern at once as a set of bits.

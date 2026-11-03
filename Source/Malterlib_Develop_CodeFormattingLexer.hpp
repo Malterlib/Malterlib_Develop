@@ -22,14 +22,14 @@ namespace NMib::NDevelop
 		}
 
 		auto pToken = mp_Source.f_GetStr() + _Token.m_iOffset;
-		umint i = 0;
-		for (; i < _Token.m_nLength; ++i)
+		umint iChar = 0;
+		for (; iChar < _Token.m_nLength; ++iChar)
 		{
-			if (_pText[i] != pToken[i])
+			if (_pText[iChar] != pToken[iChar])
 				return false;
 		}
 
-		return _pText[i] == 0;
+		return _pText[iChar] == 0;
 	}
 
 	inline_always bool CCodeTokenStream::f_HasRole(CCodeToken const &_Token, ECodeNameRole _Role) const

@@ -12,7 +12,7 @@ namespace NMib::NDevelop::NPrivate
 	// specifier among its like and never a word of something else.
 	void CFormattingAnalyzer::fp_ConvertSpecifiers()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		constexpr ch8 const *c_pSpecifiers[] =
 			{
 				"inline"
@@ -26,35 +26,35 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			auto const &Token = Tokens[i];
-			if (Token.m_Kind != ECodeTokenKind::mc_Identifier || !m_Tokens.f_IsText(Token, "constexpr"))
+			auto const &Token = Tokens[iToken];
+			if (Token.m_Kind != ECodeTokenKind::mc_Identifier || !mp_Tokens.f_IsText(Token, "constexpr"))
 				continue;
 
 			// A macro's argument can paste to or stringize its words: 'DDeclare(constexpr static)' with 'S##_type'. An argument
 			// holding a brace it does not close leaves the structure incomplete, and the call unseen: 'DStr({ constexpr static)'.
-			if (!m_Structure.f_IsComplete() || fp_IsInMacroArgument(i))
+			if (!mp_Structure.f_IsComplete() || fp_IsInMacroArgument(iToken))
 				continue;
 
 			umint iStatic = TCLimitsInt<umint>::mc_Max;
 			bool bQualifierInFront = false;
-			for (auto iNext = fp_NextCode(i); iNext >= 0; iNext = fp_NextCode(umint(iNext)))
+			for (auto iNext = fp_NextCode(iToken); iNext >= 0; iNext = fp_NextCode(umint(iNext)))
 			{
 				auto const &Next = Tokens[umint(iNext)];
-				if (m_Tokens.f_IsText(Next, "static"))
+				if (mp_Tokens.f_IsText(Next, "static"))
 				{
 					iStatic = umint(iNext);
 
 					break;
 				}
 
-				bQualifierInFront |= m_Tokens.f_IsText(Next, "const") || m_Tokens.f_IsText(Next, "volatile");
+				bQualifierInFront |= mp_Tokens.f_IsText(Next, "const") || mp_Tokens.f_IsText(Next, "volatile");
 
 				// A qualifier among the specifiers is one the qualifier conversion moves behind the type in the same stage.
-				bool bSpecifier = m_Tokens.f_HasRole(Next, ECodeNameRole::mc_SpecifierMacro) || m_Tokens.f_IsText(Next, "const") || m_Tokens.f_IsText(Next, "volatile");
+				bool bSpecifier = mp_Tokens.f_HasRole(Next, ECodeNameRole::mc_SpecifierMacro) || mp_Tokens.f_IsText(Next, "const") || mp_Tokens.f_IsText(Next, "volatile");
 				for (auto pSpecifier : c_pSpecifiers)
-					bSpecifier |= m_Tokens.f_IsText(Next, pSpecifier);
+					bSpecifier |= mp_Tokens.f_IsText(Next, pSpecifier);
 
 				if (!bSpecifier)
 					break;
@@ -69,11 +69,11 @@ namespace NMib::NDevelop::NPrivate
 
 			// Qualifiers on both sides of the 'static' come together once it moves, which the qualifier conversion, refusing
 			// them apart, would then move in a pass of its own: 'constexpr const static volatile int'.
-			if (bQualifierInFront && (m_Tokens.f_IsText(Tokens[umint(iBehind)], "const") || m_Tokens.f_IsText(Tokens[umint(iBehind)], "volatile")))
+			if (bQualifierInFront && (mp_Tokens.f_IsText(Tokens[umint(iBehind)], "const") || mp_Tokens.f_IsText(Tokens[umint(iBehind)], "volatile")))
 				continue;
 
 			bool bPlain = true;
-			for (umint iGap = i; iGap < umint(iBehind) && bPlain; ++iGap)
+			for (umint iGap = iToken; iGap < umint(iBehind) && bPlain; ++iGap)
 			{
 				auto const &Gap = Tokens[iGap];
 				bPlain = fg_IsCodeToken(Gap) || Gap.m_Kind == ECodeTokenKind::mc_Whitespace || Gap.m_Kind == ECodeTokenKind::mc_Newline;
@@ -98,13 +98,13 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 			}
 
-			auto &Insert = m_Structural.f_Insert();
+			auto &Insert = mp_Structural.f_Insert();
 			Insert.m_iOffset = iInsert;
 			Insert.m_nLength = nInsert;
 			Insert.m_Replacement = "static constexpr";
 			Insert.m_Rule = "specifier-order";
 
-			auto &Remove = m_Structural.f_Insert();
+			auto &Remove = mp_Structural.f_Insert();
 			Remove.m_iOffset = iRemove;
 			Remove.m_nLength = nRemove;
 			Remove.m_Rule = "specifier-order";
@@ -124,8 +124,8 @@ namespace NMib::NDevelop::NPrivate
 	// pastes to it, 'DStr((const int))', is out of scope by decision.
 	bool CFormattingAnalyzer::fp_IsInMacroArgument(umint _iToken, bool _bDirect)
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 		auto fIsMacroCall = [&](umint _iOpen)
 			{
 				auto iCallee = fp_PreviousCode(_iOpen);
@@ -134,17 +134,17 @@ namespace NMib::NDevelop::NPrivate
 
 				auto const &Callee = Tokens[umint(iCallee)];
 				auto iInFront = fp_PreviousCode(umint(iCallee));
-				if (iInFront >= 0 && fg_NamesType(m_Tokens, Tokens[umint(iInFront)]))
+				if (iInFront >= 0 && fg_NamesType(mp_Tokens, Tokens[umint(iInFront)]))
 					return false;
 
-				return m_Tokens.f_HasRole(Callee, ECodeNameRole::mc_Macro) || m_Tokens.f_HasRole(Callee, ECodeNameRole::mc_SpecifierMacro);
+				return mp_Tokens.f_HasRole(Callee, ECodeNameRole::mc_Macro) || mp_Tokens.f_HasRole(Callee, ECodeNameRole::mc_SpecifierMacro);
 			}
 		;
 
-		for (auto iGroup = m_Structure.f_FindEnclosingNode(_iToken); iGroup && iGroup < Nodes.f_GetLen(); iGroup = Nodes[iGroup].m_iParent)
+		for (auto iGroup = mp_Structure.f_FindEnclosingNode(_iToken); iGroup && iGroup < Nodes.f_GetLen(); iGroup = Nodes[iGroup].m_iParent)
 		{
 			auto const &Group = Nodes[iGroup];
-			if (Group.m_Kind != ECodeNodeKind::mc_Group || !m_Tokens.f_IsText(Tokens[Group.m_iFirstToken], "("))
+			if (Group.m_Kind != ECodeNodeKind::mc_Group || !mp_Tokens.f_IsText(Tokens[Group.m_iFirstToken], "("))
 				continue;
 
 			// Back along the chain of calls in front, any of which can expand to the next one's name: 'DGet()()(const int)'.
@@ -154,10 +154,10 @@ namespace NMib::NDevelop::NPrivate
 					return true;
 
 				auto iBefore = fp_PreviousCode(iOpen);
-				if (iBefore < 0 || !m_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
+				if (iBefore < 0 || !mp_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
 					break;
 
-				auto iCall = m_Structure.f_FindNodeClosingAt(umint(iBefore));
+				auto iCall = mp_Structure.f_FindNodeClosingAt(umint(iBefore));
 				if (iCall >= Nodes.f_GetLen())
 					break;
 
@@ -178,10 +178,10 @@ namespace NMib::NDevelop::NPrivate
 	// layout can move one from between the two, so whether it stands there decides nothing.
 	void CFormattingAnalyzer::fp_ConvertEmptyStatements()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 
 		// A structure cut by a macro or a conditional can make a terminator a separator: 'DLoop;;)' with 'for (int i = 0'.
-		if (!m_Structure.f_IsComplete())
+		if (!mp_Structure.f_IsComplete())
 			return;
 
 		auto fIsSpace = [&](umint _iToken)
@@ -191,14 +191,14 @@ namespace NMib::NDevelop::NPrivate
 		;
 
 		umint iLastRemove = TCLimitsInt<umint>::mc_Max;
-		for (auto const &Node : m_Structure.f_GetNodes())
+		for (auto const &Node : mp_Structure.f_GetNodes())
 		{
-			if (Node.m_Kind != ECodeNodeKind::mc_Statement || Node.m_iFirstToken != Node.m_iLastToken || !m_Tokens.f_IsText(Tokens[Node.m_iFirstToken], ";"))
+			if (Node.m_Kind != ECodeNodeKind::mc_Statement || Node.m_iFirstToken != Node.m_iLastToken || !mp_Tokens.f_IsText(Tokens[Node.m_iFirstToken], ";"))
 				continue;
 
 			auto iEmpty = Node.m_iFirstToken;
 			auto iBefore = fp_PreviousCode(iEmpty);
-			if (iBefore < 0 || !m_Tokens.f_IsText(Tokens[umint(iBefore)], ";"))
+			if (iBefore < 0 || !mp_Tokens.f_IsText(Tokens[umint(iBefore)], ";"))
 				continue;
 
 			if (fp_IsInMacroArgument(iEmpty))
@@ -211,10 +211,10 @@ namespace NMib::NDevelop::NPrivate
 			// In a GNU statement expression the last statement gives its type, which a macro expanding to nothing can leave the
 			// empty one to be: '({ 1;; DEmpty })'.
 			auto iBlock = Node.m_iParent;
-			if (iBlock && iBlock < m_Structure.f_GetNodes().f_GetLen())
+			if (iBlock && iBlock < mp_Structure.f_GetNodes().f_GetLen())
 			{
-				auto iOpenBefore = fp_PreviousCode(m_Structure.f_GetNodes()[iBlock].m_iFirstToken);
-				if (iOpenBefore >= 0 && m_Tokens.f_IsText(Tokens[umint(iOpenBefore)], "("))
+				auto iOpenBefore = fp_PreviousCode(mp_Structure.f_GetNodes()[iBlock].m_iFirstToken);
+				if (iOpenBefore >= 0 && mp_Tokens.f_IsText(Tokens[umint(iOpenBefore)], "("))
 					continue;
 			}
 
@@ -232,7 +232,7 @@ namespace NMib::NDevelop::NPrivate
 
 			auto iClose = fp_NextCode(iEmpty);
 			auto iAfterClose = iClose >= 0 ? fp_NextCode(umint(iClose)) : aint(-1);
-			if (iAfterClose >= 0 && m_Tokens.f_IsText(Tokens[umint(iClose)], "}") && m_Tokens.f_IsText(Tokens[umint(iAfterClose)], ")"))
+			if (iAfterClose >= 0 && mp_Tokens.f_IsText(Tokens[umint(iClose)], "}") && mp_Tokens.f_IsText(Tokens[umint(iAfterClose)], ")"))
 				continue;
 
 			auto iRemove = Tokens[umint(iBefore)].f_GetEnd();
@@ -240,7 +240,7 @@ namespace NMib::NDevelop::NPrivate
 
 			auto fOverlapsLast = [&]
 				{
-					return iLastRemove != TCLimitsInt<umint>::mc_Max && iRemove < m_Structural[iLastRemove].f_GetEnd();
+					return iLastRemove != TCLimitsInt<umint>::mc_Max && iRemove < mp_Structural[iLastRemove].f_GetEnd();
 				}
 			;
 
@@ -285,13 +285,13 @@ namespace NMib::NDevelop::NPrivate
 
 			if (fOverlapsLast())
 			{
-				auto &Last = m_Structural[iLastRemove];
+				auto &Last = mp_Structural[iLastRemove];
 				Last.m_nLength = fg_Max(Last.f_GetEnd(), iRemoveEnd) - Last.m_iOffset;
 				continue;
 			}
 
-			iLastRemove = m_Structural.f_GetLen();
-			auto &Remove = m_Structural.f_Insert();
+			iLastRemove = mp_Structural.f_GetLen();
+			auto &Remove = mp_Structural.f_Insert();
 			Remove.m_iOffset = iRemove;
 			Remove.m_nLength = nRemove;
 			Remove.m_Rule = "empty-statement";
@@ -302,14 +302,14 @@ namespace NMib::NDevelop::NPrivate
 	// not move one there by itself.
 	void CFormattingAnalyzer::fp_ConvertEnumCommas()
 	{
-		if (!m_Structure.f_IsComplete())
+		if (!mp_Structure.f_IsComplete())
 			return;
 
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 		for (umint iNode = 0; iNode < Nodes.f_GetLen(); ++iNode)
 		{
-			if (m_Structure.f_IsEnumBody(iNode))
+			if (mp_Structure.f_IsEnumBody(iNode))
 				fp_ConvertSeparatedCommas(Nodes[iNode], true);
 		}
 
@@ -323,9 +323,9 @@ namespace NMib::NDevelop::NPrivate
 				if (_List.m_Bracket != ECodeBracket::mc_Brace)
 					return false;
 
-				for (auto i = _List.m_iFirstToken; i < _List.m_iLastToken; ++i)
+				for (auto iToken = _List.m_iFirstToken; iToken < _List.m_iLastToken; ++iToken)
 				{
-					if (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor)
+					if (Tokens[iToken].m_Kind == ECodeTokenKind::mc_Preprocessor)
 						return true;
 				}
 
@@ -354,18 +354,18 @@ namespace NMib::NDevelop::NPrivate
 			bool bTrailingComma
 				= Node.m_Bracket == ECodeBracket::mc_Brace
 				&& !Node.m_SplitPoints.f_IsEmpty()
-				&& m_Tokens.f_IsText(Tokens[Node.m_SplitPoints.f_GetLast()], ",")
+				&& mp_Tokens.f_IsText(Tokens[Node.m_SplitPoints.f_GetLast()], ",")
 				&& fp_NextCode(Node.m_SplitPoints.f_GetLast()) == aint(Node.m_iLastToken)
 			;
 			bool bMayOpen = bTrailingComma && fp_SpansLines(Node.m_iFirstToken, Node.m_iLastToken);
 
 			// A block in the list, a lambda's body, takes lines of its own, which opens the list around it.
-			for (auto i = Node.m_iFirstToken + 1; bTrailingComma && !bMayOpen && i < Node.m_iLastToken; ++i)
+			for (auto iToken = Node.m_iFirstToken + 1; bTrailingComma && !bMayOpen && iToken < Node.m_iLastToken; ++iToken)
 			{
-				if (!m_Tokens.f_IsText(Tokens[i], "{"))
+				if (!mp_Tokens.f_IsText(Tokens[iToken], "{"))
 					continue;
 
-				auto iOpened = m_Structure.f_FindNodeOpeningAt(i);
+				auto iOpened = mp_Structure.f_FindNodeOpeningAt(iToken);
 				bMayOpen = iOpened < Nodes.f_GetLen() && Nodes[iOpened].m_Kind == ECodeNodeKind::mc_Block;
 			}
 
@@ -376,7 +376,7 @@ namespace NMib::NDevelop::NPrivate
 					iStatement = Nodes[iStatement].m_iParent;
 
 				umint nJoined = 0;
-				auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+				auto nMaxColumns = mp_Request.m_Settings.m_nMaxColumns;
 				if (auto pTooLong = StatementTooLong.f_FindEqual(iStatement))
 					bMayOpen = *pTooLong;
 				else if (iStatement && iStatement < Nodes.f_GetLen() && nMaxColumns)
@@ -397,7 +397,7 @@ namespace NMib::NDevelop::NPrivate
 
 					// The continuation a lambda's body in an expression takes is not counted, so a list there within a few columns of
 					// the limit can keep its comma until the layout opens it, which the next pass then takes out.
-					auto nIndent = fg_Max(fp_GetSourceLineIndent(Statement.m_iFirstToken), nBlocks * m_Request.m_Settings.m_nTabWidth);
+					auto nIndent = fg_Max(fp_GetSourceLineIndent(Statement.m_iFirstToken), nBlocks * mp_Request.m_Settings.m_nTabWidth);
 					bMayOpen = !fp_MeasureJoinedWidth(iLineFirst, Statement.m_iLastToken, nJoined) || nIndent + nJoined > nMaxColumns;
 					StatementTooLong[iStatement] = bMayOpen;
 				}
@@ -411,11 +411,11 @@ namespace NMib::NDevelop::NPrivate
 				// One behind a block comment stays: taking it out would leave the comment ending the line, for the next
 				// pass to convert. A comment trailing the element goes with the element, and is converted with the comma gone.
 				bool bBehindComment = false;
-				for (auto i = iBefore >= 0 ? umint(iBefore) + 1 : iComma; i < iComma; ++i)
-					bBehindComment |= Tokens[i].m_Kind == ECodeTokenKind::mc_BlockComment && !fp_IsTrailingBlockComment(i);
+				for (auto iToken = iBefore >= 0 ? umint(iBefore) + 1 : iComma; iToken < iComma; ++iToken)
+					bBehindComment |= Tokens[iToken].m_Kind == ECodeTokenKind::mc_BlockComment && !fp_IsTrailingBlockComment(iToken);
 
 				bool bRemove
-					= m_Tokens.f_IsText(Tokens[iComma], ",")
+					= mp_Tokens.f_IsText(Tokens[iComma], ",")
 					&& fp_NextCode(iComma) == aint(Node.m_iLastToken)
 					&& iBefore > aint(Node.m_iFirstToken)
 					&& !bBehindComment
@@ -426,8 +426,8 @@ namespace NMib::NDevelop::NPrivate
 				{
 					auto iRemove = Tokens[iComma].m_iOffset;
 					bool bTight = true;
-					for (auto i = umint(iBefore) + 1; i < iComma && bTight; ++i)
-						bTight = Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace;
+					for (auto iToken = umint(iBefore) + 1; iToken < iComma && bTight; ++iToken)
+						bTight = Tokens[iToken].m_Kind == ECodeTokenKind::mc_Whitespace;
 
 					if (bTight)
 						iRemove = Tokens[umint(iBefore)].f_GetEnd();
@@ -435,7 +435,7 @@ namespace NMib::NDevelop::NPrivate
 					auto nRemove = Tokens[iComma].f_GetEnd() - iRemove;
 					if (!fp_IsFormatOff(iRemove, nRemove) && !fp_IsSuppressed(iRemove, nRemove) && fp_IsSelected(iRemove, nRemove))
 					{
-						auto &Remove = m_Structural.f_Insert();
+						auto &Remove = mp_Structural.f_Insert();
 						Remove.m_iOffset = iRemove;
 						Remove.m_nLength = nRemove;
 						Remove.m_Rule = "list-comma";
@@ -446,7 +446,7 @@ namespace NMib::NDevelop::NPrivate
 			for (auto iComma : Node.m_SplitPoints)
 			{
 				auto const &Comma = Tokens[iComma];
-				if (!m_Tokens.f_IsText(Comma, ","))
+				if (!mp_Tokens.f_IsText(Comma, ","))
 					continue;
 
 				// Block comments in front of the comment ending the line describe the element with it.
@@ -471,7 +471,7 @@ namespace NMib::NDevelop::NPrivate
 					while (iAfter < Tokens.f_GetLen() && Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Whitespace)
 						++iAfter;
 
-					bLineComment = iAfter < Tokens.f_GetLen() && Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Newline && !fg_TrailingLineComment(m_Tokens.f_GetText(*pComment)).f_IsEmpty();
+					bLineComment = iAfter < Tokens.f_GetLen() && Tokens[iAfter].m_Kind == ECodeTokenKind::mc_Newline && !fg_TrailingLineComment(mp_Tokens.f_GetText(*pComment)).f_IsEmpty();
 				}
 
 				CStr Lines;
@@ -489,12 +489,12 @@ namespace NMib::NDevelop::NPrivate
 				{
 					bCommentLines = true;
 					bool bAnyComment = false;
-					for (auto i = iComment + 1; i < umint(iNext) && bCommentLines; ++i)
+					for (auto iToken = iComment + 1; iToken < umint(iNext) && bCommentLines; ++iToken)
 					{
-						auto Kind = Tokens[i].m_Kind;
+						auto Kind = Tokens[iToken].m_Kind;
 						bool bComment = Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment;
 						bAnyComment |= bComment;
-						bCommentLines = Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || (bComment && fp_IsFirstOnLine(i) && fp_IsLastOnLine(i));
+						bCommentLines = Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || (bComment && fp_IsFirstOnLine(iToken) && fp_IsLastOnLine(iToken));
 					}
 
 					bCommentLines = bCommentLines && bAnyComment;
@@ -504,9 +504,9 @@ namespace NMib::NDevelop::NPrivate
 					continue;
 
 				bool bPlain = true;
-				for (auto i = iComment + 1; i < umint(iNext) && bPlain; ++i)
+				for (auto iToken = iComment + 1; iToken < umint(iNext) && bPlain; ++iToken)
 				{
-					auto Kind = Tokens[i].m_Kind;
+					auto Kind = Tokens[iToken].m_Kind;
 					bPlain
 						= Kind == ECodeTokenKind::mc_Whitespace
 						|| Kind == ECodeTokenKind::mc_Newline
@@ -521,8 +521,8 @@ namespace NMib::NDevelop::NPrivate
 
 				auto iRemove = Comma.m_iOffset;
 				bool bTight = true;
-				for (auto i = umint(iBefore) + 1; i < iComma && bTight; ++i)
-					bTight = Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace;
+				for (auto iToken = umint(iBefore) + 1; iToken < iComma && bTight; ++iToken)
+					bTight = Tokens[iToken].m_Kind == ECodeTokenKind::mc_Whitespace;
 
 				if (bTight)
 					iRemove = Tokens[umint(iBefore)].f_GetEnd();
@@ -539,12 +539,12 @@ namespace NMib::NDevelop::NPrivate
 				if (bLeft)
 					continue;
 
-				auto &Remove = m_Structural.f_Insert();
+				auto &Remove = mp_Structural.f_Insert();
 				Remove.m_iOffset = iRemove;
 				Remove.m_nLength = nRemove;
 				Remove.m_Rule = "list-comma";
 
-				auto &Insert = m_Structural.f_Insert();
+				auto &Insert = mp_Structural.f_Insert();
 				Insert.m_iOffset = iInsert;
 				Insert.m_nLength = 0;
 				Insert.m_Replacement = ", ";
@@ -553,19 +553,19 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		// A comment trailing a comma taken out trails the element in front of it.
-		m_CommaGone.f_Clear();
-		m_CommaGone.f_SetLen(Tokens.f_GetLen());
-		for (auto &bGone : m_CommaGone)
+		mp_CommaGone.f_Clear();
+		mp_CommaGone.f_SetLen(Tokens.f_GetLen());
+		for (auto &bGone : mp_CommaGone)
 			bGone = 0;
 
-		for (auto const &Edit : m_Structural)
+		for (auto const &Edit : mp_Structural)
 		{
 			if ((Edit.m_Rule != "list-comma" && Edit.m_Rule != "enum-comma") || !Edit.m_Replacement.f_IsEmpty() || !Edit.m_nLength)
 				continue;
 
-			auto iComma = m_Tokens.f_FindToken(Edit.f_GetEnd() - 1);
-			if (iComma < Tokens.f_GetLen() && m_Tokens.f_IsText(Tokens[iComma], ","))
-				m_CommaGone[iComma] = 1;
+			auto iComma = mp_Tokens.f_FindToken(Edit.f_GetEnd() - 1);
+			if (iComma < Tokens.f_GetLen() && mp_Tokens.f_IsText(Tokens[iComma], ","))
+				mp_CommaGone[iComma] = 1;
 		}
 	}
 
@@ -581,16 +581,16 @@ namespace NMib::NDevelop::NPrivate
 	// macro can expand to the name: 'DGetList()({1, 2,})'.
 	bool CFormattingAnalyzer::fp_MayBeMacroArgument(CCodeNode const &_Node) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 		for (auto iEnclosing = _Node.m_iParent; iEnclosing && iEnclosing < Nodes.f_GetLen(); iEnclosing = Nodes[iEnclosing].m_iParent)
 		{
 			auto const &Enclosing = Nodes[iEnclosing];
-			if (Enclosing.m_Kind != ECodeNodeKind::mc_Group || !m_Tokens.f_IsText(Tokens[Enclosing.m_iFirstToken], "("))
+			if (Enclosing.m_Kind != ECodeNodeKind::mc_Group || !mp_Tokens.f_IsText(Tokens[Enclosing.m_iFirstToken], "("))
 				continue;
 
 			auto iCallee = fp_PreviousCode(Enclosing.m_iFirstToken);
-			return iCallee >= 0 && (Tokens[umint(iCallee)].m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Tokens[umint(iCallee)], ")"));
+			return iCallee >= 0 && (Tokens[umint(iCallee)].m_Kind == ECodeTokenKind::mc_Identifier || mp_Tokens.f_IsText(Tokens[umint(iCallee)], ")"));
 		}
 
 		return false;
@@ -598,7 +598,7 @@ namespace NMib::NDevelop::NPrivate
 
 	void CFormattingAnalyzer::fp_ConvertSeparatedCommas(CCodeNode const &_Body, bool _bEnum)
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 
 		if (fp_MayBeMacroArgument(_Body) || fp_IsInMacroArgument(_Body.m_iFirstToken))
 			return;
@@ -644,27 +644,27 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		auto nLevel = m_TokenDepth[umint(iFirstCode)];
+		auto nLevel = mp_TokenDepth[umint(iFirstCode)];
 
 		// A body whose elements block comments name on their lines keeps its commas behind them: a comma moved in front
 		// would part the name from what it names. '/* SQLITE_OK */ "not an error",'.
-		for (auto i = _Body.m_iFirstToken + 1; i < _Body.m_iLastToken; ++i)
+		for (auto iToken = _Body.m_iFirstToken + 1; iToken < _Body.m_iLastToken; ++iToken)
 		{
-			auto const &Token = Tokens[i];
-			if (Token.m_Kind != ECodeTokenKind::mc_BlockComment || Token.m_bMultiLine || m_TokenDepth[i] != nLevel || !fp_IsFirstOnLine(i))
+			auto const &Token = Tokens[iToken];
+			if (Token.m_Kind != ECodeTokenKind::mc_BlockComment || Token.m_bMultiLine || mp_TokenDepth[iToken] != nLevel || !fp_IsFirstOnLine(iToken))
 				continue;
 
-			auto iNamed = fp_NextSignificant(i);
+			auto iNamed = fp_NextSignificant(iToken);
 			if (iNamed >= 0 && fg_IsCodeToken(Tokens[umint(iNamed)]))
 				return;
 		}
 
-		for (auto i = _Body.m_iFirstToken + 1; i < _Body.m_iLastToken; ++i)
+		for (auto iToken = _Body.m_iFirstToken + 1; iToken < _Body.m_iLastToken; ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			if (Token.m_Kind == ECodeTokenKind::mc_Preprocessor)
 			{
-				auto Keyword = fp_GetDirectiveKeyword(i);
+				auto Keyword = fp_GetDirectiveKeyword(iToken);
 				if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
 					Path.f_Insert(CBranch{nGroups++, 0});
 				else if (Keyword == "elif" || Keyword == "elifdef" || Keyword == "elifndef" || Keyword == "else")
@@ -693,12 +693,12 @@ namespace NMib::NDevelop::NPrivate
 			if (!fg_IsCodeToken(Token))
 				continue;
 
-			if (m_TokenDepth[i] == nLevel && m_Tokens.f_IsText(Token, ","))
+			if (mp_TokenDepth[iToken] == nLevel && mp_Tokens.f_IsText(Token, ","))
 			{
 				if (!bOpen && !bEndedByDirective)
 					return;
 
-				Commas.f_Insert(i);
+				Commas.f_Insert(iToken);
 				bOpen = false;
 				bEndedByDirective = false;
 
@@ -708,7 +708,7 @@ namespace NMib::NDevelop::NPrivate
 			if (bOpen)
 				continue;
 
-			if (m_TokenDepth[i] != nLevel || (_bEnum && Token.m_Kind != ECodeTokenKind::mc_Identifier))
+			if (mp_TokenDepth[iToken] != nLevel || (_bEnum && Token.m_Kind != ECodeTokenKind::mc_Identifier))
 				return;
 
 			// An enumerator a directive ended without a comma is complete only where it is the
@@ -718,7 +718,7 @@ namespace NMib::NDevelop::NPrivate
 
 			bEndedByDirective = false;
 
-			Enumerators.f_Insert(CEnumerator{i, Path});
+			Enumerators.f_Insert(CEnumerator{iToken, Path});
 			bOpen = true;
 		}
 
@@ -727,9 +727,9 @@ namespace NMib::NDevelop::NPrivate
 
 		auto fPlain = [&](umint _iFirst, umint _iEnd)
 			{
-				for (auto i = _iFirst; i < _iEnd; ++i)
+				for (auto iToken = _iFirst; iToken < _iEnd; ++iToken)
 				{
-					auto Kind = Tokens[i].m_Kind;
+					auto Kind = Tokens[iToken].m_Kind;
 					if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline)
 						return false;
 				}
@@ -773,7 +773,7 @@ namespace NMib::NDevelop::NPrivate
 				return;
 
 			auto iPrevious = fp_PreviousCode(Enumerator.m_iFirst);
-			bool bCommaInFront = iPrevious >= 0 && m_Tokens.f_IsText(Tokens[umint(iPrevious)], ",") && !fMoves(umint(iPrevious));
+			bool bCommaInFront = iPrevious >= 0 && mp_Tokens.f_IsText(Tokens[umint(iPrevious)], ",") && !fMoves(umint(iPrevious));
 			if (bCommaInFront && !bAlways)
 				return;
 
@@ -818,7 +818,7 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		for (auto &Edit : Edits)
-			m_Structural.f_Insert(fg_Move(Edit));
+			mp_Structural.f_Insert(fg_Move(Edit));
 	}
 
 	// Moves a qualifier written in front of its type behind it: 'const int &_Value' becomes
@@ -832,11 +832,11 @@ namespace NMib::NDevelop::NPrivate
 	// the layout would take out before the next pass; anything else stays.
 	void CFormattingAnalyzer::fp_ConvertQualifiers()
 	{
-		if (!m_Structure.f_IsComplete())
+		if (!mp_Structure.f_IsComplete())
 			return;
 
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 
 		TCVector<umint> GroupEnd;
 		GroupEnd.f_SetLen(Tokens.f_GetLen());
@@ -950,7 +950,7 @@ namespace NMib::NDevelop::NPrivate
 			{
 				for (auto pText : _pTexts)
 				{
-					if (m_Tokens.f_IsText(Tokens[_iToken], pText))
+					if (mp_Tokens.f_IsText(Tokens[_iToken], pText))
 						return true;
 				}
 
@@ -962,7 +962,7 @@ namespace NMib::NDevelop::NPrivate
 			{
 				auto const &Token = Tokens[_iToken];
 
-				return m_Tokens.f_IsText(Token, "const") || m_Tokens.f_IsText(Token, "volatile");
+				return mp_Tokens.f_IsText(Token, "const") || mp_Tokens.f_IsText(Token, "volatile");
 			}
 		;
 
@@ -974,42 +974,42 @@ namespace NMib::NDevelop::NPrivate
 		auto fFollowType = [&](umint _iFirst) -> umint
 			{
 				umint iEnd = c_NoType;
-				auto j = _iFirst;
-				if (m_Tokens.f_IsText(Tokens[j], "typename") || fIsAny(j, c_pElaborated))
+				auto iToken = _iFirst;
+				if (mp_Tokens.f_IsText(Tokens[iToken], "typename") || fIsAny(iToken, c_pElaborated))
 				{
-					auto iNext = fp_NextCode(j);
+					auto iNext = fp_NextCode(iToken);
 					if (iNext < 0)
 						return c_NoType;
 
-					j = umint(iNext);
+					iToken = umint(iNext);
 
 					// 'enum class' and 'enum struct' name a scoped enumeration.
-					if (fIsAny(j, c_pElaborated))
+					if (fIsAny(iToken, c_pElaborated))
 					{
-						iNext = fp_NextCode(j);
+						iNext = fp_NextCode(iToken);
 						if (iNext < 0)
 							return c_NoType;
 
-						j = umint(iNext);
+						iToken = umint(iNext);
 					}
 				}
 
-				if (m_Tokens.f_IsText(Tokens[j], "auto"))
-					iEnd = j;
-				else if (m_Tokens.f_IsText(Tokens[j], "decltype"))
+				if (mp_Tokens.f_IsText(Tokens[iToken], "auto"))
+					iEnd = iToken;
+				else if (mp_Tokens.f_IsText(Tokens[iToken], "decltype"))
 				{
-					auto iOpen = fp_NextCode(j);
-					if (iOpen < 0 || !m_Tokens.f_IsText(Tokens[umint(iOpen)], "(") || GroupEnd[umint(iOpen)] == TCLimitsInt<umint>::mc_Max)
+					auto iOpen = fp_NextCode(iToken);
+					if (iOpen < 0 || !mp_Tokens.f_IsText(Tokens[umint(iOpen)], "(") || GroupEnd[umint(iOpen)] == TCLimitsInt<umint>::mc_Max)
 						return c_NoType;
 
 					iEnd = GroupEnd[umint(iOpen)];
 
 					// A name qualified by the type it gives goes on past it: 'decltype(c)::template X<int>'.
 					auto iBehind = fp_NextCode(iEnd);
-					if (iBehind >= 0 && m_Tokens.f_IsText(Tokens[umint(iBehind)], "::"))
+					if (iBehind >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBehind)], "::"))
 						return c_NoType;
 				}
-				else if (fIsAny(j, c_pFundamental))
+				else if (fIsAny(iToken, c_pFundamental))
 				{
 					// In C 'bool' combines with no other word, and behind one it is a name until C23 reserves it: 'const int bool'.
 					auto fContinuesFundamental = [&](aint _iToken)
@@ -1018,11 +1018,11 @@ namespace NMib::NDevelop::NPrivate
 								return false;
 
 							auto const &Token = Tokens[umint(_iToken)];
-							return !(m_Tokens.f_IsC(Token) && m_Tokens.f_IsText(Token, "bool"));
+							return !(mp_Tokens.f_IsC(Token) && mp_Tokens.f_IsText(Token, "bool"));
 						}
 					;
 
-					iEnd = j;
+					iEnd = iToken;
 					for (auto iNext = fp_NextCode(iEnd); fContinuesFundamental(iNext); iNext = fp_NextCode(iEnd))
 						iEnd = umint(iNext);
 
@@ -1038,19 +1038,19 @@ namespace NMib::NDevelop::NPrivate
 				else
 				{
 					// A name, qualified and with template arguments where it has them.
-					if (m_Tokens.f_IsText(Tokens[j], "::"))
+					if (mp_Tokens.f_IsText(Tokens[iToken], "::"))
 					{
-						auto iNext = fp_NextCode(j);
+						auto iNext = fp_NextCode(iToken);
 						if (iNext < 0)
 							return c_NoType;
 
-						j = umint(iNext);
+						iToken = umint(iNext);
 					}
 
 					bool bNamed = false;
 					while (true)
 					{
-						bool bName = Tokens[j].m_Kind == ECodeTokenKind::mc_Identifier && !fIsQualifier(j) && !fIsAny(j, c_pNoType) && !fIsAny(j, c_pSpecifiers);
+						bool bName = Tokens[iToken].m_Kind == ECodeTokenKind::mc_Identifier && !fIsQualifier(iToken) && !fIsAny(iToken, c_pNoType) && !fIsAny(iToken, c_pSpecifiers);
 						if (!bName)
 						{
 							bNamed = false;
@@ -1059,12 +1059,12 @@ namespace NMib::NDevelop::NPrivate
 						}
 
 						bNamed = true;
-						iEnd = j;
+						iEnd = iToken;
 						auto iNext = fp_NextCode(iEnd);
-						if (iNext >= 0 && m_Tokens.f_IsText(Tokens[umint(iNext)], "<"))
+						if (iNext >= 0 && mp_Tokens.f_IsText(Tokens[umint(iNext)], "<"))
 						{
 							// A '<' the structure did not resolve is as much a comparison.
-							if (!m_Structure.f_IsAngleBracket(umint(iNext)) || GroupEnd[umint(iNext)] == TCLimitsInt<umint>::mc_Max)
+							if (!mp_Structure.f_IsAngleBracket(umint(iNext)) || GroupEnd[umint(iNext)] == TCLimitsInt<umint>::mc_Max)
 							{
 								bNamed = false;
 
@@ -1075,11 +1075,11 @@ namespace NMib::NDevelop::NPrivate
 							iNext = fp_NextCode(iEnd);
 						}
 
-						if (iNext < 0 || !m_Tokens.f_IsText(Tokens[umint(iNext)], "::"))
+						if (iNext < 0 || !mp_Tokens.f_IsText(Tokens[umint(iNext)], "::"))
 							break;
 
 						iNext = fp_NextCode(umint(iNext));
-						if (iNext >= 0 && m_Tokens.f_IsText(Tokens[umint(iNext)], "template"))
+						if (iNext >= 0 && mp_Tokens.f_IsText(Tokens[umint(iNext)], "template"))
 							iNext = fp_NextCode(umint(iNext));
 
 						if (iNext < 0)
@@ -1089,7 +1089,7 @@ namespace NMib::NDevelop::NPrivate
 							break;
 						}
 
-						j = umint(iNext);
+						iToken = umint(iNext);
 					}
 
 					if (!bNamed)
@@ -1103,13 +1103,13 @@ namespace NMib::NDevelop::NPrivate
 						= iAfter >= 0
 						&&
 						(
-							m_Tokens.f_IsText(Tokens[umint(iAfter)], "(")
-							|| m_Tokens.f_IsText(Tokens[umint(iAfter)], "{")
-							|| m_Tokens.f_IsText(Tokens[umint(iAfter)], ":")
-							|| m_Tokens.f_IsText(Tokens[umint(iAfter)], "auto")
-							|| m_Tokens.f_IsText(Tokens[umint(iAfter)], "decltype")
-							|| m_Tokens.f_IsText(Tokens[umint(iAfter)], "final")
-							|| m_Tokens.f_IsText(Tokens[umint(iAfter)], "sealed")
+							mp_Tokens.f_IsText(Tokens[umint(iAfter)], "(")
+							|| mp_Tokens.f_IsText(Tokens[umint(iAfter)], "{")
+							|| mp_Tokens.f_IsText(Tokens[umint(iAfter)], ":")
+							|| mp_Tokens.f_IsText(Tokens[umint(iAfter)], "auto")
+							|| mp_Tokens.f_IsText(Tokens[umint(iAfter)], "decltype")
+							|| mp_Tokens.f_IsText(Tokens[umint(iAfter)], "final")
+							|| mp_Tokens.f_IsText(Tokens[umint(iAfter)], "sealed")
 						)
 					;
 					if (bGoesOn)
@@ -1130,48 +1130,48 @@ namespace NMib::NDevelop::NPrivate
 
 				auto const &Token = Tokens[umint(_iToken)];
 
-				return m_Tokens.f_IsText(Token, "*")
-					|| m_Tokens.f_IsText(Token, "&")
-					|| m_Tokens.f_IsText(Token, "&&")
+				return mp_Tokens.f_IsText(Token, "*")
+					|| mp_Tokens.f_IsText(Token, "&")
+					|| mp_Tokens.f_IsText(Token, "&&")
 					||
 					(
 						Token.m_Kind == ECodeTokenKind::mc_Identifier
 						&& !fIsAny(umint(_iToken), c_pNoType)
 						&& !fIsAny(umint(_iToken), c_pDeclaratorSuffixes)
-						&& !m_Tokens.f_HasRole(Token, ECodeNameRole::mc_Macro)
-						&& !m_Tokens.f_HasRole(Token, ECodeNameRole::mc_SpecifierMacro)
+						&& !mp_Tokens.f_HasRole(Token, ECodeNameRole::mc_Macro)
+						&& !mp_Tokens.f_HasRole(Token, ECodeNameRole::mc_SpecifierMacro)
 					)
 				;
 			}
 		;
 
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Identifier || !fIsQualifier(i))
+			if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_Identifier || !fIsQualifier(iToken))
 				continue;
 
 			// A run of qualifiers moves as one, from its first.
-			auto iBefore = fp_PreviousCode(i);
+			auto iBefore = fp_PreviousCode(iToken);
 			if (iBefore >= 0 && fIsQualifier(umint(iBefore)))
 				continue;
 
 			// Behind a parameter list it qualifies the member function, whatever follows it: 'f() const DNoexcept'. Behind an
 			// alignment or an attribute's parenthesis it leads the type, as behind an attribute: 'alignas(8) const int x'.
 			bool bBehindAttribute = false;
-			if (iBefore >= 0 && m_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
+			if (iBefore >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBefore)], ")"))
 			{
 				// The attributes stand in a run, which the qualifier leads a type behind only where nothing in front of the run
 				// is a type or a declarator it could qualify already: 'int * __attribute__((unused)) const p' and
 				// 'int __attribute__((unused)) const x' keep their qualifier.
 				auto iInFront = aint(iBefore);
-				while (iInFront >= 0 && (m_Tokens.f_IsText(Tokens[umint(iInFront)], ")") || m_Tokens.f_IsText(Tokens[umint(iInFront)], "]")))
+				while (iInFront >= 0 && (mp_Tokens.f_IsText(Tokens[umint(iInFront)], ")") || mp_Tokens.f_IsText(Tokens[umint(iInFront)], "]")))
 				{
 					// A standard attribute in the run is stepped over the same way: 'int *[[]] __attribute__((unused)) const p'.
-					if (m_Tokens.f_IsText(Tokens[umint(iInFront)], "]"))
+					if (mp_Tokens.f_IsText(Tokens[umint(iInFront)], "]"))
 					{
-						auto iOuter = m_Structure.f_FindNodeClosingAt(umint(iInFront));
+						auto iOuter = mp_Structure.f_FindNodeClosingAt(umint(iInFront));
 						auto iInner = iOuter < Nodes.f_GetLen() ? fp_NextCode(Nodes[iOuter].m_iFirstToken) : aint(-1);
-						if (iInner < 0 || !m_Tokens.f_IsText(Tokens[umint(iInner)], "["))
+						if (iInner < 0 || !mp_Tokens.f_IsText(Tokens[umint(iInner)], "["))
 							break;
 
 						bBehindAttribute = true;
@@ -1180,11 +1180,11 @@ namespace NMib::NDevelop::NPrivate
 						continue;
 					}
 
-					auto iGroup = m_Structure.f_FindNodeClosingAt(umint(iInFront));
+					auto iGroup = mp_Structure.f_FindNodeClosingAt(umint(iInFront));
 					auto iKeyword = iGroup < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iGroup].m_iFirstToken) : aint(-1);
 					bool bAttribute = false;
 					for (auto pAttribute : {"alignas", "_Alignas", "__declspec", "__attribute__", "__attribute"})
-						bAttribute = bAttribute || (iKeyword >= 0 && m_Tokens.f_IsText(Tokens[umint(iKeyword)], pAttribute));
+						bAttribute = bAttribute || (iKeyword >= 0 && mp_Tokens.f_IsText(Tokens[umint(iKeyword)], pAttribute));
 
 					if (!bAttribute)
 						break;
@@ -1194,25 +1194,25 @@ namespace NMib::NDevelop::NPrivate
 				}
 
 				bool bAtStart = iInFront < 0 || fIsAny(umint(iInFront), c_pOpeners) || fIsAny(umint(iInFront), c_pSpecifiers);
-				if (!bBehindAttribute || (iInFront >= 0 && m_Tokens.f_IsText(Tokens[umint(iInFront)], ")")) || !bAtStart)
+				if (!bBehindAttribute || (iInFront >= 0 && mp_Tokens.f_IsText(Tokens[umint(iInFront)], ")")) || !bAtStart)
 					continue;
 			}
 
 			// A C array parameter's bracket qualifies the pointer it stands for, and its bound is no type: 'int a[static const N]'.
-			auto iEnclosing = m_Structure.f_FindEnclosingNode(i);
-			if (iEnclosing && iEnclosing < m_Structure.f_GetNodes().f_GetLen())
+			auto iEnclosing = mp_Structure.f_FindEnclosingNode(iToken);
+			if (iEnclosing && iEnclosing < mp_Structure.f_GetNodes().f_GetLen())
 			{
-				auto const &Enclosing = m_Structure.f_GetNodes()[iEnclosing];
-				if (Enclosing.m_Kind == ECodeNodeKind::mc_Group && m_Tokens.f_IsText(Tokens[Enclosing.m_iFirstToken], "["))
+				auto const &Enclosing = mp_Structure.f_GetNodes()[iEnclosing];
+				if (Enclosing.m_Kind == ECodeNodeKind::mc_Group && mp_Tokens.f_IsText(Tokens[Enclosing.m_iFirstToken], "["))
 					continue;
 			}
 
 			// A macro's argument is text the macro places, which can paste to it or name no type: 'DType(const int)' with
 			// 'T##32', 'DDeclare(const a)'.
-			if (fp_IsInMacroArgument(i, true))
+			if (fp_IsInMacroArgument(iToken, true))
 				continue;
 
-			umint iRunLast = i;
+			umint iRunLast = iToken;
 			for (auto iNext = fp_NextCode(iRunLast); iNext >= 0 && fIsQualifier(umint(iNext)); iNext = fp_NextCode(iRunLast))
 				iRunLast = umint(iNext);
 
@@ -1225,14 +1225,14 @@ namespace NMib::NDevelop::NPrivate
 
 			// Attributes behind a declarator's '*' or '&' belong to it, and so does the qualifier behind them:
 			// 'int *[[]] [[]] const p'.
-			if (bLeads && iBeforeSpecifiers >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeSpecifiers)], "]"))
+			if (bLeads && iBeforeSpecifiers >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBeforeSpecifiers)], "]"))
 			{
 				constexpr ch8 const *c_pDeclarators[] = {"*", "&", "&&"};
-				auto const &Nodes = m_Structure.f_GetNodes();
+				auto const &Nodes = mp_Structure.f_GetNodes();
 				auto iBeforeOpen = aint(iBeforeSpecifiers);
-				while (iBeforeOpen >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeOpen)], "]"))
+				while (iBeforeOpen >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBeforeOpen)], "]"))
 				{
-					auto iClosed = m_Structure.f_FindNodeClosingAt(umint(iBeforeOpen));
+					auto iClosed = mp_Structure.f_FindNodeClosingAt(umint(iBeforeOpen));
 					iBeforeOpen = iClosed < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iClosed].m_iFirstToken) : aint(-1);
 				}
 
@@ -1244,13 +1244,13 @@ namespace NMib::NDevelop::NPrivate
 
 			// A brace in front can close the type the declaration defines, which the qualifier then stands behind:
 			// 'struct S { int n; } const x'.
-			if (iBeforeSpecifiers >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeSpecifiers)], "}"))
+			if (iBeforeSpecifiers >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBeforeSpecifiers)], "}"))
 			{
-				auto iClosed = m_Structure.f_FindNodeClosingAt(umint(iBeforeSpecifiers));
-				auto const &Nodes = m_Structure.f_GetNodes();
+				auto iClosed = mp_Structure.f_FindNodeClosingAt(umint(iBeforeSpecifiers));
+				auto const &Nodes = mp_Structure.f_GetNodes();
 				auto iStatement = iClosed < Nodes.f_GetLen() ? Nodes[iClosed].m_iParent : Nodes.f_GetLen();
 				bool bDefinition = false;
-				if (iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_Kind == ECodeNodeKind::mc_Statement && Nodes[iStatement].m_iLastToken >= i)
+				if (iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_Kind == ECodeNodeKind::mc_Statement && Nodes[iStatement].m_iLastToken >= iToken)
 				{
 					for (auto iKey = Nodes[iStatement].m_iFirstToken; iKey < Nodes[iClosed].m_iFirstToken && !bDefinition; ++iKey)
 						bDefinition = fIsAny(iKey, c_pElaborated);
@@ -1266,7 +1266,7 @@ namespace NMib::NDevelop::NPrivate
 			{
 				auto const &Before = Tokens[umint(iBefore)];
 				bool bAmbiguous
-					= Before.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Before, ")") || (m_Structure.f_IsAngleBracket(umint(iBefore)) && m_Tokens.f_IsText(Before, ">"))
+					= Before.m_Kind == ECodeTokenKind::mc_Identifier || mp_Tokens.f_IsText(Before, ")") || (mp_Structure.f_IsAngleBracket(umint(iBefore)) && mp_Tokens.f_IsText(Before, ">"))
 				;
 				if (!bAmbiguous)
 					continue;
@@ -1294,8 +1294,8 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 
 			// A pack index goes on with the type, which the qualifier cannot stand inside of: 'const Ts...[0]'.
-			auto iIndex = iAfter >= 0 && m_Tokens.f_IsText(Tokens[umint(iAfter)], "...") ? fp_NextCode(umint(iAfter)) : aint(-1);
-			if (iIndex >= 0 && m_Tokens.f_IsText(Tokens[umint(iIndex)], "["))
+			auto iIndex = iAfter >= 0 && mp_Tokens.f_IsText(Tokens[umint(iAfter)], "...") ? fp_NextCode(umint(iAfter)) : aint(-1);
+			if (iIndex >= 0 && mp_Tokens.f_IsText(Tokens[umint(iIndex)], "["))
 				continue;
 
 			// Only a declarator or a name behind the type says the qualifier led it.
@@ -1308,10 +1308,10 @@ namespace NMib::NDevelop::NPrivate
 				= iAfter >= 0
 				&&
 				(
-					m_Tokens.f_IsText(Tokens[umint(iAfter)], "=")
-					|| m_Tokens.f_IsText(Tokens[umint(iAfter)], ";")
-					|| m_Tokens.f_IsText(Tokens[umint(iAfter)], "[")
-					|| (m_Tokens.f_IsC(Tokens[umint(iAfter)]) && m_Tokens.f_IsText(Tokens[umint(iAfter)], ","))
+					mp_Tokens.f_IsText(Tokens[umint(iAfter)], "=")
+					|| mp_Tokens.f_IsText(Tokens[umint(iAfter)], ";")
+					|| mp_Tokens.f_IsText(Tokens[umint(iAfter)], "[")
+					|| (mp_Tokens.f_IsC(Tokens[umint(iAfter)]) && mp_Tokens.f_IsText(Tokens[umint(iAfter)], ","))
 				)
 			;
 			// Only a declaration has a declarator to leave the type out in front of; an alias's type or a trailing return type
@@ -1320,7 +1320,8 @@ namespace NMib::NDevelop::NPrivate
 			auto iUsing = iBeforeAlias >= 0 ? fp_PreviousCode(umint(iBeforeAlias)) : aint(-1);
 			bool bTypeOnly
 				= iBefore >= 0
-				&& (m_Tokens.f_IsText(Tokens[umint(iBefore)], "->") || (m_Tokens.f_IsText(Tokens[umint(iBefore)], "=") && iUsing >= 0 && m_Tokens.f_IsText(Tokens[umint(iUsing)], "using")))
+				&&
+				(mp_Tokens.f_IsText(Tokens[umint(iBefore)], "->") || (mp_Tokens.f_IsText(Tokens[umint(iBefore)], "=") && iUsing >= 0 && mp_Tokens.f_IsText(Tokens[umint(iUsing)], "using")))
 			;
 			constexpr ch8 const *c_pFundamentals[] = {"int", "char", "short", "long", "signed", "unsigned", "bool", "float", "double", "void", "auto"};
 			if (iType == aint(iEnd) && bEndsDeclaration && !bTypeOnly && !fIsAny(umint(iType), c_pFundamentals))
@@ -1338,7 +1339,7 @@ namespace NMib::NDevelop::NPrivate
 			}
 
 			bool bPlain = true;
-			for (umint iGap = i; iGap <= iEnd && bPlain; ++iGap)
+			for (umint iGap = iToken; iGap <= iEnd && bPlain; ++iGap)
 			{
 				auto const &Gap = Tokens[iGap];
 				bPlain = fg_IsCodeToken(Gap) || Gap.m_Kind == ECodeTokenKind::mc_Whitespace || Gap.m_Kind == ECodeTokenKind::mc_Newline;
@@ -1347,7 +1348,7 @@ namespace NMib::NDevelop::NPrivate
 			if (!bPlain)
 				continue;
 
-			auto iRunStart = Tokens[i].m_iOffset;
+			auto iRunStart = Tokens[iToken].m_iOffset;
 			auto nRun = Tokens[iFirstBehind].m_iOffset - iRunStart;
 			auto iLastStart = Tokens[iEnd].m_iOffset;
 			auto nLast = Tokens[iEnd].m_nLength;
@@ -1363,20 +1364,20 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 			}
 
-			CStr Moved = m_Tokens.f_GetText(Tokens[iEnd]);
-			for (auto iRun = aint(i); iRun >= 0 && umint(iRun) <= iRunLast; iRun = fp_NextCode(umint(iRun)))
+			CStr Moved = mp_Tokens.f_GetText(Tokens[iEnd]);
+			for (auto iRun = aint(iToken); iRun >= 0 && umint(iRun) <= iRunLast; iRun = fp_NextCode(umint(iRun)))
 			{
 				auto const &Run = Tokens[umint(iRun)];
 				Moved += " ";
-				Moved.f_AddStr(m_pSource + Run.m_iOffset, Run.m_nLength);
+				Moved.f_AddStr(mp_pSource + Run.m_iOffset, Run.m_nLength);
 			}
 
-			auto &Remove = m_Structural.f_Insert();
+			auto &Remove = mp_Structural.f_Insert();
 			Remove.m_iOffset = iRunStart;
 			Remove.m_nLength = nRun;
 			Remove.m_Rule = "east-qualifier";
 
-			auto &Insert = m_Structural.f_Insert();
+			auto &Insert = mp_Structural.f_Insert();
 			Insert.m_iOffset = iLastStart;
 			Insert.m_nLength = nLast;
 			Insert.m_Replacement = Moved;
@@ -1389,7 +1390,7 @@ namespace NMib::NDevelop::NPrivate
 	// conversion is recorded as text; the layout of the converted declaration is made on the result.
 	bool CFormattingAnalyzer::fp_ConvertTrailingReturn(umint _iNode, umint _iDeclFirst, umint _iIndent)
 	{
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 		auto const &Node = Nodes[_iNode];
 
 		// Out of scope by decision: a function template's types are substituted in lexical order, so behind the parameters
@@ -1397,14 +1398,14 @@ namespace NMib::NDevelop::NPrivate
 		// taken to be the form such a template is written in. So is a member's definition outside its class, where the type
 		// behind the parameters is looked up in the class's scope and a member shadowing the type the leading return type names,
 		// 'CFoo::CResult' over '::CResult', would change it. C has no trailing return type.
-		if (m_Tokens.f_IsC(m_Tokens.f_GetTokens()[Node.m_iFirstToken]))
+		if (mp_Tokens.f_IsC(mp_Tokens.f_GetTokens()[Node.m_iFirstToken]))
 			return false;
 
 		// A declaration in a macro's argument is text the macro places or turns into a string.
 		if (fp_IsInMacroArgument(Node.m_iFirstToken))
 			return false;
 
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 
 		// An attribute's parenthesis is no parameter list: 'struct __declspec(dllexport) CFoo {...};' declares no function. Nor
 		// is one in front of the declaration, as a requires clause's: 'requires (cA<T> || cB<T>) && cC<T>'.
@@ -1418,10 +1419,10 @@ namespace NMib::NDevelop::NPrivate
 			auto iKeyword = fp_PreviousCode(Child.m_iFirstToken);
 			bool bAttribute = false;
 			for (auto pKeyword : {"__attribute__", "__attribute", "__declspec", "alignas", "_Alignas"})
-				bAttribute |= iKeyword >= 0 && m_Tokens.f_IsText(Tokens[umint(iKeyword)], pKeyword);
+				bAttribute |= iKeyword >= 0 && mp_Tokens.f_IsText(Tokens[umint(iKeyword)], pKeyword);
 
 			// The call operator's parentheses are its name, and its parameter list stands behind them: 'operator () (int _A)'.
-			bool bCallOperatorName = iKeyword >= 0 && m_Tokens.f_IsText(Tokens[umint(iKeyword)], "operator") && fp_NextCode(Child.m_iFirstToken) == aint(Child.m_iLastToken);
+			bool bCallOperatorName = iKeyword >= 0 && mp_Tokens.f_IsText(Tokens[umint(iKeyword)], "operator") && fp_NextCode(Child.m_iFirstToken) == aint(Child.m_iLastToken);
 			if (bAttribute || bCallOperatorName)
 				continue;
 
@@ -1456,36 +1457,36 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		// So does a comma between declarators, 'unsigned f(int), g(void);', whose type every declarator shares.
-		for (auto i = _iDeclFirst; i < iHeadEnd; ++i)
+		for (auto iToken = _iDeclFirst; iToken < iHeadEnd; ++iToken)
 		{
-			if (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor)
+			if (Tokens[iToken].m_Kind == ECodeTokenKind::mc_Preprocessor)
 				return false;
 
-			if (m_Tokens.f_IsText(Tokens[i], ",") && m_Structure.f_FindEnclosingNode(i) == iHeadNode)
+			if (mp_Tokens.f_IsText(Tokens[iToken], ",") && mp_Structure.f_FindEnclosingNode(iToken) == iHeadNode)
 				return false;
 		}
 
 		// A typedef declares a type, and a parenthesis with another behind it is a pointer to function's
 		// declarator, which has no return type to move: 'typedef LONG (NTAPI *FHandler)(PVOID _pContext)'.
 		auto iBehindClose = fp_NextCode(iClose);
-		if (iBehindClose >= 0 && m_Tokens.f_IsText(Tokens[umint(iBehindClose)], "("))
+		if (iBehindClose >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBehindClose)], "("))
 			return false;
 
-		for (auto i = _iDeclFirst; i < iOpen; ++i)
+		for (auto iToken = _iDeclFirst; iToken < iOpen; ++iToken)
 		{
-			if (m_Tokens.f_IsText(Tokens[i], "typedef"))
+			if (mp_Tokens.f_IsText(Tokens[iToken], "typedef"))
 				return false;
 		}
 
 		// A variable constructed with arguments has the shape of a declaration too; what the
 		// parenthesis holds is what tells them apart.
-		if (fg_HoldsArguments(m_Tokens, m_Structure, iParen))
+		if (fg_HoldsArguments(mp_Tokens, mp_Structure, iParen))
 			return false;
 
 		// Without a body, only a parenthesis that holds parameters proves the declaration a function's: 'CType Value(g_Value);'
 		// constructs a variable.
 		bool bDefinition = iHeadEnd != Node.m_iLastToken;
-		if (!bDefinition && !fg_HoldsParameters(m_Tokens, m_Structure, iParen))
+		if (!bDefinition && !fg_HoldsParameters(mp_Tokens, mp_Structure, iParen))
 			return false;
 
 		// A name the naming lists as a type is an enumerator's as readily, 'CValue Value(N::EFlag_A, EFlag_B * g_Scale);', so
@@ -1498,16 +1499,16 @@ namespace NMib::NDevelop::NPrivate
 		// An operator's declarator names a function whatever it overloads, and a specialization's name stands in front of its
 		// template argument list: 'operator +(CFoo)', 'fg_Get<int>(CFoo)'.
 		auto iDeclared = fp_PreviousCode(iOpen);
-		if (iDeclared >= 0 && m_Tokens.f_IsText(Tokens[umint(iDeclared)], ">") && m_Structure.f_IsAngleBracket(umint(iDeclared)))
+		if (iDeclared >= 0 && mp_Tokens.f_IsText(Tokens[umint(iDeclared)], ">") && mp_Structure.f_IsAngleBracket(umint(iDeclared)))
 		{
-			auto iArguments = m_Structure.f_FindNodeClosingAt(umint(iDeclared));
+			auto iArguments = mp_Structure.f_FindNodeClosingAt(umint(iDeclared));
 			iDeclared = iArguments < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iArguments].m_iFirstToken) : aint(-1);
 		}
 
-		bool bNamedFunction = iDeclared >= 0 && m_Tokens.f_HasRole(Tokens[umint(iDeclared)], ECodeNameRole::mc_Function);
+		bool bNamedFunction = iDeclared >= 0 && mp_Tokens.f_HasRole(Tokens[umint(iDeclared)], ECodeNameRole::mc_Function);
 		// The operator stands at the declarator's level, where one in the type names its argument: 'TCValue<&CFoo::operator +> g_Value(...)'.
 		for (auto iOperator = _iDeclFirst; iOperator < iOpen && !bNamedFunction; ++iOperator)
-			bNamedFunction = m_Tokens.f_IsText(Tokens[iOperator], "operator") && m_Structure.f_FindEnclosingNode(iOperator) == _iNode;
+			bNamedFunction = mp_Tokens.f_IsText(Tokens[iOperator], "operator") && mp_Structure.f_FindEnclosingNode(iOperator) == _iNode;
 		if (!bDefinition && !bInClassBody && !bNamedFunction)
 		{
 			constexpr ch8 const *c_pTypeWords[] =
@@ -1550,15 +1551,15 @@ namespace NMib::NDevelop::NPrivate
 			auto fIsDeclarator = [&](aint _iToken)
 				{
 					return _iToken >= 0
-						&& (m_Tokens.f_IsText(Tokens[umint(_iToken)], "*") || m_Tokens.f_IsText(Tokens[umint(_iToken)], "&") || m_Tokens.f_IsText(Tokens[umint(_iToken)], "&&"))
+						&& (mp_Tokens.f_IsText(Tokens[umint(_iToken)], "*") || mp_Tokens.f_IsText(Tokens[umint(_iToken)], "&") || mp_Tokens.f_IsText(Tokens[umint(_iToken)], "&&"))
 					;
 				}
 			;
 			auto fEndParameter = [&]
 				{
-					bool bDeclaresName = nNames > 1 && iLastName >= 0 && !m_Tokens.f_HasRole(Tokens[umint(iLastName)], ECodeNameRole::mc_Type) && (!bAcrossOperator || bTemplateType);
+					bool bDeclaresName = nNames > 1 && iLastName >= 0 && !mp_Tokens.f_HasRole(Tokens[umint(iLastName)], ECodeNameRole::mc_Type) && (!bAcrossOperator || bTemplateType);
 					bool bEndsInDeclarator = fIsDeclarator(iLastInParameter);
-					bool bEllipsis = iFirstInParameter >= 0 && iFirstInParameter == iLastInParameter && m_Tokens.f_IsText(Tokens[umint(iFirstInParameter)], "...");
+					bool bEllipsis = iFirstInParameter >= 0 && iFirstInParameter == iLastInParameter && mp_Tokens.f_IsText(Tokens[umint(iFirstInParameter)], "...");
 
 					bProven = bProven || bTypeWord || bDeclaresName || bEndsInDeclarator || bEllipsis;
 					bTypeWord = false;
@@ -1573,14 +1574,14 @@ namespace NMib::NDevelop::NPrivate
 			;
 
 			bool bEmpty = true;
-			for (auto i = fp_NextCode(iOpen); i >= 0 && umint(i) < iClose; i = fp_NextCode(umint(i)))
+			for (auto iToken = fp_NextCode(iOpen); iToken >= 0 && umint(iToken) < iClose; iToken = fp_NextCode(umint(iToken)))
 			{
 				bEmpty = false;
-				if (m_Structure.f_FindEnclosingNode(umint(i)) != iParen)
+				if (mp_Structure.f_FindEnclosingNode(umint(iToken)) != iParen)
 					continue;
 
-				auto const &Token = Tokens[umint(i)];
-				if (m_Tokens.f_IsText(Token, ","))
+				auto const &Token = Tokens[umint(iToken)];
+				if (mp_Tokens.f_IsText(Token, ","))
 				{
 					fEndParameter();
 
@@ -1588,13 +1589,13 @@ namespace NMib::NDevelop::NPrivate
 				}
 
 				if (iFirstInParameter < 0)
-					iFirstInParameter = i;
+					iFirstInParameter = iToken;
 
 				// A default argument is an expression, which proves nothing of the parameter in front of it.
 				if (bDefault)
 					continue;
 
-				if (m_Tokens.f_IsText(Token, "="))
+				if (mp_Tokens.f_IsText(Token, "="))
 				{
 					bDefault = true;
 
@@ -1602,34 +1603,34 @@ namespace NMib::NDevelop::NPrivate
 				}
 
 				// Any other operator between the names makes them operands: 'EFlag_A ^ g_Scale'.
-				iLastInParameter = i;
-				bool bScope = m_Tokens.f_IsText(Token, "::") || m_Tokens.f_IsText(Token, "...") || m_Structure.f_IsAngleBracket(umint(i));
+				iLastInParameter = iToken;
+				bool bScope = mp_Tokens.f_IsText(Token, "::") || mp_Tokens.f_IsText(Token, "...") || mp_Structure.f_IsAngleBracket(umint(iToken));
 				if (nNames && Token.m_Kind == ECodeTokenKind::mc_Punctuator && !bScope)
 					bAcrossOperator = true;
 
 				if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
 				{
 					// A name behind a scope is qualified, behind the 'template' that names a member template too: 'CFoo::template g_Value<int>'.
-					auto iBehind = fp_NextCode(umint(i));
-					auto iQualifier = fp_PreviousCode(umint(i));
-					if (iQualifier >= 0 && m_Tokens.f_IsText(Tokens[umint(iQualifier)], "template"))
+					auto iBehind = fp_NextCode(umint(iToken));
+					auto iQualifier = fp_PreviousCode(umint(iToken));
+					if (iQualifier >= 0 && mp_Tokens.f_IsText(Tokens[umint(iQualifier)], "template"))
 						iQualifier = fp_PreviousCode(umint(iQualifier));
 
-					bool bQualified = iQualifier >= 0 && m_Tokens.f_IsText(Tokens[umint(iQualifier)], "::");
+					bool bQualified = iQualifier >= 0 && mp_Tokens.f_IsText(Tokens[umint(iQualifier)], "::");
 					// The type's last name is the one its arguments prove a type: 'TCFlags<int>::EFlag_A' names a value as readily.
 					bool bInType = !nNames || (nNames == 1 && bQualified);
 					if (bInType)
-						bTemplateType = iBehind >= 0 && m_Tokens.f_IsText(Tokens[umint(iBehind)], "<") && m_Structure.f_IsAngleBracket(umint(iBehind));
+						bTemplateType = iBehind >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBehind)], "<") && mp_Structure.f_IsAngleBracket(umint(iBehind));
 
 					bool bWord = false;
 					for (auto pWord : c_pTypeWords)
-						bWord = bWord || m_Tokens.f_IsText(Token, pWord);
+						bWord = bWord || mp_Tokens.f_IsText(Token, pWord);
 
 					bTypeWord = bTypeWord || bWord;
 					if (!bWord && !bQualified)
 					{
 						++nNames;
-						iLastName = i;
+						iLastName = iToken;
 					}
 				}
 			}
@@ -1641,7 +1642,7 @@ namespace NMib::NDevelop::NPrivate
 
 		// No parameter starts with a parenthesis, an initializer may: 'CType Value((42))'.
 		auto iFirstInside = fp_NextCode(Nodes[iParen].m_iFirstToken);
-		if (iFirstInside >= 0 && umint(iFirstInside) < Nodes[iParen].m_iLastToken && m_Tokens.f_IsText(Tokens[umint(iFirstInside)], "("))
+		if (iFirstInside >= 0 && umint(iFirstInside) < Nodes[iParen].m_iLastToken && mp_Tokens.f_IsText(Tokens[umint(iFirstInside)], "("))
 			return false;
 
 		auto iBeforeOpen = fp_PreviousCode(iOpen);
@@ -1659,12 +1660,12 @@ namespace NMib::NDevelop::NPrivate
 		auto fSkipAngleBackwards = [&](aint _iToken)
 			{
 				umint nDepth = 0;
-				for (auto i = _iToken; i >= 0; i = fp_PreviousCode(umint(i)))
+				for (auto iToken = _iToken; iToken >= 0; iToken = fp_PreviousCode(umint(iToken)))
 				{
-					if (!m_Structure.f_IsAngleBracket(umint(i)))
+					if (!mp_Structure.f_IsAngleBracket(umint(iToken)))
 						continue;
 
-					if (m_Tokens.f_IsText(Tokens[umint(i)], ">"))
+					if (mp_Tokens.f_IsText(Tokens[umint(iToken)], ">"))
 					{
 						++nDepth;
 
@@ -1672,7 +1673,7 @@ namespace NMib::NDevelop::NPrivate
 					}
 
 					if (!--nDepth)
-						return i;
+						return iToken;
 				}
 
 				return aint(-1);
@@ -1682,7 +1683,7 @@ namespace NMib::NDevelop::NPrivate
 		// The name may carry its own template argument list, as an explicit instantiation
 		// or a specialization does: 'f_Create<...>(...)'.
 		umint iDeclarator = umint(iBeforeOpen);
-		if (m_Structure.f_IsAngleBracket(iDeclarator) && m_Tokens.f_IsText(Tokens[iDeclarator], ">"))
+		if (mp_Structure.f_IsAngleBracket(iDeclarator) && mp_Tokens.f_IsText(Tokens[iDeclarator], ">"))
 		{
 			auto iOpenAngle = fSkipAngleBackwards(aint(iDeclarator));
 			if (iOpenAngle < 0)
@@ -1699,27 +1700,27 @@ namespace NMib::NDevelop::NPrivate
 			// An operator function is named by the keyword and its symbol, or by the call
 			// operator's own parentheses: 'operator ->* (', 'operator () ('.
 			auto iOperator = fp_PreviousCode(iDeclarator);
-			if (iOperator >= 0 && m_Tokens.f_IsText(Tokens[iDeclarator], ")") && m_Tokens.f_IsText(Tokens[umint(iOperator)], "("))
+			if (iOperator >= 0 && mp_Tokens.f_IsText(Tokens[iDeclarator], ")") && mp_Tokens.f_IsText(Tokens[umint(iOperator)], "("))
 				iOperator = fp_PreviousCode(umint(iOperator));
 
-			if (iOperator < 0 || !m_Tokens.f_IsText(Tokens[umint(iOperator)], "operator"))
+			if (iOperator < 0 || !mp_Tokens.f_IsText(Tokens[umint(iOperator)], "operator"))
 				return false;
 
 			iDeclarator = umint(iOperator);
 		}
 
 		auto iWalk = fp_PreviousCode(iDeclarator);
-		if (iWalk >= 0 && m_Tokens.f_IsText(Tokens[umint(iWalk)], "~"))
+		if (iWalk >= 0 && mp_Tokens.f_IsText(Tokens[umint(iWalk)], "~"))
 		{
 			iDeclarator = umint(iWalk);
 			iWalk = fp_PreviousCode(iDeclarator);
 		}
 
-		while (iWalk >= 0 && m_Tokens.f_IsText(Tokens[umint(iWalk)], "::"))
+		while (iWalk >= 0 && mp_Tokens.f_IsText(Tokens[umint(iWalk)], "::"))
 		{
 			iDeclarator = umint(iWalk);
 			iWalk = fp_PreviousCode(iDeclarator);
-			if (iWalk >= 0 && m_Structure.f_IsAngleBracket(umint(iWalk)) && m_Tokens.f_IsText(Tokens[umint(iWalk)], ">"))
+			if (iWalk >= 0 && mp_Structure.f_IsAngleBracket(umint(iWalk)) && mp_Tokens.f_IsText(Tokens[umint(iWalk)], ">"))
 			{
 				auto iOpenAngle = fSkipAngleBackwards(iWalk);
 				if (iOpenAngle < 0)
@@ -1761,11 +1762,11 @@ namespace NMib::NDevelop::NPrivate
 		while (iReturn < iDeclarator)
 		{
 			auto const &Token = Tokens[iReturn];
-			bool bSkip = m_Tokens.f_HasRole(Token, ECodeNameRole::mc_SpecifierMacro);
+			bool bSkip = mp_Tokens.f_HasRole(Token, ECodeNameRole::mc_SpecifierMacro);
 			for (auto pSpecifier : c_pSpecifiers)
-				bSkip |= m_Tokens.f_IsText(Token, pSpecifier);
+				bSkip |= mp_Tokens.f_IsText(Token, pSpecifier);
 
-			if (m_Tokens.f_IsText(Token, "template"))
+			if (mp_Tokens.f_IsText(Token, "template"))
 			{
 				// 'template <...>' introduces a declaration and is stepped over. 'template
 				// Type Name(...)' is an explicit instantiation, whose 'template' is a
@@ -1788,7 +1789,7 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 			}
 
-			if (m_Tokens.f_IsText(Token, "["))
+			if (mp_Tokens.f_IsText(Token, "["))
 			{
 				// The attribute is a child group; step past it whole. Without one the shape
 				// is not the expected declaration, so no conversion is attempted.
@@ -1834,11 +1835,11 @@ namespace NMib::NDevelop::NPrivate
 
 		// An elaborated return type can declare the class it names, which the parameters in front of it then could not use:
 		// 'struct CNew *fg_Get(CNew *_pNew)'.
-		for (auto i = iReturn; i <= umint(iReturnLast); ++i)
+		for (auto iToken = iReturn; iToken <= umint(iReturnLast); ++iToken)
 		{
 			for (auto pElaborated : {"struct", "class", "union", "enum"})
 			{
-				if (m_Tokens.f_IsText(Tokens[i], pElaborated))
+				if (mp_Tokens.f_IsText(Tokens[iToken], pElaborated))
 					return false;
 			}
 		}
@@ -1846,9 +1847,9 @@ namespace NMib::NDevelop::NPrivate
 		// A macro, by the project's naming, can expand to specifiers as readily as to a type,
 		// and a specifier moved behind the parameter list is no type. One naming the function can expand to the whole
 		// declarator, a pure specifier behind it included: 'DDeclare(int x)' with 'f(__VA_ARGS__) = 0'.
-		for (auto i = iReturn; i <= umint(iBeforeOpen); ++i)
+		for (auto iToken = iReturn; iToken <= umint(iBeforeOpen); ++iToken)
 		{
-			if (m_Tokens.f_HasRole(Tokens[i], ECodeNameRole::mc_Macro))
+			if (mp_Tokens.f_HasRole(Tokens[iToken], ECodeNameRole::mc_Macro))
 				return false;
 		}
 
@@ -1870,33 +1871,33 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 		// The attribute can stand in front of where the declaration is taken to start, as a statement of its own.
-		if (auto iBeforeDeclaration = fp_PreviousCode(_iDeclFirst); iBeforeDeclaration >= 0 && m_Tokens.f_IsText(Tokens[umint(iBeforeDeclaration)], ")"))
+		if (auto iBeforeDeclaration = fp_PreviousCode(_iDeclFirst); iBeforeDeclaration >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBeforeDeclaration)], ")"))
 		{
-			auto iGroup = m_Structure.f_FindNodeClosingAt(umint(iBeforeDeclaration));
+			auto iGroup = mp_Structure.f_FindNodeClosingAt(umint(iBeforeDeclaration));
 			auto iAttribute = iGroup < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iGroup].m_iFirstToken) : aint(-1);
-			if (iAttribute >= 0 && (m_Tokens.f_IsText(Tokens[umint(iAttribute)], "__attribute__") || m_Tokens.f_IsText(Tokens[umint(iAttribute)], "__attribute")))
+			if (iAttribute >= 0 && (mp_Tokens.f_IsText(Tokens[umint(iAttribute)], "__attribute__") || mp_Tokens.f_IsText(Tokens[umint(iAttribute)], "__attribute")))
 				return false;
 		}
 
-		for (auto i = _iDeclFirst; i < iDeclarator; ++i)
+		for (auto iToken = _iDeclFirst; iToken < iDeclarator; ++iToken)
 		{
-			if (m_Tokens.f_IsText(Tokens[i], "__attribute__") || m_Tokens.f_IsText(Tokens[i], "__attribute"))
+			if (mp_Tokens.f_IsText(Tokens[iToken], "__attribute__") || mp_Tokens.f_IsText(Tokens[iToken], "__attribute"))
 				return false;
 
 			for (auto pConvention : c_pConventions)
 			{
-				if (m_Tokens.f_IsText(Tokens[i], pConvention))
+				if (mp_Tokens.f_IsText(Tokens[iToken], pConvention))
 					return false;
 			}
 		}
 
 		// A return type that is already 'auto' has nowhere to go: moving it behind the
 		// parameter list would only spell the same deduction as 'auto ... -> auto'.
-		if (umint(iReturnLast) == iReturn && m_Tokens.f_IsText(Tokens[iReturn], "auto"))
+		if (umint(iReturnLast) == iReturn && mp_Tokens.f_IsText(Tokens[iReturn], "auto"))
 			return false;
 
 		// A plain 'void' stays, so a split declaration with no trailing return type returns nothing: 'void f' over '(' over ')'.
-		if (umint(iReturnLast) == iReturn && m_Tokens.f_IsText(Tokens[iReturn], "void"))
+		if (umint(iReturnLast) == iReturn && mp_Tokens.f_IsText(Tokens[iReturn], "void"))
 			return false;
 
 		umint nReturnWidth = 0;
@@ -1907,7 +1908,7 @@ namespace NMib::NDevelop::NPrivate
 		// ends in a call, and rewriting one of those as a declaration would destroy it.
 		auto iBeforeDeclarator = fp_PreviousCode(iDeclarator);
 		auto const *pBeforeDeclarator = iBeforeDeclarator >= 0 ? &Tokens[umint(iBeforeDeclarator)] : nullptr;
-		if (pBeforeDeclarator && (m_Tokens.f_IsText(*pBeforeDeclarator, ".") || m_Tokens.f_IsText(*pBeforeDeclarator, "->")))
+		if (pBeforeDeclarator && (mp_Tokens.f_IsText(*pBeforeDeclarator, ".") || mp_Tokens.f_IsText(*pBeforeDeclarator, "->")))
 			return false;
 
 		// A keyword is spelled like an identifier, so a statement that opens with one reads
@@ -1978,12 +1979,12 @@ namespace NMib::NDevelop::NPrivate
 
 		// A template argument list follows the name it belongs to, which a return type starting with one is cut off from:
 		// 'TCBox' over '<TCBox<int>> f_Get(int x);'.
-		for (umint i = iReturn; i <= umint(iReturnLast); ++i)
+		for (umint iToken = iReturn; iToken <= umint(iReturnLast); ++iToken)
 		{
-			if (!fg_IsCodeToken(Tokens[i]))
+			if (!fg_IsCodeToken(Tokens[iToken]))
 				continue;
 
-			if (m_Tokens.f_IsText(Tokens[i], "<") || m_Tokens.f_IsText(Tokens[i], ">") || m_Tokens.f_IsText(Tokens[i], ">>"))
+			if (mp_Tokens.f_IsText(Tokens[iToken], "<") || mp_Tokens.f_IsText(Tokens[iToken], ">") || mp_Tokens.f_IsText(Tokens[iToken], ">>"))
 				return false;
 
 			break;
@@ -1992,16 +1993,16 @@ namespace NMib::NDevelop::NPrivate
 		umint nAngle = 0;
 		bool bAfterName = false;
 		bool bAfterPlainName = false;
-		for (umint i = iReturn; i <= umint(iReturnLast); ++i)
+		for (umint iToken = iReturn; iToken <= umint(iReturnLast); ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 
 			// Whatever a template argument list holds, a function type's parameter list
 			// included, is part of the type around it.
-			if (m_Structure.f_IsAngleBracket(i))
+			if (mp_Structure.f_IsAngleBracket(iToken))
 			{
-				nAngle += m_Tokens.f_IsText(Token, "<") ? 1 : 0;
-				nAngle -= m_Tokens.f_IsText(Token, ">") ? 1 : 0;
+				nAngle += mp_Tokens.f_IsText(Token, "<") ? 1 : 0;
+				nAngle -= mp_Tokens.f_IsText(Token, ">") ? 1 : 0;
 				bAfterName = !nAngle;
 
 				continue;
@@ -2014,29 +2015,29 @@ namespace NMib::NDevelop::NPrivate
 			{
 				for (auto pKeyword : c_pStatementKeywords)
 				{
-					if (m_Tokens.f_IsText(Token, pKeyword))
+					if (mp_Tokens.f_IsText(Token, pKeyword))
 						return false;
 				}
 
 				bool bTypeWord = false;
 				for (auto pWord : c_pTypeWords)
-					bTypeWord |= m_Tokens.f_IsText(Token, pWord);
+					bTypeWord |= mp_Tokens.f_IsText(Token, pWord);
 
 				// These introduce the name behind them rather than completing a type: 'typename TCFoo<t_C>::CNode'. Behind a
 				// name one starts another type, which leaves the name a specifier: 'BOOST_MOVE_FORCEINLINE typename N::CFoo'.
 				bool bIntroduces
-					= m_Tokens.f_IsText(Token, "typename")
-					|| m_Tokens.f_IsText(Token, "struct")
-					|| m_Tokens.f_IsText(Token, "class")
-					|| m_Tokens.f_IsText(Token, "union")
-					|| m_Tokens.f_IsText(Token, "enum")
+					= mp_Tokens.f_IsText(Token, "typename")
+					|| mp_Tokens.f_IsText(Token, "struct")
+					|| mp_Tokens.f_IsText(Token, "class")
+					|| mp_Tokens.f_IsText(Token, "union")
+					|| mp_Tokens.f_IsText(Token, "enum")
 				;
 				if (bAfterName && (!bTypeWord || bIntroduces))
 					return false;
 
 				// A fundamental type's word behind a name no type word is leaves the name a specifier, or a macro standing for
 				// one: 'API int', where no spelling of a type holds a name in front of 'int'.
-				bool bFundamental = bTypeWord && !m_Tokens.f_IsText(Token, "const") && !m_Tokens.f_IsText(Token, "volatile") && !bIntroduces;
+				bool bFundamental = bTypeWord && !mp_Tokens.f_IsText(Token, "const") && !mp_Tokens.f_IsText(Token, "volatile") && !bIntroduces;
 				if (bAfterPlainName && bFundamental)
 					return false;
 
@@ -2048,7 +2049,7 @@ namespace NMib::NDevelop::NPrivate
 
 			// A declarator completes the type in front of it, so a name behind 'void *' is
 			// as much a bare name as one behind 'void': 'void * DMibCrossmoduleAPI fs_Alloc'.
-			bool bDeclarator = m_Tokens.f_IsText(Token, "*") || m_Tokens.f_IsText(Token, "&") || m_Tokens.f_IsText(Token, "&&");
+			bool bDeclarator = mp_Tokens.f_IsText(Token, "*") || mp_Tokens.f_IsText(Token, "&") || mp_Tokens.f_IsText(Token, "&&");
 			bAfterName = bAfterName && bDeclarator;
 			bAfterPlainName = false;
 
@@ -2059,14 +2060,14 @@ namespace NMib::NDevelop::NPrivate
 				return false;
 
 			bool bTypePunctuation
-				= m_Tokens.f_IsText(Token, "::")
-				|| m_Tokens.f_IsText(Token, "*")
-				|| m_Tokens.f_IsText(Token, "&")
-				|| m_Tokens.f_IsText(Token, "&&")
-				|| m_Tokens.f_IsText(Token, ",")
-				|| m_Tokens.f_IsText(Token, "[")
-				|| m_Tokens.f_IsText(Token, "]")
-				|| m_Tokens.f_IsText(Token, "...")
+				= mp_Tokens.f_IsText(Token, "::")
+				|| mp_Tokens.f_IsText(Token, "*")
+				|| mp_Tokens.f_IsText(Token, "&")
+				|| mp_Tokens.f_IsText(Token, "&&")
+				|| mp_Tokens.f_IsText(Token, ",")
+				|| mp_Tokens.f_IsText(Token, "[")
+				|| mp_Tokens.f_IsText(Token, "]")
+				|| mp_Tokens.f_IsText(Token, "...")
 			;
 			if (!bTypePunctuation)
 				return false;
@@ -2075,20 +2076,20 @@ namespace NMib::NDevelop::NPrivate
 		// Find where the trailing type goes: after the qualifiers, before a definition,
 		// a pure specifier, or the terminator. An existing arrow means there is nothing to do.
 		umint iInsert = TCLimitsInt<umint>::mc_Max;
-		for (auto i = fp_NextCode(iClose); i >= 0 && umint(i) <= Node.m_iLastToken; i = fp_NextCode(umint(i)))
+		for (auto iToken = fp_NextCode(iClose); iToken >= 0 && umint(iToken) <= Node.m_iLastToken; iToken = fp_NextCode(umint(iToken)))
 		{
-			auto const &Token = Tokens[umint(i)];
+			auto const &Token = Tokens[umint(iToken)];
 
 			// What a group behind the parameter list holds, a lambda in a 'noexcept(...)' as well, is no part of the head.
-			auto iGroup = m_Structure.f_FindNodeOpeningAt(umint(i));
-			if (iGroup < Nodes.f_GetLen() && Nodes[iGroup].m_Kind == ECodeNodeKind::mc_Group && !m_Tokens.f_IsText(Token, "{"))
+			auto iGroup = mp_Structure.f_FindNodeOpeningAt(umint(iToken));
+			if (iGroup < Nodes.f_GetLen() && Nodes[iGroup].m_Kind == ECodeNodeKind::mc_Group && !mp_Tokens.f_IsText(Token, "{"))
 			{
-				i = aint(Nodes[iGroup].m_iLastToken);
+				iToken = aint(Nodes[iGroup].m_iLastToken);
 
 				continue;
 			}
 
-			if (m_Tokens.f_IsText(Token, "->"))
+			if (mp_Tokens.f_IsText(Token, "->"))
 				return false;
 
 			// A GNU attribute behind the parameter list has no place beside a trailing return type: written behind it, it
@@ -2096,11 +2097,11 @@ namespace NMib::NDevelop::NPrivate
 			// which the trailing type belongs inside of.
 			if
 			(
-				m_Tokens.f_IsText(Token, "__attribute__")
-				|| m_Tokens.f_IsText(Token, "__attribute")
-				|| m_Tokens.f_IsText(Token, "asm")
-				|| m_Tokens.f_IsText(Token, "__asm__")
-				|| m_Tokens.f_IsText(Token, "__asm")
+				mp_Tokens.f_IsText(Token, "__attribute__")
+				|| mp_Tokens.f_IsText(Token, "__attribute")
+				|| mp_Tokens.f_IsText(Token, "asm")
+				|| mp_Tokens.f_IsText(Token, "__asm__")
+				|| mp_Tokens.f_IsText(Token, "__asm")
 			)
 			{
 				return false;
@@ -2108,14 +2109,14 @@ namespace NMib::NDevelop::NPrivate
 
 			// Nor does a word that is no qualifier, a macro that may stand for an attribute or for 'final': 'f() DFinal'.
 			bool bQualifierWord
-				= m_Tokens.f_IsText(Token, "const")
-				|| m_Tokens.f_IsText(Token, "volatile")
-				|| m_Tokens.f_IsText(Token, "noexcept")
-				|| m_Tokens.f_IsText(Token, "throw")
-				|| m_Tokens.f_IsText(Token, "requires")
-				|| m_Tokens.f_IsText(Token, "override")
-				|| m_Tokens.f_IsText(Token, "final")
-				|| m_Tokens.f_IsText(Token, "try")
+				= mp_Tokens.f_IsText(Token, "const")
+				|| mp_Tokens.f_IsText(Token, "volatile")
+				|| mp_Tokens.f_IsText(Token, "noexcept")
+				|| mp_Tokens.f_IsText(Token, "throw")
+				|| mp_Tokens.f_IsText(Token, "requires")
+				|| mp_Tokens.f_IsText(Token, "override")
+				|| mp_Tokens.f_IsText(Token, "final")
+				|| mp_Tokens.f_IsText(Token, "try")
 			;
 			if (Token.m_Kind == ECodeTokenKind::mc_Identifier && !bQualifierWord)
 				return false;
@@ -2124,17 +2125,17 @@ namespace NMib::NDevelop::NPrivate
 			// 'final', which are written after the declarator, and in front of a pure
 			// specifier, a body, a function try block, a requires clause and the terminator.
 			bool bInsert
-				= m_Tokens.f_IsText(Token, "=")
-				|| m_Tokens.f_IsText(Token, "{")
-				|| m_Tokens.f_IsText(Token, "try")
-				|| m_Tokens.f_IsText(Token, ";")
-				|| m_Tokens.f_IsText(Token, "requires")
-				|| m_Tokens.f_IsText(Token, "override")
-				|| m_Tokens.f_IsText(Token, "final")
+				= mp_Tokens.f_IsText(Token, "=")
+				|| mp_Tokens.f_IsText(Token, "{")
+				|| mp_Tokens.f_IsText(Token, "try")
+				|| mp_Tokens.f_IsText(Token, ";")
+				|| mp_Tokens.f_IsText(Token, "requires")
+				|| mp_Tokens.f_IsText(Token, "override")
+				|| mp_Tokens.f_IsText(Token, "final")
 			;
 			if (bInsert)
 			{
-				iInsert = umint(i);
+				iInsert = umint(iToken);
 
 				break;
 			}
@@ -2143,10 +2144,10 @@ namespace NMib::NDevelop::NPrivate
 		if (iInsert == TCLimitsInt<umint>::mc_Max)
 			return false;
 
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto nTab = mp_Request.m_Settings.m_nTabWidth;
 		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
 		auto iReturnStart = Tokens[iReturn].m_iOffset;
-		CStr ReturnType(m_pSource + iReturnStart, Tokens[umint(iReturnLast)].f_GetEnd() - iReturnStart);
+		CStr ReturnType(mp_pSource + iReturnStart, Tokens[umint(iReturnLast)].f_GetEnd() - iReturnStart);
 
 		// Behind the parameter list a parameter's name hides a name of the return type that it shares: 'CType f(int CType)'.
 		// A parameter's name is the last of its names in front of a default argument, when it has more than one. A member of
@@ -2183,22 +2184,22 @@ namespace NMib::NDevelop::NPrivate
 			for (auto iParameter = iOpen + 1; iParameter < iClose; ++iParameter)
 			{
 				auto const &ParameterToken = Tokens[iParameter];
-				bool bTopLevel = m_Structure.f_FindEnclosingNode(iParameter) == iParen;
-				if (bTopLevel && m_Tokens.f_IsText(ParameterToken, ","))
+				bool bTopLevel = mp_Structure.f_FindEnclosingNode(iParameter) == iParen;
+				if (bTopLevel && mp_Tokens.f_IsText(ParameterToken, ","))
 					fEndParameter();
-				else if (bTopLevel && m_Tokens.f_IsText(ParameterToken, "="))
+				else if (bTopLevel && mp_Tokens.f_IsText(ParameterToken, "="))
 					bDefault = true;
 				else if (bTopLevel && !bDefault && ParameterToken.m_Kind == ECodeTokenKind::mc_Identifier)
 				{
 					// An attribute behind the name, or a macro the naming lists, is no name: 'int CType ATTR'. A
 					// macro still counts as a word in front of the name, which it can stand for a type with: 'DInt CType'.
 					bool bAttribute
-						= m_Tokens.f_IsText(ParameterToken, "__attribute__")
-						|| m_Tokens.f_IsText(ParameterToken, "__attribute")
-						|| m_Tokens.f_IsText(ParameterToken, "__declspec")
-						|| m_Tokens.f_IsText(ParameterToken, "alignas")
+						= mp_Tokens.f_IsText(ParameterToken, "__attribute__")
+						|| mp_Tokens.f_IsText(ParameterToken, "__attribute")
+						|| mp_Tokens.f_IsText(ParameterToken, "__declspec")
+						|| mp_Tokens.f_IsText(ParameterToken, "alignas")
 					;
-					bool bMacro = m_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_Macro) || m_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_SpecifierMacro);
+					bool bMacro = mp_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_Macro) || mp_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_SpecifierMacro);
 					if (!bAttribute)
 						++nNames;
 
@@ -2225,7 +2226,7 @@ namespace NMib::NDevelop::NPrivate
 
 					bool bKeyword = false;
 					for (auto pKeyword : c_pTypeKeywords)
-						bKeyword = bKeyword || m_Tokens.f_IsText(ParameterToken, pKeyword);
+						bKeyword = bKeyword || mp_Tokens.f_IsText(ParameterToken, pKeyword);
 
 					if (!bAttribute && !bMacro && !bKeyword)
 					{
@@ -2243,7 +2244,7 @@ namespace NMib::NDevelop::NPrivate
 					// be one, which also takes in an unnamed parameter's type, as 'void (CType)' is, and so may one behind an attribute:
 					// 'int (* [[]] CType)()', 'int (* __attribute__((x)) CType)()', or behind a word: 'int (* __restrict CType)[1]'.
 					auto iBefore = fp_PreviousCode(iParameter);
-					while (iBefore >= 0 && (m_Tokens.f_IsText(Tokens[umint(iBefore)], "const") || m_Tokens.f_IsText(Tokens[umint(iBefore)], "volatile")))
+					while (iBefore >= 0 && (mp_Tokens.f_IsText(Tokens[umint(iBefore)], "const") || mp_Tokens.f_IsText(Tokens[umint(iBefore)], "volatile")))
 						iBefore = fp_PreviousCode(umint(iBefore));
 
 					if (iBefore < 0)
@@ -2251,18 +2252,18 @@ namespace NMib::NDevelop::NPrivate
 
 					auto const &BeforeToken = Tokens[umint(iBefore)];
 					bool bDeclarator
-						= m_Tokens.f_IsText(BeforeToken, "(")
-						|| m_Tokens.f_IsText(BeforeToken, "*")
-						|| m_Tokens.f_IsText(BeforeToken, "&")
-						|| m_Tokens.f_IsText(BeforeToken, "&&")
-						|| m_Tokens.f_IsText(BeforeToken, "^")
-						|| m_Tokens.f_IsText(BeforeToken, "...")
-						|| m_Tokens.f_IsText(BeforeToken, "]")
-						|| m_Tokens.f_IsText(BeforeToken, ")")
+						= mp_Tokens.f_IsText(BeforeToken, "(")
+						|| mp_Tokens.f_IsText(BeforeToken, "*")
+						|| mp_Tokens.f_IsText(BeforeToken, "&")
+						|| mp_Tokens.f_IsText(BeforeToken, "&&")
+						|| mp_Tokens.f_IsText(BeforeToken, "^")
+						|| mp_Tokens.f_IsText(BeforeToken, "...")
+						|| mp_Tokens.f_IsText(BeforeToken, "]")
+						|| mp_Tokens.f_IsText(BeforeToken, ")")
 						|| BeforeToken.m_Kind == ECodeTokenKind::mc_Identifier
 					;
 					// A macro there can expand to the name, which could hide the return type: 'int (*DName)(int)'.
-					bool bMacro = m_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_Macro) || m_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_SpecifierMacro);
+					bool bMacro = mp_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_Macro) || mp_Tokens.f_HasRole(ParameterToken, ECodeNameRole::mc_SpecifierMacro);
 					bOpaqueName = bOpaqueName || (bDeclarator && bMacro);
 
 					// A function type's parameter in a template argument list declares no name in scope:
@@ -2270,7 +2271,7 @@ namespace NMib::NDevelop::NPrivate
 					bool bInArguments = false;
 					for
 					(
-						auto iEnclosing = m_Structure.f_FindEnclosingNode(iParameter)
+						auto iEnclosing = mp_Structure.f_FindEnclosingNode(iParameter)
 						; !bInArguments && iEnclosing < Nodes.f_GetLen() && iEnclosing != iParen
 						; iEnclosing = Nodes[iEnclosing].m_iParent
 					)
@@ -2316,7 +2317,7 @@ namespace NMib::NDevelop::NPrivate
 
 			bool bKeyword = false;
 			for (auto pKeyword : c_pReturnKeywords)
-				bKeyword = bKeyword || m_Tokens.f_IsText(TypeToken, pKeyword);
+				bKeyword = bKeyword || mp_Tokens.f_IsText(TypeToken, pKeyword);
 
 			if (bKeyword)
 				continue;
@@ -2324,8 +2325,8 @@ namespace NMib::NDevelop::NPrivate
 			for (auto iParameter : ParameterNames)
 			{
 				auto const &ParameterToken = Tokens[iParameter];
-				auto pParameter = (uint8 const *)(m_pSource + ParameterToken.m_iOffset);
-				auto pType = (uint8 const *)(m_pSource + TypeToken.m_iOffset);
+				auto pParameter = (uint8 const *)(mp_pSource + ParameterToken.m_iOffset);
+				auto pType = (uint8 const *)(mp_pSource + TypeToken.m_iOffset);
 				if (ParameterToken.m_nLength == TypeToken.m_nLength && NMemory::fg_MemCmp(pParameter, pType, TypeToken.m_nLength) == 0)
 					return false;
 			}
@@ -2341,7 +2342,7 @@ namespace NMib::NDevelop::NPrivate
 		auto iNameEnd = fp_NextCode(iOpen) == aint(iClose) ? iClose : umint(iBeforeOpen);
 		bool bPlainName = true;
 		for (auto iInName = iDeclarator; iInName < iOpen && bPlainName; ++iInName)
-			bPlainName = !m_Tokens.f_IsText(Tokens[iInName], "::") && !m_Structure.f_IsAngleBracket(iInName);
+			bPlainName = !mp_Tokens.f_IsText(Tokens[iInName], "::") && !mp_Structure.f_IsAngleBracket(iInName);
 
 		if (bPlainName)
 		{
@@ -2355,7 +2356,7 @@ namespace NMib::NDevelop::NPrivate
 				&& fp_MeasureJoinedWidth(_iDeclFirst, iNameEnd, nOriginal)
 				&& (!bSpecifiers || fp_MeasureJoinedWidth(_iDeclFirst, umint(iSpecifiersLast), nSpecifiers))
 			;
-			auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+			auto nMaxColumns = mp_Request.m_Settings.m_nMaxColumns;
 			auto nConverted = (bSpecifiers ? nSpecifiers + 1 : 0) + CStr("auto ").f_GetLen() + nName;
 			if (!bMeasured || (nMaxColumns && _iIndent + nConverted > nMaxColumns && nConverted >= nOriginal))
 				return false;
@@ -2376,11 +2377,11 @@ namespace NMib::NDevelop::NPrivate
 				break;
 			}
 		}
-		auto bBody = m_Tokens.f_IsText(InsertAt, "{") || m_Tokens.f_IsText(InsertAt, ";");
+		auto bBody = mp_Tokens.f_IsText(InsertAt, "{") || mp_Tokens.f_IsText(InsertAt, ";");
 
 		// 'override', 'final' and a pure specifier are written behind the trailing type, on
 		// its line.
-		bool bVirtSpecifier = m_Tokens.f_IsText(InsertAt, "override") || m_Tokens.f_IsText(InsertAt, "final") || m_Tokens.f_IsText(InsertAt, "=");
+		bool bVirtSpecifier = mp_Tokens.f_IsText(InsertAt, "override") || mp_Tokens.f_IsText(InsertAt, "final") || mp_Tokens.f_IsText(InsertAt, "=");
 		CStr Replacement = Ending + fp_MakeIndent(_iIndent + nTab) + "-> " + ReturnType;
 		Replacement += bVirtSpecifier ? CStr(" ") : Ending + fp_MakeIndent(bBody ? _iIndent : _iIndent + nTab);
 
@@ -2400,12 +2401,12 @@ namespace NMib::NDevelop::NPrivate
 		// The gap is written whole, so a comment in it, 'f_Get(int x) /* keep */;', would be lost.
 		for (auto iChar = iGap; iChar < iGap + nGap; ++iChar)
 		{
-			auto Char = m_pSource[iChar];
+			auto Char = mp_pSource[iChar];
 			if (Char != ' ' && Char != '\t' && Char != '\n' && Char != '\r')
 				return false;
 		}
 
-		auto &First = m_Structural.f_Insert();
+		auto &First = mp_Structural.f_Insert();
 		First.m_iOffset = iReturnStart;
 		First.m_nLength = nReturn;
 		// A declarator hugs the name, so nothing stands between a type that ends in one and
@@ -2413,7 +2414,7 @@ namespace NMib::NDevelop::NPrivate
 		First.m_Replacement = iReturnStart + nReturn == Tokens[iDeclarator].m_iOffset ? "auto " : "auto";
 		First.m_Rule = "trailing-return";
 
-		auto &Second = m_Structural.f_Insert();
+		auto &Second = mp_Structural.f_Insert();
 		Second.m_iOffset = iGap;
 		Second.m_nLength = nGap;
 		Second.m_Replacement = Replacement;
@@ -2427,10 +2428,10 @@ namespace NMib::NDevelop::NPrivate
 	// behind a clause split across lines.
 	bool CFormattingAnalyzer::fp_IsBraceGuard(umint _iGuard, bool &o_bClauseFits) const
 	{
-		auto const &Guard = m_Structure.f_GetNodes()[_iGuard];
-		auto const &GuardFirst = m_Tokens.f_GetTokens()[Guard.m_iFirstToken];
-		bool bClause = m_Tokens.f_IsText(GuardFirst, "if") || m_Tokens.f_IsText(GuardFirst, "for") || m_Tokens.f_IsText(GuardFirst, "while");
-		if (!bClause && !m_Tokens.f_IsText(GuardFirst, "else"))
+		auto const &Guard = mp_Structure.f_GetNodes()[_iGuard];
+		auto const &GuardFirst = mp_Tokens.f_GetTokens()[Guard.m_iFirstToken];
+		bool bClause = mp_Tokens.f_IsText(GuardFirst, "if") || mp_Tokens.f_IsText(GuardFirst, "for") || mp_Tokens.f_IsText(GuardFirst, "while");
+		if (!bClause && !mp_Tokens.f_IsText(GuardFirst, "else"))
 			return false;
 
 		// An 'else if' is measured from its 'else', which the layout puts at the start of a line one level in per block
@@ -2438,11 +2439,11 @@ namespace NMib::NDevelop::NPrivate
 		// Only an 'else' on the clause's line is one the layout keeps there; the 'else' of a conditional's other branch,
 		// with the directive between them, is no part of the clause.
 		umint iLineFirst = Guard.m_iFirstToken;
-		if (auto iElse = fp_PreviousCode(Guard.m_iFirstToken); iElse >= 0 && m_Tokens.f_IsText(m_Tokens.f_GetTokens()[umint(iElse)], "else"))
+		if (auto iElse = fp_PreviousCode(Guard.m_iFirstToken); iElse >= 0 && mp_Tokens.f_IsText(mp_Tokens.f_GetTokens()[umint(iElse)], "else"))
 		{
 			bool bPlain = true;
-			for (auto i = umint(iElse) + 1; i < Guard.m_iFirstToken && bPlain; ++i)
-				bPlain = m_Tokens.f_GetTokens()[i].m_Kind == ECodeTokenKind::mc_Whitespace;
+			for (auto iToken = umint(iElse) + 1; iToken < Guard.m_iFirstToken && bPlain; ++iToken)
+				bPlain = mp_Tokens.f_GetTokens()[iToken].m_Kind == ECodeTokenKind::mc_Whitespace;
 
 			if (bPlain)
 				iLineFirst = umint(iElse);
@@ -2451,12 +2452,12 @@ namespace NMib::NDevelop::NPrivate
 		umint nIndent = fp_GetStatementIndent(iLineFirst);
 		if (!fp_IsFirstOnLine(iLineFirst))
 		{
-			auto const &Nodes = m_Structure.f_GetNodes();
+			auto const &Nodes = mp_Structure.f_GetNodes();
 			umint nBlocks = 0;
-			for (auto iNode = m_Structure.f_FindEnclosingNode(Guard.m_iFirstToken); iNode && iNode < Nodes.f_GetLen(); iNode = Nodes[iNode].m_iParent)
+			for (auto iNode = mp_Structure.f_FindEnclosingNode(Guard.m_iFirstToken); iNode && iNode < Nodes.f_GetLen(); iNode = Nodes[iNode].m_iParent)
 				nBlocks += Nodes[iNode].m_Kind == ECodeNodeKind::mc_Block;
 
-			nIndent = nBlocks * m_Request.m_Settings.m_nTabWidth;
+			nIndent = nBlocks * mp_Request.m_Settings.m_nTabWidth;
 		}
 
 		o_bClauseFits = !bClause || fp_FitsInline(iLineFirst, Guard.m_iLastToken, nIndent);
@@ -2468,7 +2469,7 @@ namespace NMib::NDevelop::NPrivate
 	// otherwise written on one, since lines it fixes itself stay as they are.
 	bool CFormattingAnalyzer::fp_IsRangeOneLine(umint _iNode, umint _iFirst, umint _iLast, umint _iIndent) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		if (fp_IsRangeJoinable(_iNode, _iFirst, _iLast))
 			return fp_FitsInline(_iFirst, _iLast, _iIndent);
 
@@ -2476,7 +2477,7 @@ namespace NMib::NDevelop::NPrivate
 		// holds one, a lambda's body above all, is laid out across lines whether or not
 		// the source has it on one.
 		// The children stand in order, so the first one that can lie in the range is searched for.
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 		auto const &Children = Nodes[_iNode].m_Children;
 		umint iLow = 0;
 		umint iHigh = Children.f_GetLen();
@@ -2516,20 +2517,20 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		bool bBroken = false;
-		for (auto i = _iFirst; i <= _iLast; ++i)
+		for (auto iToken = _iFirst; iToken <= _iLast; ++iToken)
 		{
-			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Newline)
+			if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_Newline)
 				continue;
 
 			bBroken = true;
-			bInsideGroups = bInsideGroups && m_Structure.f_FindEnclosingNode(i) != _iNode;
+			bInsideGroups = bInsideGroups && mp_Structure.f_FindEnclosingNode(iToken) != _iNode;
 		}
 
 		if (!bBroken)
 			return true;
 
 		umint nJoined = 0;
-		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		auto nMaxColumns = mp_Request.m_Settings.m_nMaxColumns;
 
 		return bInsideGroups && fp_MeasureJoinedWidth(_iFirst, _iLast, nJoined, true) && (!nMaxColumns || _iIndent + nJoined <= nMaxColumns);
 	}
@@ -2544,8 +2545,8 @@ namespace NMib::NDevelop::NPrivate
 	// statement to the builder, which keeps a dangling 'else' where it is.
 	bool CFormattingAnalyzer::fp_DropBraces(umint _iStatement, umint _iGuard)
 	{
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto const &Guard = Nodes[_iGuard];
 		bool bClauseFits = false;
 		if (!fp_IsBraceGuard(_iGuard, bClauseFits) || !bClauseFits)
@@ -2570,7 +2571,7 @@ namespace NMib::NDevelop::NPrivate
 		if (Inner.m_Kind != ECodeNodeKind::mc_Statement || Inner.m_iFirstToken == Inner.m_iLastToken)
 			return false;
 
-		if (m_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], "{") || !m_Tokens.f_IsText(Tokens[Inner.m_iLastToken], ";"))
+		if (mp_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], "{") || !mp_Tokens.f_IsText(Tokens[Inner.m_iLastToken], ";"))
 			return false;
 
 		// A macro statement is one statement: the code standard writes a statement macro as one, 'do { ... } while (false)'.
@@ -2579,12 +2580,12 @@ namespace NMib::NDevelop::NPrivate
 
 		// An attribute in front of a clause hides that the clause would take an 'else' behind the braces:
 		// '[[likely]] if (b) ...'. In C '[[maybe_unused]] int x' declares. An Objective-C message starts with a single '['.
-		if (auto iBehindOpen = fp_NextCode(Inner.m_iFirstToken); m_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], "[") && iBehindOpen >= 0)
+		if (auto iBehindOpen = fp_NextCode(Inner.m_iFirstToken); mp_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], "[") && iBehindOpen >= 0)
 		{
-			auto iAttribute = m_Structure.f_FindNodeOpeningAt(Inner.m_iFirstToken);
-			if (m_Tokens.f_IsText(Tokens[umint(iBehindOpen)], "["))
+			auto iAttribute = mp_Structure.f_FindNodeOpeningAt(Inner.m_iFirstToken);
+			if (mp_Tokens.f_IsText(Tokens[umint(iBehindOpen)], "["))
 			{
-				if (m_Tokens.f_IsC(Tokens[Inner.m_iFirstToken]) || iAttribute >= Nodes.f_GetLen())
+				if (mp_Tokens.f_IsC(Tokens[Inner.m_iFirstToken]) || iAttribute >= Nodes.f_GetLen())
 					return false;
 
 				auto iBehindAttribute = fp_NextCode(Nodes[iAttribute].m_iLastToken);
@@ -2593,13 +2594,13 @@ namespace NMib::NDevelop::NPrivate
 
 				for (auto pClause : {"if", "for", "while", "switch", "do", "case", "default", "[", "__extension__", "_Pragma", "__pragma", "__attribute__", "__attribute"})
 				{
-					if (m_Tokens.f_IsText(Tokens[umint(iBehindAttribute)], pClause))
+					if (mp_Tokens.f_IsText(Tokens[umint(iBehindAttribute)], pClause))
 						return false;
 				}
 
 				// So does a label, which can stand in front of a clause: '[[maybe_unused]] L: if (b) ...', a case label too.
 				auto iColon = fp_NextCode(umint(iBehindAttribute));
-				if (iColon >= 0 && m_Tokens.f_IsText(Tokens[umint(iColon)], ":"))
+				if (iColon >= 0 && mp_Tokens.f_IsText(Tokens[umint(iColon)], ":"))
 					return false;
 			}
 		}
@@ -2608,13 +2609,13 @@ namespace NMib::NDevelop::NPrivate
 		// a pragma or a GNU attribute in front of an 'if' that would take an 'else' behind. GNU's '__label__' only starts a block.
 		for (auto pPrefix : {"__extension__", "_Pragma", "__pragma", "__attribute__", "__attribute", "__declspec", "__label__"})
 		{
-			if (m_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], pPrefix))
+			if (mp_Tokens.f_IsText(Tokens[Inner.m_iFirstToken], pPrefix))
 				return false;
 		}
 
 		// C has no declaration statement, so a guarded declaration keeps its braces, and so does a statement that could be
 		// one: one opening with a word that starts a declaration, or with a name followed by a name or a '*'.
-		if (m_Tokens.f_IsC(Tokens[Inner.m_iFirstToken]) && Tokens[Inner.m_iFirstToken].m_Kind == ECodeTokenKind::mc_Identifier)
+		if (mp_Tokens.f_IsC(Tokens[Inner.m_iFirstToken]) && Tokens[Inner.m_iFirstToken].m_Kind == ECodeTokenKind::mc_Identifier)
 		{
 			constexpr ch8 const *c_pDeclarationStarts[] =
 				{
@@ -2701,14 +2702,14 @@ namespace NMib::NDevelop::NPrivate
 			auto const &First = Tokens[Inner.m_iFirstToken];
 			for (auto pWord : c_pDeclarationStarts)
 			{
-				if (m_Tokens.f_IsText(First, pWord))
+				if (mp_Tokens.f_IsText(First, pWord))
 					return false;
 			}
 
 			// A name alone can be a macro expanding to a declaration: 'DLocal;' for 'int Value = 0'.
-			bool bKeyword = m_Tokens.f_IsText(First, "break") || m_Tokens.f_IsText(First, "continue") || m_Tokens.f_IsText(First, "return");
+			bool bKeyword = mp_Tokens.f_IsText(First, "break") || mp_Tokens.f_IsText(First, "continue") || mp_Tokens.f_IsText(First, "return");
 			auto iSecond = fp_NextCode(Inner.m_iFirstToken);
-			if (iSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSecond)], ";") && !bKeyword)
+			if (iSecond >= 0 && mp_Tokens.f_IsText(Tokens[umint(iSecond)], ";") && !bKeyword)
 				return false;
 
 			if (iSecond >= 0)
@@ -2716,12 +2717,12 @@ namespace NMib::NDevelop::NPrivate
 				// Objective-C's protocols and generics qualify a type with angle brackets, 'id<P> value;', where an expression
 				// would only compare and discard.
 				auto const &Second = Tokens[umint(iSecond)];
-				if (Second.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Second, "*") || m_Tokens.f_IsText(Second, "<"))
+				if (Second.m_Kind == ECodeTokenKind::mc_Identifier || mp_Tokens.f_IsText(Second, "*") || mp_Tokens.f_IsText(Second, "<"))
 					return false;
 
 				// So does an attribute behind the type, which no subscript can start: 'T [[maybe_unused]] *x;'.
 				auto iThird = fp_NextCode(umint(iSecond));
-				if (m_Tokens.f_IsText(Second, "[") && iThird >= 0 && m_Tokens.f_IsText(Tokens[umint(iThird)], "["))
+				if (mp_Tokens.f_IsText(Second, "[") && iThird >= 0 && mp_Tokens.f_IsText(Tokens[umint(iThird)], "["))
 					return false;
 
 				// A parenthesized declarator: 'T (*x)(int);', 'T ((x));', 'T (x)[2];', or a type the naming lists. A call
@@ -2729,23 +2730,23 @@ namespace NMib::NDevelop::NPrivate
 				// by decision: the typedefs are not known here, and refusing every such call would keep nearly all braces.
 				// A name behind the parenthesis declares, as no expression goes on with one: 'DAlign(16) int x;', and so can an
 				// initializer, 'T (x) = 1;', which a call's result cannot take in C but a macro's can, whose braces then stay.
-				auto iGroup = m_Tokens.f_IsText(Second, "(") ? m_Structure.f_FindNodeOpeningAt(umint(iSecond)) : Nodes.f_GetLen();
+				auto iGroup = mp_Tokens.f_IsText(Second, "(") ? mp_Structure.f_FindNodeOpeningAt(umint(iSecond)) : Nodes.f_GetLen();
 				if (iGroup < Nodes.f_GetLen())
 				{
 					auto iInside = fp_NextCode(umint(iSecond));
 					auto iBehind = fp_NextCode(Nodes[iGroup].m_iLastToken);
 					bool bDeclarator
-						= m_Tokens.f_HasRole(First, ECodeNameRole::mc_Type)
-						|| (iInside >= 0 && (m_Tokens.f_IsText(Tokens[umint(iInside)], "*") || m_Tokens.f_IsText(Tokens[umint(iInside)], "(")))
+						= mp_Tokens.f_HasRole(First, ECodeNameRole::mc_Type)
+						|| (iInside >= 0 && (mp_Tokens.f_IsText(Tokens[umint(iInside)], "*") || mp_Tokens.f_IsText(Tokens[umint(iInside)], "(")))
 						||
 						(
 							iBehind >= 0
 							&&
 							(
-								m_Tokens.f_IsText(Tokens[umint(iBehind)], "(")
-								|| m_Tokens.f_IsText(Tokens[umint(iBehind)], "[")
+								mp_Tokens.f_IsText(Tokens[umint(iBehind)], "(")
+								|| mp_Tokens.f_IsText(Tokens[umint(iBehind)], "[")
 								|| Tokens[umint(iBehind)].m_Kind == ECodeTokenKind::mc_Identifier
-								|| m_Tokens.f_IsText(Tokens[umint(iBehind)], "=")
+								|| mp_Tokens.f_IsText(Tokens[umint(iBehind)], "=")
 							)
 						)
 					;
@@ -2757,9 +2758,9 @@ namespace NMib::NDevelop::NPrivate
 
 		auto fOnlyWhitespace = [&](umint _iFrom, umint _iTo)
 			{
-				for (auto i = _iFrom; i < _iTo; ++i)
+				for (auto iToken = _iFrom; iToken < _iTo; ++iToken)
 				{
-					auto Kind = Tokens[i].m_Kind;
+					auto Kind = Tokens[iToken].m_Kind;
 					if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline)
 						return false;
 				}
@@ -2771,7 +2772,7 @@ namespace NMib::NDevelop::NPrivate
 		if (!fOnlyWhitespace(Guard.m_iLastToken + 1, Block.m_iFirstToken) || !fOnlyWhitespace(Block.m_iFirstToken + 1, Inner.m_iFirstToken))
 			return false;
 
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto nTab = mp_Request.m_Settings.m_nTabWidth;
 
 		// The 'if' of an 'else if' stands behind the 'else', whose line the braces go under.
 		// Behind a case label on its line, a body within a few columns of the limit can have its braces taken and given back
@@ -2783,9 +2784,9 @@ namespace NMib::NDevelop::NPrivate
 
 		auto iCloseStart = Tokens[Inner.m_iLastToken].f_GetEnd();
 		bool bTrailingComment = false;
-		for (auto i = Inner.m_iLastToken + 1; i < Block.m_iLastToken; ++i)
+		for (auto iToken = Inner.m_iLastToken + 1; iToken < Block.m_iLastToken; ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			auto Kind = Token.m_Kind;
 			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline)
 				continue;
@@ -2795,7 +2796,7 @@ namespace NMib::NDevelop::NPrivate
 				return false;
 
 			bool bOnStatementLine = true;
-			for (auto iGap = Inner.m_iLastToken + 1; iGap < i; ++iGap)
+			for (auto iGap = Inner.m_iLastToken + 1; iGap < iToken; ++iGap)
 				bOnStatementLine &= Tokens[iGap].m_Kind != ECodeTokenKind::mc_Newline;
 
 			if (!bOnStatementLine)
@@ -2803,7 +2804,7 @@ namespace NMib::NDevelop::NPrivate
 
 			// A block comment the brace stands behind would be left ending the line, for the next pass to convert.
 			bool bBraceBehind = true;
-			for (auto iGap = i + 1; bBraceBehind && iGap < Block.m_iLastToken; ++iGap)
+			for (auto iGap = iToken + 1; bBraceBehind && iGap < Block.m_iLastToken; ++iGap)
 				bBraceBehind = Tokens[iGap].m_Kind != ECodeTokenKind::mc_Newline;
 
 			if (Kind == ECodeTokenKind::mc_BlockComment && bBraceBehind)
@@ -2819,13 +2820,13 @@ namespace NMib::NDevelop::NPrivate
 		// So does the closing brace of the block around it.
 		auto iAfter = fp_NextCode(Block.m_iLastToken);
 		bool bLastOnLine = fp_IsLastOnLine(Block.m_iLastToken);
-		bool bElseFollows = iAfter >= 0 && m_Tokens.f_IsText(Tokens[umint(iAfter)], "else");
+		bool bElseFollows = iAfter >= 0 && mp_Tokens.f_IsText(Tokens[umint(iAfter)], "else");
 
 		auto iOuter = Statement.m_iParent;
 		auto const *pOuter = iOuter < Nodes.f_GetLen() ? &Nodes[iOuter] : nullptr;
 		bool bOuterCloses = iAfter >= 0 && pOuter && pOuter->m_Kind == ECodeNodeKind::mc_Block && pOuter->m_iLastToken == umint(iAfter);
-		for (auto i = Block.m_iLastToken + 1; bOuterCloses && i < umint(iAfter); ++i)
-			bOuterCloses = Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace;
+		for (auto iToken = Block.m_iLastToken + 1; bOuterCloses && iToken < umint(iAfter); ++iToken)
+			bOuterCloses = Tokens[iToken].m_Kind == ECodeTokenKind::mc_Whitespace;
 
 		// And so does the next statement in the block, which the layout starts a line of its own with.
 		// The children stand in source order, so the one starting there is found by halving.
@@ -2851,8 +2852,8 @@ namespace NMib::NDevelop::NPrivate
 			}
 		}
 
-		for (auto i = Block.m_iLastToken + 1; bStatementFollows && i < umint(iAfter); ++i)
-			bStatementFollows = Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace;
+		for (auto iToken = Block.m_iLastToken + 1; bStatementFollows && iToken < umint(iAfter); ++iToken)
+			bStatementFollows = Tokens[iToken].m_Kind == ECodeTokenKind::mc_Whitespace;
 
 		if (!bLastOnLine && !bElseFollows && !bOuterCloses && !bStatementFollows)
 			return false;
@@ -2867,7 +2868,7 @@ namespace NMib::NDevelop::NPrivate
 			{
 				for (auto iChar = _iStart; iChar < _iStart + _nLength; ++iChar)
 				{
-					auto Char = m_pSource[iChar];
+					auto Char = mp_pSource[iChar];
 					if (Char != ' ' && Char != '\t' && Char != '\n' && Char != '\r' && Char != '{' && Char != '}')
 						return false;
 				}
@@ -2891,13 +2892,13 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
-		auto &Open = m_Structural.f_Insert();
+		auto &Open = mp_Structural.f_Insert();
 		Open.m_iOffset = iOpenStart;
 		Open.m_nLength = nOpen;
 		Open.m_Replacement = Ending + fp_MakeIndent(nGuardIndent + nTab);
 		Open.m_Rule = "braces";
 
-		auto &Close = m_Structural.f_Insert();
+		auto &Close = mp_Structural.f_Insert();
 		Close.m_iOffset = iCloseStart;
 		Close.m_nLength = nClose;
 		if (!bLastOnLine)
@@ -2916,8 +2917,8 @@ namespace NMib::NDevelop::NPrivate
 	// statement's last line stays there, in front of the closing brace.
 	bool CFormattingAnalyzer::fp_AddBraces(umint _iStatement, umint _iGuard)
 	{
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 		auto const &Guard = Nodes[_iGuard];
 		bool bClauseFits = false;
 		if (!fp_IsBraceGuard(_iGuard, bClauseFits))
@@ -2934,7 +2935,7 @@ namespace NMib::NDevelop::NPrivate
 		// guards in turn and the 'else' branches behind them, 'for (...)' over 'if (...)' over '{ ... }'.
 		umint iLast = Statement.m_iLastToken;
 		bool bChain = fp_IsGuard(_iStatement);
-		bool bLabelled = !bChain && m_Tokens.f_IsText(Tokens[iLast], ":");
+		bool bLabelled = !bChain && mp_Tokens.f_IsText(Tokens[iLast], ":");
 		if (bLabelled)
 		{
 			// A guarded label takes the statement it labels into the braces: 'if (b)' over 'Retry: f();'. Labels in a row
@@ -2953,7 +2954,7 @@ namespace NMib::NDevelop::NPrivate
 			auto iLabelled = Siblings[iIndex + 1];
 			auto const &Labelled = Nodes[iLabelled];
 			auto const &LabelledLast = Tokens[Labelled.m_iLastToken];
-			if (fp_IsGuard(iLabelled) || m_Tokens.f_IsText(Tokens[Labelled.m_iFirstToken], "{") || !m_Tokens.f_IsText(LabelledLast, ";"))
+			if (fp_IsGuard(iLabelled) || mp_Tokens.f_IsText(Tokens[Labelled.m_iFirstToken], "{") || !mp_Tokens.f_IsText(LabelledLast, ";"))
 				return false;
 
 			iLast = Labelled.m_iLastToken;
@@ -2983,14 +2984,14 @@ namespace NMib::NDevelop::NPrivate
 
 					// An 'else' whose 'if' is a guard of its own leaves that 'if' to be counted where it stands.
 					auto iKey = Nodes[Siblings[iIndex]].m_iFirstToken;
-					if (m_Tokens.f_IsText(Tokens[iKey], "else"))
+					if (mp_Tokens.f_IsText(Tokens[iKey], "else"))
 					{
 						auto iIf = fp_NextCode(iKey);
 						bool bOwnGuard = iIf >= 0 && iIndex + 1 < Siblings.f_GetLen() && Nodes[Siblings[iIndex + 1]].m_iFirstToken == umint(iIf);
 						iKey = iIf >= 0 && !bOwnGuard ? umint(iIf) : iKey;
 					}
 
-					nUnmatched += m_Tokens.f_IsText(Tokens[iKey], "if");
+					nUnmatched += mp_Tokens.f_IsText(Tokens[iKey], "if");
 					++iIndex;
 
 					continue;
@@ -3000,10 +3001,10 @@ namespace NMib::NDevelop::NPrivate
 				// lambda's captures start with one bracket.
 				auto iSiblingFirst = Nodes[Siblings[iIndex]].m_iFirstToken;
 				auto iSiblingSecond = fp_NextCode(iSiblingFirst);
-				if (m_Tokens.f_IsText(Tokens[iSiblingFirst], "[") && iSiblingSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSiblingSecond)], "["))
+				if (mp_Tokens.f_IsText(Tokens[iSiblingFirst], "[") && iSiblingSecond >= 0 && mp_Tokens.f_IsText(Tokens[umint(iSiblingSecond)], "["))
 					return false;
 
-				if (nUnmatched && iIndex + 1 < Siblings.f_GetLen() && m_Tokens.f_IsText(Tokens[Nodes[Siblings[iIndex + 1]].m_iFirstToken], "else"))
+				if (nUnmatched && iIndex + 1 < Siblings.f_GetLen() && mp_Tokens.f_IsText(Tokens[Nodes[Siblings[iIndex + 1]].m_iFirstToken], "else"))
 				{
 					--nUnmatched;
 					++iIndex;
@@ -3016,16 +3017,16 @@ namespace NMib::NDevelop::NPrivate
 
 			iLast = Nodes[Siblings[iIndex]].m_iLastToken;
 			auto const &Last = Tokens[iLast];
-			if (!m_Tokens.f_IsText(Last, ";") && !m_Tokens.f_IsText(Last, "}"))
+			if (!mp_Tokens.f_IsText(Last, ";") && !mp_Tokens.f_IsText(Last, "}"))
 				return false;
 		}
-		else if (!m_Tokens.f_IsText(Tokens[Statement.m_iLastToken], ";"))
+		else if (!mp_Tokens.f_IsText(Tokens[Statement.m_iLastToken], ";"))
 			return false;
 
-		if (m_Tokens.f_IsText(Tokens[Statement.m_iFirstToken], "{"))
+		if (mp_Tokens.f_IsText(Tokens[Statement.m_iFirstToken], "{"))
 			return false;
 
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto nTab = mp_Request.m_Settings.m_nTabWidth;
 
 		// The 'if' of an 'else if' stands behind the 'else', whose line the braces go under.
 		auto iElse = fp_LeadingElse(Guard.m_iFirstToken);
@@ -3036,15 +3037,15 @@ namespace NMib::NDevelop::NPrivate
 		auto iOpenAfter = Guard.m_iLastToken;
 		auto iFirst = Statement.m_iFirstToken;
 		auto iSecond = fp_NextCode(iFirst);
-		if (m_Tokens.f_IsText(Tokens[iFirst], "[") && iSecond >= 0 && m_Tokens.f_IsText(Tokens[umint(iSecond)], "["))
+		if (mp_Tokens.f_IsText(Tokens[iFirst], "[") && iSecond >= 0 && mp_Tokens.f_IsText(Tokens[umint(iSecond)], "["))
 		{
 			auto iName = fp_NextCode(umint(iSecond));
 			auto iNameEnd = iName >= 0 ? fp_NextCode(umint(iName)) : aint(-1);
 			bool bLikelihood
 				= iName >= 0
-				&& (m_Tokens.f_IsText(Tokens[umint(iName)], "likely") || m_Tokens.f_IsText(Tokens[umint(iName)], "unlikely"))
+				&& (mp_Tokens.f_IsText(Tokens[umint(iName)], "likely") || mp_Tokens.f_IsText(Tokens[umint(iName)], "unlikely"))
 				&& iNameEnd >= 0
-				&& m_Tokens.f_IsText(Tokens[umint(iNameEnd)], "]")
+				&& mp_Tokens.f_IsText(Tokens[umint(iNameEnd)], "]")
 			;
 			if (!bLikelihood)
 				return false;
@@ -3069,14 +3070,14 @@ namespace NMib::NDevelop::NPrivate
 
 			// Another attribute behind it can hide a clause as well: '[[likely]] [[likely]] if (b) f(); else g();'.
 			auto iAfterAttribute = fp_NextCode(iFirst);
-			if (m_Tokens.f_IsText(Tokens[iFirst], "[") && iAfterAttribute >= 0 && m_Tokens.f_IsText(Tokens[umint(iAfterAttribute)], "["))
+			if (mp_Tokens.f_IsText(Tokens[iFirst], "[") && iAfterAttribute >= 0 && mp_Tokens.f_IsText(Tokens[umint(iAfterAttribute)], "["))
 				return false;
 
 			// A clause behind the attribute was not read as one, so the 'else' branches it takes are not known here:
 			// 'if (a) [[likely]] if (b) f(); else g();'.
 			for (auto pClause : {"if", "for", "while", "switch", "do", "try"})
 			{
-				if (m_Tokens.f_IsText(Tokens[iFirst], pClause))
+				if (mp_Tokens.f_IsText(Tokens[iFirst], pClause))
 					return false;
 			}
 		}
@@ -3085,20 +3086,20 @@ namespace NMib::NDevelop::NPrivate
 		// The builder then reads the 'else' behind that block as more of the statement, and
 		// braces around the two would take the 'else' away from its clause. No statement
 		// that holds one at its own level is ever wrapped.
-		if (m_Tokens.f_IsText(Tokens[iFirst], "{"))
+		if (mp_Tokens.f_IsText(Tokens[iFirst], "{"))
 			return false;
 
-		for (auto i = iFirst; !bChain && i <= iLast; ++i)
+		for (auto iToken = iFirst; !bChain && iToken <= iLast; ++iToken)
 		{
-			if (m_TokenDepth[i] == m_TokenDepth[iFirst] && m_Tokens.f_IsText(Tokens[i], "else"))
+			if (mp_TokenDepth[iToken] == mp_TokenDepth[iFirst] && mp_Tokens.f_IsText(Tokens[iToken], "else"))
 				return false;
 		}
 
 		// A 'do' or a 'try' in the chain goes on past where its body ends, 'while (c);' or 'catch', which the chain's walk does
 		// not follow, and a directive in it can end the chain in one branch and not in another.
-		for (auto i = iFirst; i <= iLast; ++i)
+		for (auto iToken = iFirst; iToken <= iLast; ++iToken)
 		{
-			if (m_Tokens.f_IsText(Tokens[i], "do") || m_Tokens.f_IsText(Tokens[i], "try") || Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor)
+			if (mp_Tokens.f_IsText(Tokens[iToken], "do") || mp_Tokens.f_IsText(Tokens[iToken], "try") || Tokens[iToken].m_Kind == ECodeTokenKind::mc_Preprocessor)
 				return false;
 		}
 
@@ -3106,17 +3107,17 @@ namespace NMib::NDevelop::NPrivate
 		if (bClauseFits && !bChain && fp_IsRangeOneLine(_iStatement, iFirst, iLast, nGuardIndent + nTab))
 			return false;
 
-		for (auto i = iOpenAfter + 1; i < iFirst; ++i)
+		for (auto iToken = iOpenAfter + 1; iToken < iFirst; ++iToken)
 		{
-			auto Kind = Tokens[i].m_Kind;
+			auto Kind = Tokens[iToken].m_Kind;
 			if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline)
 				return false;
 		}
 
 		auto iCloseAt = Tokens[iLast].f_GetEnd();
-		for (auto i = iLast + 1; i < Tokens.f_GetLen(); ++i)
+		for (auto iToken = iLast + 1; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			auto Kind = Token.m_Kind;
 			if (Kind == ECodeTokenKind::mc_Whitespace)
 				continue;
@@ -3146,13 +3147,13 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
-		auto &Open = m_Structural.f_Insert();
+		auto &Open = mp_Structural.f_Insert();
 		Open.m_iOffset = iOpenStart;
 		Open.m_nLength = nOpen;
 		Open.m_Replacement = Ending + fp_MakeIndent(nGuardIndent) + "{" + Ending + fp_MakeIndent(nGuardIndent + nTab);
 		Open.m_Rule = "braces";
 
-		auto &Close = m_Structural.f_Insert();
+		auto &Close = mp_Structural.f_Insert();
 		Close.m_iOffset = iCloseAt;
 		Close.m_nLength = 0;
 		Close.m_Replacement = Ending + fp_MakeIndent(nGuardIndent) + "}";

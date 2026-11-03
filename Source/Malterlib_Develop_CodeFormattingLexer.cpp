@@ -96,10 +96,10 @@ namespace
 
 	bool fg_IsSameText(ch8 const *_pText, umint _nLength, ch8 const *_pOther)
 	{
-		for (umint i = 0; i < _nLength; ++i)
+		for (umint iChar = 0; iChar < _nLength; ++iChar)
 		{
-			auto Char = _pOther[i];
-			if (_pText[i] != Char || !Char)
+			auto Char = _pOther[iChar];
+			if (_pText[iChar] != Char || !Char)
 				return false;
 		}
 
@@ -190,11 +190,11 @@ namespace
 				continue;
 			}
 
-			umint i = 0;
-			while (i < nDelimiter && _Cursor.f_Peek(1 + i) == _Cursor.m_pStart[iDelimiter + i])
-				++i;
+			umint iChar = 0;
+			while (iChar < nDelimiter && _Cursor.f_Peek(1 + iChar) == _Cursor.m_pStart[iDelimiter + iChar])
+				++iChar;
 
-			if (i == nDelimiter && _Cursor.f_Peek(1 + nDelimiter) == '"')
+			if (iChar == nDelimiter && _Cursor.f_Peek(1 + nDelimiter) == '"')
 			{
 				_Cursor.m_iOffset += nDelimiter + 2;
 
@@ -510,11 +510,11 @@ namespace
 			while (pPunctuator[nLength])
 				++nLength;
 
-			umint i = 0;
-			while (i < nLength && _Cursor.f_Peek(i) == pPunctuator[i])
-				++i;
+			umint iChar = 0;
+			while (iChar < nLength && _Cursor.f_Peek(iChar) == pPunctuator[iChar])
+				++iChar;
 
-			if (i == nLength)
+			if (iChar == nLength)
 			{
 				_Cursor.m_iOffset += nLength;
 
@@ -648,9 +648,9 @@ namespace NMib::NDevelop
 			// An operand follows one, which text an assembler reads does not have: 'and \scratch3, \scratch3' in a macro.
 			auto fStartsOperand = [&](umint _iToken)
 				{
-					for (auto i = _iToken + 1; i < mp_Tokens.f_GetLen(); ++i)
+					for (auto iToken = _iToken + 1; iToken < mp_Tokens.f_GetLen(); ++iToken)
 					{
-						auto const &Next = mp_Tokens[i];
+						auto const &Next = mp_Tokens[iToken];
 						switch (Next.m_Kind)
 						{
 						case ECodeTokenKind::mc_Whitespace:
@@ -746,9 +746,9 @@ namespace NMib::NDevelop
 	bool CCodeTokenStream::f_StartsWith(CCodeToken const &_Token, ch8 const *_pPrefix) const
 	{
 		auto pToken = mp_Source.f_GetStr() + _Token.m_iOffset;
-		for (umint i = 0; _pPrefix[i]; ++i)
+		for (umint iChar = 0; _pPrefix[iChar]; ++iChar)
 		{
-			if (i >= _Token.m_nLength || pToken[i] != _pPrefix[i])
+			if (iChar >= _Token.m_nLength || pToken[iChar] != _pPrefix[iChar])
 				return false;
 		}
 
@@ -761,9 +761,9 @@ namespace NMib::NDevelop
 			return false;
 
 		auto pSource = mp_Source.f_GetStr();
-		for (umint i = 0; i < _Left.m_nLength; ++i)
+		for (umint iChar = 0; iChar < _Left.m_nLength; ++iChar)
 		{
-			if (pSource[_Left.m_iOffset + i] != pSource[_Right.m_iOffset + i])
+			if (pSource[_Left.m_iOffset + iChar] != pSource[_Right.m_iOffset + iChar])
 				return false;
 		}
 
@@ -788,9 +788,9 @@ namespace NMib::NDevelop
 
 		auto pToken = mp_Source.f_GetStr() + _Token.m_iOffset;
 		auto pText = _Text.f_GetStr();
-		for (umint i = 0; i < _Token.m_nLength; ++i)
+		for (umint iChar = 0; iChar < _Token.m_nLength; ++iChar)
 		{
-			if (pToken[i] != pText[i])
+			if (pToken[iChar] != pText[iChar])
 				return false;
 		}
 
@@ -842,23 +842,23 @@ namespace
 				return fg_CharIsAnsiAlphabetical(_Char) || fg_CharIsNumber(_Char) || _Char == '_';
 			}
 		;
-		for (umint i = 0; i < _nLength; ++i)
+		for (umint iChar = 0; iChar < _nLength; ++iChar)
 		{
-			auto Char = _pText[i];
+			auto Char = _pText[iChar];
 
 			// A literal's text is no comment: '__has_include("a//b.h")'.
 			if (Char == '"' || Char == '\'')
 			{
 				Compact.f_AddChar(Char);
-				for (++i; i < _nLength && _pText[i] != Char; ++i)
+				for (++iChar; iChar < _nLength && _pText[iChar] != Char; ++iChar)
 				{
-					if (_pText[i] == '\\' && i + 1 < _nLength)
-						Compact.f_AddChar(_pText[i++]);
+					if (_pText[iChar] == '\\' && iChar + 1 < _nLength)
+						Compact.f_AddChar(_pText[iChar++]);
 
-					Compact.f_AddChar(_pText[i]);
+					Compact.f_AddChar(_pText[iChar]);
 				}
 
-				if (i < _nLength)
+				if (iChar < _nLength)
 					Compact.f_AddChar(Char);
 
 				bSeparated = false;
@@ -866,16 +866,16 @@ namespace
 				continue;
 			}
 
-			if (Char == '/' && i + 1 < _nLength && _pText[i + 1] == '/')
+			if (Char == '/' && iChar + 1 < _nLength && _pText[iChar + 1] == '/')
 				break;
 
-			if (Char == '/' && i + 1 < _nLength && _pText[i + 1] == '*')
+			if (Char == '/' && iChar + 1 < _nLength && _pText[iChar + 1] == '*')
 			{
-				i += 2;
-				while (i + 1 < _nLength && (_pText[i] != '*' || _pText[i + 1] != '/'))
-					++i;
+				iChar += 2;
+				while (iChar + 1 < _nLength && (_pText[iChar] != '*' || _pText[iChar + 1] != '/'))
+					++iChar;
 
-				++i;
+				++iChar;
 				bSeparated = true;
 
 				continue;
@@ -884,13 +884,13 @@ namespace
 			// A splice joins the text around it, which it does not separate: 'defined\\' over '__cplusplus' is one name.
 			if (Char == '\\')
 			{
-				auto iAfter = i + 1;
+				auto iAfter = iChar + 1;
 				while (iAfter < _nLength && (_pText[iAfter] == ' ' || _pText[iAfter] == '\t'))
 					++iAfter;
 
 				if (iAfter < _nLength && (_pText[iAfter] == '\r' || _pText[iAfter] == '\n'))
 				{
-					i = iAfter + (_pText[iAfter] == '\r' && iAfter + 1 < _nLength && _pText[iAfter + 1] == '\n');
+					iChar = iAfter + (_pText[iAfter] == '\r' && iAfter + 1 < _nLength && _pText[iAfter + 1] == '\n');
 
 					continue;
 				}
@@ -924,10 +924,10 @@ namespace
 				{
 					aint nDepth = 0;
 					bool bWraps = true;
-					for (umint i = 0; i < _Condition.f_GetLen() && bWraps; ++i)
+					for (umint iChar = 0; iChar < _Condition.f_GetLen() && bWraps; ++iChar)
 					{
-						nDepth += _Condition[i] == '(' ? 1 : _Condition[i] == ')' ? -1 : 0;
-						bWraps = nDepth > 0 || i + 1 == _Condition.f_GetLen();
+						nDepth += _Condition[iChar] == '(' ? 1 : _Condition[iChar] == ')' ? -1 : 0;
+						bWraps = nDepth > 0 || iChar + 1 == _Condition.f_GetLen();
 					}
 
 					if (!bWraps)
@@ -1166,10 +1166,10 @@ namespace NMib::NDevelop
 		NContainer::TCVector<CCodeToken> Tokens;
 		Tokens.f_Reserve(mp_Tokens.f_GetLen() + _Tokens.f_GetLen());
 		umint iSplit = 0;
-		for (umint i = 0; i < mp_Tokens.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < mp_Tokens.f_GetLen(); ++iToken)
 		{
-			auto &First = Tokens.f_Insert(mp_Tokens[i]);
-			if (iSplit >= _Tokens.f_GetLen() || _Tokens[iSplit] != i)
+			auto &First = Tokens.f_Insert(mp_Tokens[iToken]);
+			if (iSplit >= _Tokens.f_GetLen() || _Tokens[iSplit] != iToken)
 				continue;
 
 			++iSplit;
@@ -1197,9 +1197,9 @@ namespace NMib::NDevelop
 				Token.m_nLength = Cursor.m_iOffset - _iStart;
 				Token.m_bUnterminated = _bUnterminated;
 
-				for (umint i = _iStart; i < Cursor.m_iOffset; ++i)
+				for (umint iChar = _iStart; iChar < Cursor.m_iOffset; ++iChar)
 				{
-					if (fg_IsLineBreak(Cursor.m_pStart[i]))
+					if (fg_IsLineBreak(Cursor.m_pStart[iChar]))
 					{
 						Token.m_bMultiLine = true;
 
@@ -1380,9 +1380,9 @@ namespace NMib::NDevelop
 				Token.m_nLength = Cursor.m_iOffset - _iStart;
 				Token.m_bUnterminated = _bUnterminated;
 
-				for (umint i = _iStart; i < Cursor.m_iOffset; ++i)
+				for (umint iChar = _iStart; iChar < Cursor.m_iOffset; ++iChar)
 				{
-					if (fg_IsLineBreak(Cursor.m_pStart[i]))
+					if (fg_IsLineBreak(Cursor.m_pStart[iChar]))
 					{
 						Token.m_bMultiLine = true;
 

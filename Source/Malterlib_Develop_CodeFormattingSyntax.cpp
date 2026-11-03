@@ -39,20 +39,20 @@ namespace
 		if (Statement.m_Kind != ECodeNodeKind::mc_Statement)
 			return false;
 
-		for (auto i = Statement.m_iFirstToken; i <= Statement.m_iLastToken; ++i)
+		for (auto iToken = Statement.m_iFirstToken; iToken <= Statement.m_iLastToken; ++iToken)
 		{
 			bool bNested = false;
 			for (auto iChild : Statement.m_Children)
 			{
 				auto const &Child = Nodes[iChild];
-				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				if (Child.m_iFirstToken <= iToken && iToken <= Child.m_iLastToken)
 				{
 					// A requires expression's body in a clause in front of the head is no body of it: 'requires requires { T::a; }'
 					// over 'struct CFoo'.
 					if (Child.m_Kind == ECodeNodeKind::mc_Block && !fg_IsRequirementsBlock(_Tokens, _Structure, iChild))
 						return false;
 
-					i = Child.m_iLastToken;
+					iToken = Child.m_iLastToken;
 					bNested = true;
 
 					break;
@@ -62,7 +62,7 @@ namespace
 			if (bNested)
 				continue;
 
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			if (_Tokens.f_IsText(Token, "struct") || _Tokens.f_IsText(Token, "class") || _Tokens.f_IsText(Token, "union"))
 				return true;
 		}
@@ -84,11 +84,11 @@ namespace
 		// A conditional's branch spells its own head, which starts behind the directive in front of it:
 		// '#if' 'void *f_A()' '#else' 'void *f_B()' '#endif' over one body.
 		auto iFirst = Statement.m_iFirstToken;
-		for (auto i = _iLast; i > Statement.m_iFirstToken; --i)
+		for (auto iToken = _iLast; iToken > Statement.m_iFirstToken; --iToken)
 		{
-			if (Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor)
+			if (Tokens[iToken].m_Kind == ECodeTokenKind::mc_Preprocessor)
 			{
-				iFirst = i + 1;
+				iFirst = iToken + 1;
 
 				break;
 			}
@@ -96,9 +96,9 @@ namespace
 
 		bool bSpelled = false;
 		bool bClause = false;
-		for (auto i = iFirst; i <= _iLast; ++i)
+		for (auto iToken = iFirst; iToken <= _iLast; ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			if (!fg_IsSignificant(Token.m_Kind))
 				continue;
 
@@ -109,7 +109,7 @@ namespace
 
 			if (_Tokens.f_IsText(Token, "template"))
 			{
-				auto iOpen = fg_NextCode(_Tokens, i);
+				auto iOpen = fg_NextCode(_Tokens, iToken);
 				if (iOpen >= 0 && _Tokens.f_IsText(Tokens[umint(iOpen)], "<"))
 				{
 					// A header declares what follows it, which is what a constructor template
@@ -117,9 +117,9 @@ namespace
 					bSpelled = true;
 
 					umint nDepth = 0;
-					for (i = umint(iOpen); i <= _iLast; ++i)
+					for (iToken = umint(iOpen); iToken <= _iLast; ++iToken)
 					{
-						auto const &HeaderToken = Tokens[i];
+						auto const &HeaderToken = Tokens[iToken];
 						if (_Tokens.f_IsText(HeaderToken, "<"))
 							++nDepth;
 						else if (_Tokens.f_IsText(HeaderToken, ">"))
@@ -139,7 +139,7 @@ namespace
 			for (auto iChild : Statement.m_Children)
 			{
 				auto const &Child = Nodes[iChild];
-				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				if (Child.m_iFirstToken <= iToken && iToken <= Child.m_iLastToken)
 				{
 					// A requires clause stands between a template header and the declaration,
 					// and 'decltype' with its operand names a type: 'decltype(auto) fg_Get()'.
@@ -174,7 +174,7 @@ namespace
 					if (bClause && fg_IsRequirementsBlock(_Tokens, _Structure, iChild))
 					{
 						bNested = true;
-						i = Child.m_iLastToken;
+						iToken = Child.m_iLastToken;
 
 						break;
 					}
@@ -185,7 +185,7 @@ namespace
 
 					bSpelled |= Child.m_Bracket == ECodeBracket::mc_Angle || bDecltype;
 					bNested = true;
-					i = Child.m_iLastToken;
+					iToken = Child.m_iLastToken;
 
 					break;
 				}
@@ -195,7 +195,7 @@ namespace
 				continue;
 
 			// A linkage specification's string is one of the declaration's specifiers: 'extern "C" void'.
-			auto iExtern = Token.m_Kind == ECodeTokenKind::mc_StringLiteral ? fg_PreviousCode(_Tokens, i) : aint(-1);
+			auto iExtern = Token.m_Kind == ECodeTokenKind::mc_StringLiteral ? fg_PreviousCode(_Tokens, iToken) : aint(-1);
 			if (iExtern >= 0 && _Tokens.f_IsText(Tokens[umint(iExtern)], "extern"))
 				continue;
 
@@ -319,9 +319,9 @@ namespace
 		}
 
 		bool bType = false;
-		for (auto i = Node.m_iFirstToken + 1; i < Node.m_iLastToken; ++i)
+		for (auto iToken = Node.m_iFirstToken + 1; iToken < Node.m_iLastToken; ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			if (!fg_IsSignificant(Token.m_Kind))
 				continue;
 
@@ -416,10 +416,10 @@ namespace NMib::NDevelop::NPrivate
 	aint fg_PreviousCode(CCodeTokenStream const &_Tokens, umint _iToken)
 	{
 		auto const &Tokens = _Tokens.f_GetTokens();
-		for (auto i = _iToken; i; --i)
+		for (auto iEnd = _iToken; iEnd; --iEnd)
 		{
-			if (fg_IsSignificant(Tokens[i - 1].m_Kind))
-				return aint(i - 1);
+			if (fg_IsSignificant(Tokens[iEnd - 1].m_Kind))
+				return aint(iEnd - 1);
 		}
 
 		return -1;
@@ -428,10 +428,10 @@ namespace NMib::NDevelop::NPrivate
 	aint fg_NextCode(CCodeTokenStream const &_Tokens, umint _iToken)
 	{
 		auto const &Tokens = _Tokens.f_GetTokens();
-		for (auto i = _iToken + 1; i < Tokens.f_GetLen(); ++i)
+		for (auto iToken = _iToken + 1; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			if (fg_IsSignificant(Tokens[i].m_Kind))
-				return aint(i);
+			if (fg_IsSignificant(Tokens[iToken].m_Kind))
+				return aint(iToken);
 		}
 
 		return -1;
@@ -463,25 +463,25 @@ namespace NMib::NDevelop::NPrivate
 	bool fg_NamesOperator(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken)
 	{
 		auto const &Tokens = _Tokens.f_GetTokens();
-		auto i = aint(_iToken);
+		auto iToken = aint(_iToken);
 
 		// The keyword alone ends no name: what follows it is the rest of one.
-		if (_Tokens.f_IsText(Tokens[umint(i)], "operator"))
+		if (_Tokens.f_IsText(Tokens[umint(iToken)], "operator"))
 			return false;
 
 		// Nor does the opening of a conversion type's argument list: 'operator TCFoo<(c_A > 1)>'.
-		if (_Tokens.f_IsText(Tokens[umint(i)], "<") && _Structure.f_IsAngleBracket(umint(i)))
+		if (_Tokens.f_IsText(Tokens[umint(iToken)], "<") && _Structure.f_IsAngleBracket(umint(iToken)))
 			return false;
 
-		bool bParen = _Tokens.f_IsText(Tokens[umint(i)], ")");
-		if (bParen || _Tokens.f_IsText(Tokens[umint(i)], "]"))
+		bool bParen = _Tokens.f_IsText(Tokens[umint(iToken)], ")");
+		if (bParen || _Tokens.f_IsText(Tokens[umint(iToken)], "]"))
 		{
 			// The name's own brackets hold nothing; any other pair closes something else.
-			auto iOpen = fg_PreviousCode(_Tokens, umint(i));
+			auto iOpen = fg_PreviousCode(_Tokens, umint(iToken));
 			if (iOpen < 0 || !_Tokens.f_IsText(Tokens[umint(iOpen)], bParen ? "(" : "["))
 				return false;
 
-			i = iOpen;
+			iToken = iOpen;
 		}
 
 		// A conversion type's argument list is stepped over whole, whatever it holds.
@@ -496,10 +496,10 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		i = fSkipArguments(i);
+		iToken = fSkipArguments(iToken);
 		for (umint nSteps = 0; nSteps < 16; ++nSteps)
 		{
-			auto iPrevious = fg_PreviousCode(_Tokens, umint(i));
+			auto iPrevious = fg_PreviousCode(_Tokens, umint(iToken));
 			if (iPrevious < 0)
 				return false;
 
@@ -521,7 +521,7 @@ namespace NMib::NDevelop::NPrivate
 			if (!bName)
 				return false;
 
-			i = iPrevious;
+			iToken = iPrevious;
 		}
 
 		return false;
@@ -695,9 +695,9 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		auto i = fg_NextCode(_Tokens, Group.m_iFirstToken);
-		while (i >= 0 && umint(i) < Group.m_iLastToken && fIsConvention(i))
-			i = fg_NextCode(_Tokens, umint(i));
+		auto iToken = fg_NextCode(_Tokens, Group.m_iFirstToken);
+		while (iToken >= 0 && umint(iToken) < Group.m_iLastToken && fIsConvention(iToken))
+			iToken = fg_NextCode(_Tokens, umint(iToken));
 
 		// A block pointer, Clang's extension, is declared with '^' where a pointer to function has '*':
 		// 'void (^fReport)(void *_pMemory)'.
@@ -710,19 +710,19 @@ namespace NMib::NDevelop::NPrivate
 		;
 
 		bool bDeclarator = false;
-		while (i >= 0 && umint(i) < Group.m_iLastToken && fIsDeclarator(i))
+		while (iToken >= 0 && umint(iToken) < Group.m_iLastToken && fIsDeclarator(iToken))
 		{
 			bDeclarator = true;
-			i = fg_NextCode(_Tokens, umint(i));
+			iToken = fg_NextCode(_Tokens, umint(iToken));
 		}
 
-		if (!bDeclarator || i < 0)
+		if (!bDeclarator || iToken < 0)
 			return false;
 
-		if (umint(i) < Group.m_iLastToken && Tokens[umint(i)].m_Kind == ECodeTokenKind::mc_Identifier)
-			i = fg_NextCode(_Tokens, umint(i));
+		if (umint(iToken) < Group.m_iLastToken && Tokens[umint(iToken)].m_Kind == ECodeTokenKind::mc_Identifier)
+			iToken = fg_NextCode(_Tokens, umint(iToken));
 
-		return i >= 0 && umint(i) == Group.m_iLastToken;
+		return iToken >= 0 && umint(iToken) == Group.m_iLastToken;
 	}
 
 	bool fg_IsParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup)
@@ -815,13 +815,13 @@ namespace NMib::NDevelop::NPrivate
 			// Two names in a row in it declare a parameter, which no argument of a call does however the layout breaks the
 			// parenthesis from its name: 'function_ref<CResult(CPoint _Point, CValue &_Value)>'.
 			bool bDeclares = false;
-			for (auto i = Group.m_iFirstToken + 1; i < Group.m_iLastToken && !bDeclares; ++i)
+			for (auto iToken = Group.m_iFirstToken + 1; iToken < Group.m_iLastToken && !bDeclares; ++iToken)
 			{
-				auto const &Token = Tokens[i];
-				if (Token.m_Kind != ECodeTokenKind::mc_Identifier || _Structure.f_FindEnclosingNode(i) != _iGroup || fg_IsAnyText(_Tokens, Token, gc_pExpressionKeywords))
+				auto const &Token = Tokens[iToken];
+				if (Token.m_Kind != ECodeTokenKind::mc_Identifier || _Structure.f_FindEnclosingNode(iToken) != _iGroup || fg_IsAnyText(_Tokens, Token, gc_pExpressionKeywords))
 					continue;
 
-				auto iNext = fg_NextCode(_Tokens, i);
+				auto iNext = fg_NextCode(_Tokens, iToken);
 				auto const *pNext = iNext >= 0 && umint(iNext) < Group.m_iLastToken ? &Tokens[umint(iNext)] : nullptr;
 				bDeclares = pNext && pNext->m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, *pNext, gc_pExpressionKeywords);
 			}
@@ -913,8 +913,8 @@ namespace NMib::NDevelop::NPrivate
 			// So does one behind a constraint's operator in a requires clause: 'requires cA<t_C> && (cB<t_C>)'.
 			if (!bOperand && pBeforeChild && (_Tokens.f_IsText(*pBeforeChild, "&&") || _Tokens.f_IsText(*pBeforeChild, "||")))
 			{
-				for (auto i = Parent.m_iFirstToken; i < umint(iBeforeChild) && !bOperand; ++i)
-					bOperand = _Tokens.f_IsText(Tokens[i], "requires") && _Structure.f_FindEnclosingNode(i) == Group.m_iParent;
+				for (auto iToken = Parent.m_iFirstToken; iToken < umint(iBeforeChild) && !bOperand; ++iToken)
+					bOperand = _Tokens.f_IsText(Tokens[iToken], "requires") && _Structure.f_FindEnclosingNode(iToken) == Group.m_iParent;
 			}
 
 			if (iChild != _iGroup && bOperand)
@@ -1102,19 +1102,19 @@ namespace NMib::NDevelop::NPrivate
 		// The children stand in the order of their tokens, so one cursor passes them along with the tokens.
 		auto const &Node = Nodes[iNode];
 		umint iChild = 0;
-		for (auto i = Node.m_iFirstToken; i < _iColon; ++i)
+		for (auto iToken = Node.m_iFirstToken; iToken < _iColon; ++iToken)
 		{
-			while (iChild < Node.m_Children.f_GetLen() && Nodes[Node.m_Children[iChild]].m_iLastToken < i)
+			while (iChild < Node.m_Children.f_GetLen() && Nodes[Node.m_Children[iChild]].m_iLastToken < iToken)
 				++iChild;
 
-			if (iChild < Node.m_Children.f_GetLen() && Nodes[Node.m_Children[iChild]].m_iFirstToken <= i)
+			if (iChild < Node.m_Children.f_GetLen() && Nodes[Node.m_Children[iChild]].m_iFirstToken <= iToken)
 			{
-				i = Nodes[Node.m_Children[iChild]].m_iLastToken;
+				iToken = Nodes[Node.m_Children[iChild]].m_iLastToken;
 
 				continue;
 			}
 
-			if (_Tokens.f_IsText(Tokens[i], "?"))
+			if (_Tokens.f_IsText(Tokens[iToken], "?"))
 				return true;
 		}
 
@@ -1186,20 +1186,20 @@ namespace NMib::NDevelop::NPrivate
 				return false;
 		}
 
-		for (auto i = Statement.m_iFirstToken; i < _iColon; ++i)
+		for (auto iToken = Statement.m_iFirstToken; iToken < _iColon; ++iToken)
 		{
 			for (auto iChild : Statement.m_Children)
 			{
 				auto const &Child = Nodes[iChild];
-				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				if (Child.m_iFirstToken <= iToken && iToken <= Child.m_iLastToken)
 				{
-					i = Child.m_iLastToken;
+					iToken = Child.m_iLastToken;
 
 					break;
 				}
 			}
 
-			if (i < _iColon && _Tokens.f_IsText(Tokens[i], "?"))
+			if (iToken < _iColon && _Tokens.f_IsText(Tokens[iToken], "?"))
 				return false;
 		}
 
@@ -1619,11 +1619,12 @@ namespace NMib::NDevelop::NPrivate
 			if (_Tokens.f_IsText(Before, ")") && fg_IsAnyText(_Tokens, Name, c_pExpressionLeads) && !_Structure.f_IsAngleBracket(umint(iName)))
 			{
 				bool bExpression = false;
-				for (auto i = Nodes[umint(iGroup)].m_iFirstToken + 1; i < umint(iBefore) && !bExpression; ++i)
+				for (auto iToken = Nodes[umint(iGroup)].m_iFirstToken + 1; iToken < umint(iBefore) && !bExpression; ++iToken)
 				{
-					auto const &Inner = Tokens[i];
+					auto const &Inner = Tokens[iToken];
 					bExpression
-						= Inner.m_Kind == ECodeTokenKind::mc_Number || (Inner.m_Kind == ECodeTokenKind::mc_Punctuator && !_Tokens.f_IsText(Inner, "::") && !_Structure.f_IsAngleBracket(i))
+						= Inner.m_Kind == ECodeTokenKind::mc_Number
+						|| (Inner.m_Kind == ECodeTokenKind::mc_Punctuator && !_Tokens.f_IsText(Inner, "::") && !_Structure.f_IsAngleBracket(iToken))
 					;
 				}
 
@@ -1663,23 +1664,23 @@ namespace NMib::NDevelop::NPrivate
 
 		bool bAssigned = false;
 		auto iEnd = bCondition ? Node.m_iLastToken : _iToken;
-		for (auto i = Node.m_iFirstToken; i < iEnd; ++i)
+		for (auto iToken = Node.m_iFirstToken; iToken < iEnd; ++iToken)
 		{
 			for (auto iChild : Node.m_Children)
 			{
 				auto const &Child = Nodes[iChild];
-				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				if (Child.m_iFirstToken <= iToken && iToken <= Child.m_iLastToken)
 				{
-					i = Child.m_iLastToken;
+					iToken = Child.m_iLastToken;
 
 					break;
 				}
 			}
 
-			if (i >= iEnd)
+			if (iToken >= iEnd)
 				break;
 
-			auto const &Inner = Tokens[i];
+			auto const &Inner = Tokens[iToken];
 
 			// A separator starts the next declarator: 'int *pA = f(), *pB;'.
 			if (!bCondition && (_Tokens.f_IsText(Inner, ",") || _Tokens.f_IsText(Inner, ";")))
@@ -1788,9 +1789,9 @@ namespace NMib::NDevelop
 		;
 
 		bool bElementStart = true;
-		for (auto i = Group.m_iFirstToken + 1; i < Group.m_iLastToken; ++i)
+		for (auto iToken = Group.m_iFirstToken + 1; iToken < Group.m_iLastToken; ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			if (!fg_IsSignificant(Token.m_Kind))
 				continue;
 
@@ -1814,9 +1815,9 @@ namespace NMib::NDevelop
 			for (auto iChild : Group.m_Children)
 			{
 				auto const &Child = Nodes[iChild];
-				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				if (Child.m_iFirstToken <= iToken && iToken <= Child.m_iLastToken)
 				{
-					i = Child.m_iLastToken;
+					iToken = Child.m_iLastToken;
 					bNested = true;
 
 					break;
@@ -1875,9 +1876,9 @@ namespace NMib::NDevelop
 		bool bNameBehind = false;
 		bool bTypeByRole = false; // The last name proved the parameter by the naming's type role alone.
 		bool bDisproven = false;
-		for (auto i = Group.m_iFirstToken + 1; i < Group.m_iLastToken; ++i)
+		for (auto iToken = Group.m_iFirstToken + 1; iToken < Group.m_iLastToken; ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			if (!fg_IsSignificant(Token.m_Kind))
 				continue;
 
@@ -1887,7 +1888,7 @@ namespace NMib::NDevelop
 			for (auto iChild : Group.m_Children)
 			{
 				auto const &Child = Nodes[iChild];
-				if (Child.m_iFirstToken <= i && i <= Child.m_iLastToken)
+				if (Child.m_iFirstToken <= iToken && iToken <= Child.m_iLastToken)
 				{
 					// A brace or a parenthesis behind a name constructs a value, 'int{42}', 'int(42)', unless the parenthesis
 					// opens a declarator: 'int (*_pFunction)(int)'.
@@ -1915,7 +1916,7 @@ namespace NMib::NDevelop
 					if (_Tokens.f_IsText(Open, "("))
 						bNameBehind = false;
 
-					i = Child.m_iLastToken;
+					iToken = Child.m_iLastToken;
 					bNested = true;
 
 					break;
@@ -2250,21 +2251,21 @@ namespace NMib::NDevelop
 
 		bool bType = false;
 		umint iChild = 0;
-		for (auto i = Group.m_iFirstToken + 1; i < _iToken; ++i)
+		for (auto iToken = Group.m_iFirstToken + 1; iToken < _iToken; ++iToken)
 		{
-			auto const &Token = Tokens[i];
+			auto const &Token = Tokens[iToken];
 			if (!fg_IsSignificant(Token.m_Kind))
 				continue;
 
-			while (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iLastToken < i)
+			while (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iLastToken < iToken)
 				++iChild;
 
-			if (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iFirstToken <= i)
+			if (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iFirstToken <= iToken)
 			{
 				if (Nodes[Group.m_Children[iChild]].m_Bracket != ECodeBracket::mc_Angle)
 					return false;
 
-				i = Nodes[Group.m_Children[iChild]].m_iLastToken;
+				iToken = Nodes[Group.m_Children[iChild]].m_iLastToken;
 
 				continue;
 			}
@@ -2506,19 +2507,19 @@ namespace NMib::NDevelop
 
 		// The children stand in order, so each is stepped over once.
 		umint iChild = 0;
-		for (auto i = iStart + 1; i < _iToken; ++i)
+		for (auto iToken = iStart + 1; iToken < _iToken; ++iToken)
 		{
-			while (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iLastToken < i)
+			while (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iLastToken < iToken)
 				++iChild;
 
-			if (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iFirstToken <= i)
+			if (iChild < Group.m_Children.f_GetLen() && Nodes[Group.m_Children[iChild]].m_iFirstToken <= iToken)
 			{
-				i = Nodes[Group.m_Children[iChild]].m_iLastToken;
+				iToken = Nodes[Group.m_Children[iChild]].m_iLastToken;
 
 				continue;
 			}
 
-			if (_Tokens.f_IsText(Tokens[i], "="))
+			if (_Tokens.f_IsText(Tokens[iToken], "="))
 				return false;
 		}
 

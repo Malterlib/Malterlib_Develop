@@ -11,7 +11,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 		{
 			// The forms in Malterlib_Core_CodeStandard_Formatting.dox.
 			CStr Wide;
-			for (umint i = 0; i < 90; ++i)
+			for (umint iChar = 0; iChar < 90; ++iChar)
 				Wide += "W";
 
 			auto fSplit = [&](CStr const &_Case, CStr const &_Source, CStr const &_Expected)
@@ -30,7 +30,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// operand has to be opened, or takes a lambda's body, keeps the '=' on the
 			// head, and what follows that body is laid out under its closing brace.
 			CStr Name;
-			for (umint i = 0; i < 60; ++i)
+			for (umint iChar = 0; iChar < 60; ++iChar)
 				Name += "W";
 
 			fg_ExpectFormat
@@ -111,7 +111,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// long: the scopes inside it open in turn until every line of the result
 			// fits, whether the source wrote the construct on one line or split.
 			CStr Half = "(a + b)";
-			for (umint i = 0; i < 3; ++i)
+			for (umint iLevel = 0; iLevel < 3; ++iLevel)
 				Half = CStr("(@ + @)").f_Replace("@", Half);
 
 			CStr Element = CStr("(@ + @)").f_Replace("@", Half);
@@ -271,7 +271,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// out as any that ends there.
 			{
 				CStr Long;
-				for (umint i = 0; i < 70; ++i)
+				for (umint iChar = 0; iChar < 70; ++iChar)
 					Long += "W";
 
 				fg_ExpectFormat
@@ -302,11 +302,11 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// long.
 			{
 				CStr Fits;
-				for (umint i = 0; i < 80; ++i)
+				for (umint iChar = 0; iChar < 80; ++iChar)
 					Fits += "W";
 
 				CStr Long;
-				for (umint i = 0; i < 85; ++i)
+				for (umint iChar = 0; iChar < 85; ++iChar)
 					Long += "W";
 
 				fg_ExpectFormat
@@ -388,10 +388,10 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			{
 				CStr Constraint;
 				CStr Split;
-				for (umint i = 0; i < 19; ++i)
+				for (umint iConstraint = 0; iConstraint < 19; ++iConstraint)
 				{
 					Constraint += "cA<T> && ";
-					if (i)
+					if (iConstraint)
 						Split += "\t\t\t&& cA<T>\n";
 				}
 
@@ -413,11 +413,11 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// it goes with it to its line.
 			{
 				CStr Constraint;
-				for (umint i = 0; i < 175; ++i)
+				for (umint iChar = 0; iChar < 175; ++iChar)
 					Constraint += "A";
 
 				CStr Parameter;
-				for (umint i = 0; i < 88; ++i)
+				for (umint iChar = 0; iChar < 88; ++iChar)
 					Parameter += "W";
 
 				CStr Expected = CStr
@@ -460,7 +460,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A declaration a block comment leads on its line under a template header is measured from the comment and laid out.
 			{
 				CStr Parameter;
-				for (umint i = 0; i < 88; ++i)
+				for (umint iChar = 0; iChar < 88; ++iChar)
 					Parameter += "W";
 
 				fg_ExpectFormat
@@ -475,7 +475,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A requires expression is an operand behind 'return' too, and a clause behind a lambda's parameters is the lambda's.
 			{
 				CStr Name;
-				for (umint i = 0; i < 175; ++i)
+				for (umint iChar = 0; iChar < 175; ++iChar)
 					Name += "A";
 
 				fg_ExpectFormat
@@ -487,12 +487,12 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				;
 
 				CStr Parameters;
-				for (umint i = 0; i < 7; ++i)
-					Parameters += CStr::CFormat("{}T _Param{}WithALongerName") << (i ? ", " : "") << i;
+				for (umint iParam = 0; iParam < 7; ++iParam)
+					Parameters += CStr::CFormat("{}T _Param{}WithALongerName") << (iParam ? ", " : "") << iParam;
 
 				CStr SplitParameters;
-				for (umint i = 0; i < 7; ++i)
-					SplitParameters += CStr::CFormat("\t\t\t{}T _Param{}WithALongerName\n") << (i ? ", " : "") << i;
+				for (umint iParam = 0; iParam < 7; ++iParam)
+					SplitParameters += CStr::CFormat("\t\t\t{}T _Param{}WithALongerName\n") << (iParam ? ", " : "") << iParam;
 
 				fg_ExpectFormat
 					(
@@ -508,7 +508,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A name behind '::template' is qualified, so the parenthesis holds arguments and the variable keeps its type.
 			{
 				CStr Long;
-				for (umint i = 0; i < 90; ++i)
+				for (umint iChar = 0; iChar < 90; ++iChar)
 					Long += "A";
 
 				fg_ExpectFormat
@@ -531,7 +531,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// requires expression's parameters are measured with what stands in front of it.
 			{
 				CStr Long;
-				for (umint i = 0; i < 175; ++i)
+				for (umint iChar = 0; iChar < 175; ++iChar)
 					Long += "A";
 
 				fg_ExpectFormat
@@ -582,7 +582,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			;
 			{
 				CStr Long;
-				for (umint i = 0; i < 140; ++i)
+				for (umint iChar = 0; iChar < 140; ++iChar)
 					Long += "A";
 
 				fg_ExpectFormat
@@ -597,8 +597,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				;
 
 				CStr Concepts;
-				for (umint i = 0; i < 3; ++i)
-					Concepts += CStr::CFormat("{}c{}{}<T>\n") << (i ? "\t\t\t&& " : "\t\t\t") << i << Long.f_Left(50);
+				for (umint iConcept = 0; iConcept < 3; ++iConcept)
+					Concepts += CStr::CFormat("{}c{}{}<T>\n") << (iConcept ? "\t\t\t&& " : "\t\t\t") << iConcept << Long.f_Left(50);
 
 				fg_ExpectFormat
 					(
@@ -652,7 +652,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A block comment leading a clause is measured with it.
 			{
 				CStr Long;
-				for (umint i = 0; i < 165; ++i)
+				for (umint iChar = 0; iChar < 165; ++iChar)
 					Long += "A";
 
 				fg_ExpectFormat
@@ -666,7 +666,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A body nested in the parenthesis behind a clause's operator opens that parenthesis.
 			{
 				CStr Long;
-				for (umint i = 0; i < 150; ++i)
+				for (umint iChar = 0; iChar < 150; ++iChar)
 					Long += "A";
 
 				fg_ExpectFormat
@@ -725,7 +725,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// call starts the line below it with what follows. An element on one line too long for it is laid out even in a
 			// braced list that keeps its lines.
 			CStr Long;
-			for (umint i = 0; i < 170; ++i)
+			for (umint iChar = 0; iChar < 170; ++iChar)
 				Long += "W";
 
 			fg_ExpectFormat
@@ -813,7 +813,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// the name the naming lists no role for.
 			{
 				CStr Parameter;
-				for (umint i = 0; i < 90; ++i)
+				for (umint iChar = 0; iChar < 90; ++iChar)
 					Parameter += "a";
 
 				// So does a calling convention the naming lists between the return type and the name, written on a line of its own.
@@ -848,7 +848,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// What the layout moves behind an opened argument list stands one level in, and stays part of the statement.
 			{
 				CStr AttributeArgument;
-				for (umint i = 0; i < 180; ++i)
+				for (umint iChar = 0; iChar < 180; ++iChar)
 					AttributeArgument += "a";
 
 				fg_ExpectFormat
@@ -874,7 +874,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A requires clause goes on across a line ending in a conjunction, and an attribute is never opened.
 			{
 				CStr Parameter;
-				for (umint i = 0; i < 90; ++i)
+				for (umint iChar = 0; iChar < 90; ++iChar)
 					Parameter += "a";
 
 				fg_ExpectFormat
@@ -1035,7 +1035,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// it opens is the call behind a member access, so the terminator never takes a line
 			// of its own behind a line that was not split.
 			CStr Filler;
-			for (umint i = 0; i < 112; ++i)
+			for (umint iChar = 0; iChar < 112; ++iChar)
 				Filler += "W";
 
 			fg_ExpectFormat
@@ -1059,7 +1059,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// operators continuing it, as they do behind a single string.
 			{
 				CStr Warning;
-				for (umint i = 0; i < 170; ++i)
+				for (umint iChar = 0; iChar < 170; ++iChar)
 					Warning += "w";
 
 				fg_ExpectFormat
@@ -1137,7 +1137,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A string continued on the next line behind an element's comma stands at the element's level, the comma's
 			// line being the one it continues.
 			CStr StringHalf;
-			for (umint i = 0; i < 100; ++i)
+			for (umint iChar = 0; iChar < 100; ++iChar)
 				StringHalf += "x";
 
 			fg_ExpectFormat
@@ -1175,7 +1175,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			;
 			// A name's template argument list stays whole in front of the braced initializer that opens behind it.
 			CStr Initializer;
-			for (umint i = 0; i < 90; ++i)
+			for (umint iChar = 0; iChar < 90; ++iChar)
 				Initializer += "a";
 
 			fg_ExpectFormat
@@ -1242,7 +1242,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// Nor in front of the declaration a macro marks with it, which stays part of that declaration.
 			{
 				CStr Name;
-				for (umint i = 0; i < 170; ++i)
+				for (umint iChar = 0; iChar < 170; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -1281,8 +1281,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// comma whole.
 			{
 				CStr Numbers;
-				for (umint i = 0; i < 22; ++i)
-					Numbers += "{}48792"_f << (i ? ", " : "");
+				for (umint iNumber = 0; iNumber < 22; ++iNumber)
+					Numbers += "{}48792"_f << (iNumber ? ", " : "");
 
 				fg_ExpectFormat
 					(
@@ -1299,7 +1299,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// So does an operand opening with a bracket below the operator leading its line.
 			{
 				CStr Name;
-				for (umint i = 0; i < 140; ++i)
+				for (umint iChar = 0; iChar < 140; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -1317,7 +1317,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// Nor is its parenthesis a parameter list, which a class defined with it would move a return type behind.
 			{
 				CStr Name;
-				for (umint i = 0; i < 150; ++i)
+				for (umint iChar = 0; iChar < 150; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -1331,7 +1331,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// An attribute spelled with a keyword keeps its parentheses whole, as one in brackets does.
 			{
 				CStr Name;
-				for (umint i = 0; i < 150; ++i)
+				for (umint iChar = 0; iChar < 150; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -1345,7 +1345,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// And in front of a variable template's specialization the initializer gives its value.
 			{
 				CStr Name;
-				for (umint i = 0; i < 100; ++i)
+				for (umint iChar = 0; iChar < 100; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -1359,7 +1359,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A separator stands in front of its element also where the element is too long for that line, in a
 			// block the layout moves in as well.
 			CStr LongString;
-			for (umint i = 0; i < 180; ++i)
+			for (umint iChar = 0; iChar < 180; ++iChar)
 				LongString += "x";
 
 			fg_ExpectFormat
@@ -1456,7 +1456,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A braced initializer the layout opens, its statement too long for its line, loses the comma ending it as
 			// one written across lines does.
 			CStr LongName;
-			for (umint i = 0; i < 180; ++i)
+			for (umint iChar = 0; iChar < 180; ++iChar)
 				LongName += "x";
 
 			fg_ExpectFormat("ListCommaOpened", "int g_" + LongName + "[] = {1, 2,};\n", "int g_" + LongName + "[] =\n\t{\n\t\t1\n\t\t, 2\n\t}\n;\n", false);
@@ -1506,7 +1506,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			;
 			{
 				CStr Long;
-				for (umint i = 0; i < 180; ++i)
+				for (umint iChar = 0; iChar < 180; ++iChar)
 					Long += "x";
 
 				fg_ExpectFormat
@@ -1666,7 +1666,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			fg_ExpectFormat("NameCommentJoined", "void f(\n  int _A, int * /*_B*/)\n{\n}\n", "void f(int _A, int * /*_B*/)\n{\n}\n");
 			{
 				CStr Long;
-				for (umint i = 0; i < 90; ++i)
+				for (umint iChar = 0; iChar < 90; ++iChar)
 					Long += "a";
 
 				fg_ExpectFormat
@@ -1691,8 +1691,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A run of calls too long for its line is laid out in time linear in its length.
 			{
 				CStr Source = "void f()\n{\n    DA(A)     DA(B)       DA(C)        DA(D)\n";
-				for (umint i = 0; i < 60; ++i)
-					Source += "    DA(NAME_{}   )\n"_f << i;
+				for (umint iLine = 0; iLine < 60; ++iLine)
+					Source += "    DA(NAME_{}   )\n"_f << iLine;
 
 				Source += "    { 0, 0 }\n};\n";
 				DMibTestPath("CallRunLinear");

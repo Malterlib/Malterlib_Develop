@@ -338,14 +338,14 @@ namespace
 					// The profile says what a file is written in, whatever it is named.
 					CCodeFormattingSettings Cpp{CEditorConfigProperties{{"malterlib_format", "malterlib"}}};
 					CCodeFormattingSettings BuildSystem{CEditorConfigProperties{{"malterlib_format", "Malterlib-BuildSystem"}}};
-					CCodeFormattingSettings C{CEditorConfigProperties{{"malterlib_format", "malterlib-c"}}};
+					CCodeFormattingSettings PlainC{CEditorConfigProperties{{"malterlib_format", "malterlib-c"}}};
 					CCodeFormattingSettings Disabled{CEditorConfigProperties{{"malterlib_format", "off"}}};
 
 					DMibExpectTrue(BuildSystem.f_IsFormattingEnabled());
 					DMibExpect(BuildSystem.m_nMaxColumns, ==, 190u);
 					DMibExpectTrue(Cpp.f_GetLanguage() == ECodeLanguage::mc_Cpp);
 					DMibExpectTrue(BuildSystem.f_GetLanguage() == ECodeLanguage::mc_BuildSystem);
-					DMibExpectTrue(C.f_GetLanguage() == ECodeLanguage::mc_C);
+					DMibExpectTrue(PlainC.f_GetLanguage() == ECodeLanguage::mc_C);
 					DMibExpectTrue(Disabled.f_GetLanguage() == ECodeLanguage::mc_Unknown);
 
 					// 'off' turns the line length check off however it is cased.
@@ -538,7 +538,7 @@ namespace
 					// line, each member stands one level in with its comma in front, and a member still too long opens in turn.
 					{
 						CStr Long;
-						for (umint i = 0; i < 90; ++i)
+						for (umint iChar = 0; iChar < 90; ++iChar)
 							Long += "a";
 
 						fg_ExpectBuildSystemFormat
@@ -875,7 +875,7 @@ namespace
 				{
 					DMibTestPath("LiteralInCondition");
 					CStr Name;
-					for (umint i = 0; i < 200; ++i)
+					for (umint iChar = 0; iChar < 200; ++iChar)
 						Name += "W";
 
 					auto Formatted = fg_FormatC("#if __cplusplus && __has_include(\"foo//bar.h\") || defined(_WIN32)\nunsigned long long fg_" + Name + "(int a, int b);\n#endif\n", "Format");
@@ -887,7 +887,7 @@ namespace
 				{
 					DMibTestPath(Else == "#/**/else" ? "CommentedElse" : "SplicedElse");
 					CStr Name;
-					for (umint i = 0; i < 200; ++i)
+					for (umint iChar = 0; iChar < 200; ++iChar)
 						Name += "W";
 
 					auto Formatted = fg_FormatC("#ifdef __cplusplus\nint x;\n" + Else + "\nunsigned long long fg_" + Name + "(int a, int b);\n#endif\n", "Format");
@@ -932,8 +932,8 @@ namespace
 				// C has no trailing return type to move a return type behind.
 				{
 					CStr Params;
-					for (umint i = 0; i < 6; ++i)
-						Params += "{}struct CLongParameterTypeName{} *_pParam{}"_f << (i ? ", " : "") << i << i;
+					for (umint iParam = 0; iParam < 6; ++iParam)
+						Params += "{}struct CLongParameterTypeName{} *_pParam{}"_f << (iParam ? ", " : "") << iParam << iParam;
 
 					CStr Split = CStr(Params).f_Replace(", ", "\n\t, ");
 
@@ -950,7 +950,7 @@ namespace
 			DMibTestSuite("ObjectiveC")
 			{
 				CStr Long;
-				for (umint i = 0; i < 80; ++i)
+				for (umint iChar = 0; iChar < 80; ++iChar)
 					Long += "a";
 
 				DMibTestCategory("Lexer")
@@ -1048,7 +1048,7 @@ namespace
 					// lines.
 					{
 						CStr Comment;
-						for (umint i = 0; i < 150; ++i)
+						for (umint iChar = 0; iChar < 150; ++iChar)
 							Comment += "c";
 
 						fg_ExpectFormat
@@ -1136,8 +1136,8 @@ namespace
 					fg_ExpectFormat("OpensWithBlockLiteral", "void f()\n{\n\t^{\n\t\tg();\n\t}();\n}\n", "void f()\n{\n\t^\n\t{\n\t\tg();\n\t}();\n}\n");
 					// A header too long for its line stays on it, where the builder reads it, and is reported.
 					CStr Protocols;
-					for (umint i = 0; i < 12; ++i)
-						Protocols += "{}CProtocolWithALongName{}"_f << (i ? ", " : "") << i;
+					for (umint iProtocol = 0; iProtocol < 12; ++iProtocol)
+						Protocols += "{}CProtocolWithALongName{}"_f << (iProtocol ? ", " : "") << iProtocol;
 
 					CStr LongHeader = "@interface CFoo : NSObject <" + Protocols + ">\n@end\n";
 					fg_ExpectFormat("LongHeader", LongHeader, LongHeader);
@@ -1149,7 +1149,7 @@ namespace
 					// A header written over several lines is joined and a comment too long behind it moves above it. A comment
 					// inside it keeps it on its lines, and none of its comments moves, which would join it.
 					CStr Words;
-					for (umint i = 0; i < 34; ++i)
+					for (umint iWord = 0; iWord < 34; ++iWord)
 						Words += "word ";
 
 					Words = Words.f_Trim();
@@ -1295,7 +1295,7 @@ namespace
 				{
 					// A run whose aligned '=' makes a line too long is aligned all the same, and the line reported.
 					CStr Long;
-					for (umint i = 0; i < 170; ++i)
+					for (umint iChar = 0; iChar < 170; ++iChar)
 						Long += "x";
 
 					fExpect("Comment", "enum EKind\n{\n\tmc_A = 1 // " + Long + "\n\t, mc_Longer = 2\n};\n", "enum EKind\n{\n\tmc_A        = 1 // " + Long + "\n\t, mc_Longer = 2\n};\n");
@@ -1358,7 +1358,7 @@ namespace
 					fExpect("TrailingCommas", "enum E\n{\n\tmc_A = 1,\n\tmc_B = 2, // B\n\tmc_Cc = 3 // C\n};\n", "enum E\n{\n\tmc_A    = 1\n\t, mc_B  = 2 // B\n\t, mc_Cc = 3 // C\n};\n");
 					// A run its comments make too long is aligned all the same, and the line reported.
 					CStr Long;
-					for (umint i = 0; i < 172; ++i)
+					for (umint iChar = 0; iChar < 172; ++iChar)
 						Long += "x";
 
 					fExpect
@@ -1421,7 +1421,7 @@ namespace
 				;
 
 				CStr Long;
-				for (umint i = 0; i < 60; ++i)
+				for (umint iChar = 0; iChar < 60; ++iChar)
 					Long += "x";
 
 				// A scope holding a directive is formatted to a stable layout, whose next pass settles what the first left.
@@ -2202,7 +2202,7 @@ namespace
 					// A '/' tight between names is spaced where the layout breaks one of its sides.
 					{
 						CStr Name;
-						for (umint i = 0; i < 70; ++i)
+						for (umint iChar = 0; iChar < 70; ++iChar)
 							Name += "a";
 
 						fg_ExpectFormat
@@ -2433,15 +2433,15 @@ namespace
 					;
 					{
 						CStr Words;
-						for (umint i = 0; i < 40; ++i)
-							Words += "{}\"Word{}\""_f << (i ? ", " : "") << i;
+						for (umint iWord = 0; iWord < 40; ++iWord)
+							Words += "{}\"Word{}\""_f << (iWord ? ", " : "") << iWord;
 
 						CStr Expected = "TCVector<CStr> gc_Words =\n\t{\n\t\t// malterlib-format columns: auto\n";
 						for (umint iRow = 0; iRow < 3; ++iRow)
 						{
 							Expected += iRow ? "\t\t, " : "\t\t  ";
-							for (umint i = iRow * 18; i < fg_Min(umint(40), iRow * 18 + 18); ++i)
-								Expected += "\"Word{}\"{}"_f << i << (i + 1 < fg_Min(umint(40), iRow * 18 + 18) ? (i < 10 ? ",  " : ", ") : "");
+							for (umint iWord = iRow * 18; iWord < fg_Min(umint(40), iRow * 18 + 18); ++iWord)
+								Expected += "\"Word{}\"{}"_f << iWord << (iWord + 1 < fg_Min(umint(40), iRow * 18 + 18) ? (iWord < 10 ? ",  " : ", ") : "");
 
 							Expected += "\n";
 						}
@@ -2570,7 +2570,7 @@ namespace
 			DMibTestSuite("Convergence")
 			{
 				CStr Wide;
-				for (umint i = 0; i < 60; ++i)
+				for (umint iChar = 0; iChar < 60; ++iChar)
 					Wide += "W";
 
 				auto fExpect = [&](CStr const &_Case, CStr const &_Source, CStr const &_Expected, bool _bTokensPreserved = true)
@@ -2821,7 +2821,7 @@ namespace
 					// A keyword of the return type is no name a parameter of a function pointer can hide.
 					{
 						CStr Name = "fg_Function";
-						for (umint i = 0; i < 60; ++i)
+						for (umint iChar = 0; iChar < 60; ++iChar)
 							Name += "W";
 
 						fExpectStable
@@ -3599,7 +3599,7 @@ namespace
 					CCodeFormattingStyle Style = *fg_MalterlibStyle();
 					Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nTypeNames:\n  - 'a*a*a*a*a*a*a*a*a*a*b.*'\n"));
 					CStr Name;
-					for (umint i = 0; i < 60; ++i)
+					for (umint iChar = 0; iChar < 60; ++iChar)
 						Name += "a";
 
 					DMibExpectTrue(Style.f_GetRoles(Name.f_GetStr(), Name.f_GetLen()) == ECodeNameRole::mc_None);
@@ -3659,11 +3659,11 @@ namespace
 				{
 					DMibTestPath("DeepTemplates");
 					CStr Source = "using T = ";
-					for (umint i = 0; i < 1000; ++i)
+					for (umint iDepth = 0; iDepth < 1000; ++iDepth)
 						Source += "A<";
 
 					Source += "int";
-					for (umint i = 0; i < 1000; ++i)
+					for (umint iDepth = 0; iDepth < 1000; ++iDepth)
 						Source += ">";
 
 					Source += ";\n";
@@ -4143,10 +4143,10 @@ namespace
 					auto fNested = [](umint _nDepth)
 						{
 							CStr Source = "void f()\n";
-							for (umint i = 0; i < _nDepth; ++i)
+							for (umint iDepth = 0; iDepth < _nDepth; ++iDepth)
 								Source += "{\n";
 
-							for (umint i = 0; i < _nDepth; ++i)
+							for (umint iDepth = 0; iDepth < _nDepth; ++iDepth)
 								Source += "}\n";
 
 							return Source;
@@ -4162,7 +4162,7 @@ namespace
 				DMibTestCategory("EmptyCallChain")
 				{
 					CStr Source = "void f()\n{\n\ts";
-					for (umint i = 0; i < 5000; ++i)
+					for (umint iPair = 0; iPair < 5000; ++iPair)
 						Source += "()";
 
 					Source += ";\n}\n";
@@ -4214,7 +4214,7 @@ namespace
 				DMibTestCategory("LineLength")
 				{
 					CStr Long = "int a";
-					for (umint i = 0; i < 200; ++i)
+					for (umint iChar = 0; iChar < 200; ++iChar)
 						Long += "b";
 
 					Long += " = 0;\n";
@@ -4232,7 +4232,7 @@ namespace
 					// line's code and comments, count for theirs.
 					{
 						CStr Value;
-						for (umint i = 0; i < 200; ++i)
+						for (umint iChar = 0; iChar < 200; ++iChar)
 							Value += "v";
 
 						auto fLengthReports = [&](CStr const &_Source)
@@ -4268,7 +4268,7 @@ namespace
 					DMibTestPath("Split");
 
 					CStr Operand = "(a + b)";
-					for (umint i = 0; i < 4; ++i)
+					for (umint iLevel = 0; iLevel < 4; ++iLevel)
 						Operand = CStr("(@ + @)").f_Replace("@", Operand);
 
 					auto Broken = fg_Analyze(CStr("void f()\n{\n\tint x = @;\n}\n").f_Replace("@", Operand));

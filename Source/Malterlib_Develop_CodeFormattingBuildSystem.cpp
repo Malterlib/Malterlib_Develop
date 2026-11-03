@@ -31,11 +31,11 @@ namespace NMib::NDevelop::NPrivate
 	// with the value it continues, its tabs filled out with spaces up to that column.
 	bool CFormattingAnalyzer::fp_PrepareBuildSystemLines(CStr &o_Explanation)
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto const &Settings = m_Request.m_Settings;
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Settings = mp_Request.m_Settings;
 		auto nTab = Settings.m_nTabWidth;
-		auto nLines = m_Lines.f_GetLineCount();
-		m_BuildSystemLines.f_SetLen(nLines);
+		auto nLines = mp_Lines.f_GetLineCount();
+		mp_BuildSystemLines.f_SetLen(nLines);
 
 		// The line each opener's bracket closes on, indexed by token.
 		TCVector<umint> CloseLine;
@@ -55,27 +55,27 @@ namespace NMib::NDevelop::NPrivate
 			if (Kind == ECodeTokenKind::mc_Whitespace || Kind == ECodeTokenKind::mc_Newline || Kind == ECodeTokenKind::mc_ByteOrderMark)
 				continue;
 
-			auto iLine = m_Lines.f_FindLine(Token.m_iOffset);
+			auto iLine = mp_Lines.f_FindLine(Token.m_iOffset);
 
 			// The registry opens a child scope behind an entry's value on its line, '%Group "Name" {', '%Group ("A") {',
 			// 'A 1 {', which the rules, reading a brace that does not start its line as a value's, would take apart. A word
 			// that starts its line is a key, which a brace behind it gives an object value, and a brace behind a function
 			// type's parameters gives its return type: 'function(string _Key) {...: string}'.
 			bool bComment = Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment;
-			if (m_Tokens.f_IsText(Token, "{") && iPreviousCode >= 0 && iWordsLine == iLine)
+			if (mp_Tokens.f_IsText(Token, "{") && iPreviousCode >= 0 && iWordsLine == iLine)
 			{
 				auto const &Previous = Tokens[umint(iPreviousCode)];
 				// An accessor's '>' ends a value as well: 'Flag Config<Enabled> {'.
 				bool bValueEnd
 					= Previous.m_Kind == ECodeTokenKind::mc_StringLiteral
-					|| ((Previous.m_Kind == ECodeTokenKind::mc_Identifier || m_Tokens.f_IsText(Previous, ">")) && nWords > 1)
-					|| m_Tokens.f_IsText(Previous, "]")
-					|| m_Tokens.f_IsText(Previous, "}")
+					|| ((Previous.m_Kind == ECodeTokenKind::mc_Identifier || mp_Tokens.f_IsText(Previous, ">")) && nWords > 1)
+					|| mp_Tokens.f_IsText(Previous, "]")
+					|| mp_Tokens.f_IsText(Previous, "}")
 				;
-				if (m_Tokens.f_IsText(Previous, ")"))
-					bValueEnd = iLastClosedOpenerPrevious < 0 || !m_Tokens.f_IsText(Tokens[umint(iLastClosedOpenerPrevious)], "function");
+				if (mp_Tokens.f_IsText(Previous, ")"))
+					bValueEnd = iLastClosedOpenerPrevious < 0 || !mp_Tokens.f_IsText(Tokens[umint(iLastClosedOpenerPrevious)], "function");
 
-				if (bValueEnd && m_Lines.f_FindLine(Previous.m_iOffset) == iLine)
+				if (bValueEnd && mp_Lines.f_FindLine(Previous.m_iOffset) == iLine)
 				{
 					o_Explanation = "The scope opened behind a value at line {} is left untouched"_f << iLine + 1;
 
@@ -86,10 +86,10 @@ namespace NMib::NDevelop::NPrivate
 			bool bWord
 				= Kind == ECodeTokenKind::mc_Identifier
 				|| Kind == ECodeTokenKind::mc_StringLiteral
-				|| m_Tokens.f_IsText(Token, ">")
-				|| m_Tokens.f_IsText(Token, ")")
-				|| m_Tokens.f_IsText(Token, "]")
-				|| m_Tokens.f_IsText(Token, "}")
+				|| mp_Tokens.f_IsText(Token, ">")
+				|| mp_Tokens.f_IsText(Token, ")")
+				|| mp_Tokens.f_IsText(Token, "]")
+				|| mp_Tokens.f_IsText(Token, "}")
 			;
 			// Tokens written together are one word, an escaped name's, 'B\+\+C', and a type's, '#<CType>', but a sign standing
 			// apart starts a value of its own: 'Count -1 {'.
@@ -108,43 +108,47 @@ namespace NMib::NDevelop::NPrivate
 			}
 
 			if (!bComment)
-				bPreviousSign = !bJoined && (m_Tokens.f_IsText(Token, "-") || m_Tokens.f_IsText(Token, "+"));
+				bPreviousSign = !bJoined && (mp_Tokens.f_IsText(Token, "-") || mp_Tokens.f_IsText(Token, "+"));
 
 			auto iCodeBefore = iPreviousCode;
 
 			if (!bComment)
 				iPreviousCode = aint(iToken);
 
-			auto &Line = m_BuildSystemLines[iLine];
+			auto &Line = mp_BuildSystemLines[iLine];
 			if (Line.m_iFirst < 0)
 				Line.m_iFirst = iToken;
 
 			Line.m_iLast = iToken;
 
-			if (fg_IsBuildSystemOpener(m_Tokens, Token))
+			if (fg_IsBuildSystemOpener(mp_Tokens, Token))
 			{
 				Pending.f_Insert(iToken);
 				OpenerPrevious[iToken] = iCodeBefore;
 			}
-			else if (fg_IsBuildSystemCloser(m_Tokens, Token))
+			else if (fg_IsBuildSystemCloser(mp_Tokens, Token))
 			{
 				if (Pending.f_IsEmpty())
 				{
-					o_Explanation = "'{}' at line {} closes no bracket"_f << m_Tokens.f_GetText(Token) << iLine + 1;
+					o_Explanation = "'{}' at line {} closes no bracket"_f << mp_Tokens.f_GetText(Token) << iLine + 1;
 
 					return false;
 				}
 
 				auto const &Opener = Tokens[Pending.f_GetLast()];
 				bool bMatches
-					= (m_Tokens.f_IsText(Opener, "{") && m_Tokens.f_IsText(Token, "}"))
-					|| (m_Tokens.f_IsText(Opener, "[") && m_Tokens.f_IsText(Token, "]"))
-					|| (m_Tokens.f_IsText(Opener, "(") && m_Tokens.f_IsText(Token, ")"))
+					= (mp_Tokens.f_IsText(Opener, "{") && mp_Tokens.f_IsText(Token, "}"))
+					|| (mp_Tokens.f_IsText(Opener, "[") && mp_Tokens.f_IsText(Token, "]"))
+					|| (mp_Tokens.f_IsText(Opener, "(") && mp_Tokens.f_IsText(Token, ")"))
 				;
 				if (!bMatches)
 				{
 					o_Explanation
-						= "'{}' at line {} closes the '{}' at line {}"_f << m_Tokens.f_GetText(Token) << iLine + 1 << m_Tokens.f_GetText(Opener) << m_Lines.f_FindLine(Opener.m_iOffset) + 1
+						= "'{}' at line {} closes the '{}' at line {}"_f
+						<< mp_Tokens.f_GetText(Token)
+						<< iLine + 1
+						<< mp_Tokens.f_GetText(Opener)
+						<< mp_Lines.f_FindLine(Opener.m_iOffset) + 1
 					;
 
 					return false;
@@ -158,7 +162,7 @@ namespace NMib::NDevelop::NPrivate
 
 		if (!Pending.f_IsEmpty())
 		{
-			o_Explanation = "The bracket opened at line {} is never closed"_f << m_Lines.f_FindLine(Tokens[Pending.f_GetLast()].m_iOffset) + 1;
+			o_Explanation = "The bracket opened at line {} is never closed"_f << mp_Lines.f_FindLine(Tokens[Pending.f_GetLast()].m_iOffset) + 1;
 
 			return false;
 		}
@@ -175,11 +179,11 @@ namespace NMib::NDevelop::NPrivate
 
 		for (umint iLine = 0; iLine < nLines; ++iLine)
 		{
-			auto &Line = m_BuildSystemLines[iLine];
+			auto &Line = mp_BuildSystemLines[iLine];
 			if (Line.m_iFirst < 0)
 				continue;
 
-			bool bCloses = fg_IsBuildSystemCloser(m_Tokens, Tokens[umint(Line.m_iFirst)]);
+			bool bCloses = fg_IsBuildSystemCloser(mp_Tokens, Tokens[umint(Line.m_iFirst)]);
 			Line.m_Level = Open.f_IsEmpty() ? 0 : Open.f_GetLast().m_Level - (bCloses ? 1 : 0);
 			Line.m_bContinued = bContinued;
 			Line.m_nContinuationColumns = nChainColumns;
@@ -187,9 +191,9 @@ namespace NMib::NDevelop::NPrivate
 			auto nOpenAtStart = Open.f_GetLen();
 			for (auto iToken = umint(Line.m_iFirst); iToken <= umint(Line.m_iLast); ++iToken)
 			{
-				if (fg_IsBuildSystemOpener(m_Tokens, Tokens[iToken]))
+				if (fg_IsBuildSystemOpener(mp_Tokens, Tokens[iToken]))
 					Open.f_Insert(COpen{0, CloseLine[iToken]});
-				else if (fg_IsBuildSystemCloser(m_Tokens, Tokens[iToken]))
+				else if (fg_IsBuildSystemCloser(mp_Tokens, Tokens[iToken]))
 				{
 					Open.f_Remove(Open.f_GetLen() - 1);
 					nOpenAtStart = fg_Min(nOpenAtStart, Open.f_GetLen());
@@ -206,7 +210,7 @@ namespace NMib::NDevelop::NPrivate
 					auto const &Outer = Open[iOpen - 1];
 					bool bOuterHoldsMore = false;
 					for (auto iBetween = Opened.m_iCloseLine + 1; iBetween < Outer.m_iCloseLine && !bOuterHoldsMore; ++iBetween)
-						bOuterHoldsMore = m_BuildSystemLines[iBetween].m_iFirst >= 0;
+						bOuterHoldsMore = mp_BuildSystemLines[iBetween].m_iFirst >= 0;
 
 					Opened.m_Level = Outer.m_Level + (bOuterHoldsMore ? 1 : 0);
 				}
@@ -224,7 +228,7 @@ namespace NMib::NDevelop::NPrivate
 
 					// The line is measured as it will be indented, which starts on a tab stop.
 					umint nColumns = 0;
-					if (fg_MeasureTextColumns(m_pSource + iFirstOffset, Tokens[iToken].m_iOffset - iFirstOffset, nTab, nColumns))
+					if (fg_MeasureTextColumns(mp_pSource + iFirstOffset, Tokens[iToken].m_iOffset - iFirstOffset, nTab, nColumns))
 						nChainColumns = Line.m_Level * nTab + nColumns;
 
 					break;
@@ -239,21 +243,21 @@ namespace NMib::NDevelop::NPrivate
 
 	void CFormattingAnalyzer::fp_RuleBuildSystemIndentation()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto const &Source = m_Request.m_Source;
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Source = mp_Request.m_Source;
+		auto nTab = mp_Request.m_Settings.m_nTabWidth;
 
-		for (umint iLine = 0; iLine < m_Lines.f_GetLineCount(); ++iLine)
+		for (umint iLine = 0; iLine < mp_Lines.f_GetLineCount(); ++iLine)
 		{
-			auto const &Line = m_BuildSystemLines[iLine];
-			if (Line.m_iFirst < 0 || m_ProtectedStart[iLine] || !fp_IsLineSelected(iLine))
+			auto const &Line = mp_BuildSystemLines[iLine];
+			if (Line.m_iFirst < 0 || mp_ProtectedStart[iLine] || !fp_IsLineSelected(iLine))
 				continue;
 
 			// A line the value layout places has its indentation from it.
-			if (umint(Line.m_iFirst) < m_BuildSystemPlaced.f_GetLen() && m_BuildSystemPlaced[umint(Line.m_iFirst)])
+			if (umint(Line.m_iFirst) < mp_BuildSystemPlaced.f_GetLen() && mp_BuildSystemPlaced[umint(Line.m_iFirst)])
 				continue;
 
-			auto iStart = m_Lines.f_GetLineStart(iLine);
+			auto iStart = mp_Lines.f_GetLineStart(iLine);
 			if (!iLine)
 				iStart += fg_GetTextBomLength(Source);
 
@@ -266,14 +270,14 @@ namespace NMib::NDevelop::NPrivate
 
 			auto nColumns = Line.m_bContinued ? Line.m_nContinuationColumns : Line.m_Level * nTab;
 			auto Canonical = fp_MakeIndent(nColumns);
-			if (fg_IsSameText(Canonical, m_pSource + iStart, First.m_iOffset - iStart))
+			if (fg_IsSameText(Canonical, mp_pSource + iStart, First.m_iOffset - iStart))
 				continue;
 
 			// A block comment's lines below its first move with it.
 			umint nSourceColumns = 0;
 			if (First.m_Kind == ECodeTokenKind::mc_BlockComment && First.m_bMultiLine)
 			{
-				auto nDelta = fg_MeasureTextColumns(m_pSource + iStart, First.m_iOffset - iStart, nTab, nSourceColumns) ? aint(nColumns) - aint(nSourceColumns) : aint(0);
+				auto nDelta = fg_MeasureTextColumns(mp_pSource + iStart, First.m_iOffset - iStart, nTab, nSourceColumns) ? aint(nColumns) - aint(nSourceColumns) : aint(0);
 				if (!fp_CanShiftCommentLines(umint(Line.m_iFirst), nDelta))
 					continue;
 
@@ -302,13 +306,13 @@ namespace NMib::NDevelop::NPrivate
 	// ending it, or continued by a backslash keeps its lines.
 	void CFormattingAnalyzer::fp_RuleBuildSystemLineBreaks()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto nTab = m_Request.m_Settings.m_nTabWidth;
-		auto nMaxColumns = m_Request.m_Settings.m_nMaxColumns;
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto nTab = mp_Request.m_Settings.m_nTabWidth;
+		auto nMaxColumns = mp_Request.m_Settings.m_nMaxColumns;
 		auto Ending = fg_GetTextLineEndingBytes(fp_GetDefaultLineEnding());
 
-		m_BuildSystemPlaced.f_SetLen(Tokens.f_GetLen());
-		for (auto &bPlaced : m_BuildSystemPlaced)
+		mp_BuildSystemPlaced.f_SetLen(Tokens.f_GetLen());
+		for (auto &bPlaced : mp_BuildSystemPlaced)
 			bPlaced = 0;
 
 		auto fIsCode = [&](umint _iToken)
@@ -321,33 +325,33 @@ namespace NMib::NDevelop::NPrivate
 
 		auto fNext = [&](umint _iToken)
 			{
-				auto i = _iToken + 1;
-				while (i < Tokens.f_GetLen() && !fIsCode(i))
-					++i;
+				auto iToken = _iToken + 1;
+				while (iToken < Tokens.f_GetLen() && !fIsCode(iToken))
+					++iToken;
 
-				return i;
+				return iToken;
 			}
 		;
 
 		auto fPrevious = [&](umint _iToken) -> aint
 			{
-				aint i = aint(_iToken) - 1;
-				while (i >= 0 && !fIsCode(umint(i)))
-					--i;
+				aint iToken = aint(_iToken) - 1;
+				while (iToken >= 0 && !fIsCode(umint(iToken)))
+					--iToken;
 
-				return i;
+				return iToken;
 			}
 		;
 
 		auto fLine = [&](umint _iToken)
 			{
-				return m_Lines.f_FindLine(Tokens[_iToken].m_iOffset);
+				return mp_Lines.f_FindLine(Tokens[_iToken].m_iOffset);
 			}
 		;
 
 		auto fIsText = [&](umint _iToken, ch8 const *_pText)
 			{
-				return m_Tokens.f_IsText(Tokens[_iToken], _pText);
+				return mp_Tokens.f_IsText(Tokens[_iToken], _pText);
 			}
 		;
 
@@ -361,28 +365,28 @@ namespace NMib::NDevelop::NPrivate
 			TCVector<umint> Open;
 			umint nValueDepth = 0;
 
-			for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+			for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 			{
-				Closers[i] = Tokens.f_GetLen();
-				auto &bScope = ScopeBrackets[i];
+				Closers[iToken] = Tokens.f_GetLen();
+				auto &bScope = ScopeBrackets[iToken];
 				bScope = false;
-				if (!fIsCode(i))
+				if (!fIsCode(iToken))
 					continue;
 
-				auto const &Token = Tokens[i];
-				if (fg_IsBuildSystemOpener(m_Tokens, Token))
+				auto const &Token = Tokens[iToken];
+				if (fg_IsBuildSystemOpener(mp_Tokens, Token))
 				{
-					auto iBefore = fPrevious(i);
-					bool bFirstOnLine = iBefore < 0 || fLine(umint(iBefore)) != fLine(i);
-					bScope = fIsText(i, "{") && bFirstOnLine && !nValueDepth;
+					auto iBefore = fPrevious(iToken);
+					bool bFirstOnLine = iBefore < 0 || fLine(umint(iBefore)) != fLine(iToken);
+					bScope = fIsText(iToken, "{") && bFirstOnLine && !nValueDepth;
 					nValueDepth += !bScope;
-					Open.f_Insert(i);
+					Open.f_Insert(iToken);
 				}
-				else if (fg_IsBuildSystemCloser(m_Tokens, Token) && !Open.f_IsEmpty())
+				else if (fg_IsBuildSystemCloser(mp_Tokens, Token) && !Open.f_IsEmpty())
 				{
 					auto iOpener = Open.f_GetLast();
 					Open.f_Remove(Open.f_GetLen() - 1);
-					Closers[iOpener] = i;
+					Closers[iOpener] = iToken;
 					bScope = ScopeBrackets[iOpener];
 					nValueDepth -= !bScope;
 				}
@@ -437,7 +441,7 @@ namespace NMib::NDevelop::NPrivate
 		auto fGapText = [&](umint _iLeft, umint _iRight) -> CStr
 			{
 				auto iGap = Tokens[_iLeft].f_GetEnd();
-				CStr Gap(m_pSource + iGap, Tokens[_iRight].m_iOffset - iGap);
+				CStr Gap(mp_pSource + iGap, Tokens[_iRight].m_iOffset - iGap);
 
 				// What follows a '<' says whether it compares or reaches into its value: a blank makes it compare. The
 				// gap behind one is never rewritten.
@@ -465,13 +469,13 @@ namespace NMib::NDevelop::NPrivate
 				CStr Text;
 				{
 					CStr::CAppender Appender(Text);
-					for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+					for (auto iToken = _iFirst; iToken <= _iLast; iToken = fNext(iToken))
 					{
-						if (i != _iFirst)
-							Appender += fGapText(umint(fPrevious(i)), i);
+						if (iToken != _iFirst)
+							Appender += fGapText(umint(fPrevious(iToken)), iToken);
 
-						auto const &Token = Tokens[i];
-						Appender.f_AddString(m_pSource + Token.m_iOffset, Token.m_nLength);
+						auto const &Token = Tokens[iToken];
+						Appender.f_AddString(mp_pSource + Token.m_iOffset, Token.m_nLength);
 					}
 				}
 
@@ -495,9 +499,9 @@ namespace NMib::NDevelop::NPrivate
 
 		auto fHoldsKept = [&](umint _iFirst, umint _iLast)
 			{
-				for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+				for (auto iToken = _iFirst; iToken <= _iLast; iToken = fNext(iToken))
 				{
-					if (fg_IsBuildSystemOpener(m_Tokens, Tokens[i]) && fIsKept(i))
+					if (fg_IsBuildSystemOpener(mp_Tokens, Tokens[iToken]) && fIsKept(iToken))
 						return true;
 				}
 
@@ -515,10 +519,10 @@ namespace NMib::NDevelop::NPrivate
 
 		auto fJoin = [&](umint _iFirst, umint _iLast)
 			{
-				for (auto i = fNext(_iFirst); i <= _iLast; i = fNext(i))
+				for (auto iToken = fNext(_iFirst); iToken <= _iLast; iToken = fNext(iToken))
 				{
-					if (fLine(umint(fPrevious(i))) != fLine(i))
-						Gaps[i] = CGap{false, 0};
+					if (fLine(umint(fPrevious(iToken))) != fLine(iToken))
+						Gaps[iToken] = CGap{false, 0};
 				}
 			}
 		;
@@ -548,7 +552,7 @@ namespace NMib::NDevelop::NPrivate
 					{
 						auto const &Token = Tokens[_iCharacter];
 
-						return Token.m_Kind == ECodeTokenKind::mc_Punctuator && Token.m_nLength == 1 && NStr::fg_StrFindChar("+-*/%<>=!&^|?", m_pSource[Token.m_iOffset]) >= 0;
+						return Token.m_Kind == ECodeTokenKind::mc_Punctuator && Token.m_nLength == 1 && NStr::fg_StrFindChar("+-*/%<>=!&^|?", mp_pSource[Token.m_iOffset]) >= 0;
 					}
 				;
 
@@ -559,14 +563,14 @@ namespace NMib::NDevelop::NPrivate
 				if (!fIsOperatorCharacter(_iToken) || (iBefore >= 0 && Tokens[umint(iBefore)].f_GetEnd() == Tokens[_iToken].m_iOffset))
 					return 0;
 
-				CStr Operator = m_Tokens.f_GetText(Tokens[_iToken]);
+				CStr Operator = mp_Tokens.f_GetText(Tokens[_iToken]);
 				auto iLast = _iToken;
 
-				for (auto i = fNext(_iToken); i < Tokens.f_GetLen() && fAttached(iLast, i) && fIsOperatorCharacter(i); i = fNext(i))
+				for (auto iToken = fNext(_iToken); iToken < Tokens.f_GetLen() && fAttached(iLast, iToken) && fIsOperatorCharacter(iToken); iToken = fNext(iToken))
 				{
-					auto const &Token = Tokens[i];
-					Operator.f_AddStr(m_pSource + Token.m_iOffset, Token.m_nLength);
-					iLast = i;
+					auto const &Token = Tokens[iToken];
+					Operator.f_AddStr(mp_pSource + Token.m_iOffset, Token.m_nLength);
+					iLast = iToken;
 				}
 
 				auto iAfter = fNext(iLast);
@@ -603,7 +607,7 @@ namespace NMib::NDevelop::NPrivate
 		// The closer of a bracket opening at the token and closing by _iLast, which a walk at the range's own level steps to, or -1.
 		auto fNestedCloser = [&](umint _iToken, umint _iLast) -> aint
 			{
-				if (!fg_IsBuildSystemOpener(m_Tokens, Tokens[_iToken]))
+				if (!fg_IsBuildSystemOpener(mp_Tokens, Tokens[_iToken]))
 					return -1;
 
 				auto iClose = Closers[_iToken];
@@ -616,30 +620,30 @@ namespace NMib::NDevelop::NPrivate
 		auto fOperatorSplits = [&](umint _iFirst, umint _iLast)
 			{
 				bool bTernary = false;
-				for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+				for (auto iToken = _iFirst; iToken <= _iLast; iToken = fNext(iToken))
 				{
-					if (auto iClose = fNestedCloser(i, _iLast); iClose >= 0)
-						i = umint(iClose);
-					else if (fIsText(i, "?"))
+					if (auto iClose = fNestedCloser(iToken, _iLast); iClose >= 0)
+						iToken = umint(iClose);
+					else if (fIsText(iToken, "?"))
 						bTernary = true;
 				}
 
 				umint nLoosest = 0;
-				for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+				for (auto iToken = _iFirst; iToken <= _iLast; iToken = fNext(iToken))
 				{
-					if (auto iClose = fNestedCloser(i, _iLast); iClose >= 0)
-						i = umint(iClose);
-					else if (i != _iFirst)
-						nLoosest = fg_Max(nLoosest, fLooseness(i, bTernary));
+					if (auto iClose = fNestedCloser(iToken, _iLast); iClose >= 0)
+						iToken = umint(iClose);
+					else if (iToken != _iFirst)
+						nLoosest = fg_Max(nLoosest, fLooseness(iToken, bTernary));
 				}
 
 				TCVector<umint> Splits;
-				for (auto i = _iFirst; nLoosest && i <= _iLast; i = fNext(i))
+				for (auto iToken = _iFirst; nLoosest && iToken <= _iLast; iToken = fNext(iToken))
 				{
-					if (auto iClose = fNestedCloser(i, _iLast); iClose >= 0)
-						i = umint(iClose);
-					else if (i != _iFirst && fLooseness(i, bTernary) == nLoosest)
-						Splits.f_Insert(i);
+					if (auto iClose = fNestedCloser(iToken, _iLast); iClose >= 0)
+						iToken = umint(iClose);
+					else if (iToken != _iFirst && fLooseness(iToken, bTernary) == nLoosest)
+						Splits.f_Insert(iToken);
 				}
 
 				return Splits;
@@ -683,42 +687,42 @@ namespace NMib::NDevelop::NPrivate
 				umint iOpenClose = 0;
 				umint nWidest = 0;
 
-				for (auto i = _iFirst; i <= _iLast; i = fNext(i))
+				for (auto iToken = _iFirst; iToken <= _iLast; iToken = fNext(iToken))
 				{
-					auto iNestedClose = fNestedCloser(i, _iLast);
-					if (iNestedClose < 0 || ScopeBrackets[i])
+					auto iNestedClose = fNestedCloser(iToken, _iLast);
+					if (iNestedClose < 0 || ScopeBrackets[iToken])
 						continue;
 
 					auto iClose = umint(iNestedClose);
-					bool bInnerKept = fIsKept(i) || fHoldsKept(i, iClose);
+					bool bInnerKept = fIsKept(iToken) || fHoldsKept(iToken, iClose);
 					umint nColumns = 0;
-					fWidth(0, i, iClose, nColumns);
-					if (fNext(i) != iClose && ((bInnerKept && (iOpen < 0 || !fHoldsKept(umint(iOpen), iOpenClose))) || (!bKept && nColumns > nWidest)))
+					fWidth(0, iToken, iClose, nColumns);
+					if (fNext(iToken) != iClose && ((bInnerKept && (iOpen < 0 || !fHoldsKept(umint(iOpen), iOpenClose))) || (!bKept && nColumns > nWidest)))
 					{
-						iOpen = aint(i);
+						iOpen = aint(iToken);
 						iOpenClose = iClose;
 						nWidest = nColumns;
 					}
 
-					i = iClose;
+					iToken = iClose;
 				}
 
 				// A member chain gives at every member one level in, as in C++, starting at the first access on what a bracket
 				// yields, where opening a bracket does not leave the lines in front of and behind it fitting.
 				TCVector<umint> Links;
-				for (auto i = _iFirst; !bKept && _bInBracket && i <= _iLast; i = fNext(i))
+				for (auto iToken = _iFirst; !bKept && _bInBracket && iToken <= _iLast; iToken = fNext(iToken))
 				{
-					if (auto iClose = fNestedCloser(i, _iLast); iClose >= 0)
+					if (auto iClose = fNestedCloser(iToken, _iLast); iClose >= 0)
 					{
-						i = umint(iClose);
+						iToken = umint(iClose);
 
 						continue;
 					}
 
-					auto iArrow = fNext(i);
-					bool bLink = i != _iFirst && fIsText(i, "-") && fAttached(i, iArrow) && fIsText(iArrow, ">");
-					if (bLink && fg_IsBuildSystemCloser(m_Tokens, Tokens[umint(fPrevious(i))]))
-						Links.f_Insert(i);
+					auto iArrow = fNext(iToken);
+					bool bLink = iToken != _iFirst && fIsText(iToken, "-") && fAttached(iToken, iArrow) && fIsText(iArrow, ">");
+					if (bLink && fg_IsBuildSystemCloser(mp_Tokens, Tokens[umint(fPrevious(iToken))]))
+						Links.f_Insert(iToken);
 				}
 
 				bool bOpenFits = iOpen >= 0 && fFits(_nIndent, _iFirst, umint(iOpen)) && fFits(_nIndent, iOpenClose, _iLast);
@@ -766,16 +770,16 @@ namespace NMib::NDevelop::NPrivate
 				auto nSingles = fSwitchSingles(iOpener);
 				umint iArgument = 0;
 
-				for (auto i = iFirstMember; i <= iLastMember; i = fNext(i))
+				for (auto iToken = iFirstMember; iToken <= iLastMember; iToken = fNext(iToken))
 				{
-					if (auto iClose = fNestedCloser(i, iLastMember); iClose >= 0)
-						i = umint(iClose);
-					else if (fIsText(i, ","))
+					if (auto iClose = fNestedCloser(iToken, iLastMember); iClose >= 0)
+						iToken = umint(iClose);
+					else if (fIsText(iToken, ","))
 					{
 						// A switch's key and value share a line.
 						++iArgument;
 						if (nSingles < 0 || aint(iArgument) <= nSingles || (iArgument - umint(nSingles)) % 2 == 0)
-							Splits.f_Insert(i);
+							Splits.f_Insert(iToken);
 					}
 				}
 
@@ -830,14 +834,14 @@ namespace NMib::NDevelop::NPrivate
 		;
 
 		// The statements: what stands from a line no value is open at to the line all of its values close on.
-		for (umint iLine = 0; iLine < m_Lines.f_GetLineCount(); ++iLine)
+		for (umint iLine = 0; iLine < mp_Lines.f_GetLineCount(); ++iLine)
 		{
-			auto const &Line = m_BuildSystemLines[iLine];
+			auto const &Line = mp_BuildSystemLines[iLine];
 			if (Line.m_iFirst < 0 || Line.m_bContinued)
 				continue;
 
 			auto iFirst = umint(Line.m_iFirst);
-			if (ScopeBrackets[iFirst] || fg_IsBuildSystemCloser(m_Tokens, Tokens[iFirst]))
+			if (ScopeBrackets[iFirst] || fg_IsBuildSystemCloser(mp_Tokens, Tokens[iFirst]))
 				continue;
 
 			// The statement runs on while a bracket its lines open stays open.
@@ -846,30 +850,30 @@ namespace NMib::NDevelop::NPrivate
 			auto iEndLine = iLine;
 			bool bPlain = true;
 
-			for (auto i = iFirst; i < Tokens.f_GetLen(); ++i)
+			for (auto iToken = iFirst; iToken < Tokens.f_GetLen(); ++iToken)
 			{
-				if (!fIsCode(i))
+				if (!fIsCode(iToken))
 				{
-					if (Tokens[i].m_Kind == ECodeTokenKind::mc_Newline && !nOpen)
+					if (Tokens[iToken].m_Kind == ECodeTokenKind::mc_Newline && !nOpen)
 						break;
 
 					continue;
 				}
 
-				auto const &Token = Tokens[i];
+				auto const &Token = Tokens[iToken];
 				auto Kind = Token.m_Kind;
 				if (Kind == ECodeTokenKind::mc_LineSplice)
 					bPlain = false;
 
-				if (fg_IsBuildSystemOpener(m_Tokens, Token) && !ScopeBrackets[i])
+				if (fg_IsBuildSystemOpener(mp_Tokens, Token) && !ScopeBrackets[iToken])
 					++nOpen;
-				else if (fg_IsBuildSystemCloser(m_Tokens, Token) && !ScopeBrackets[i] && nOpen)
+				else if (fg_IsBuildSystemCloser(mp_Tokens, Token) && !ScopeBrackets[iToken] && nOpen)
 					--nOpen;
-				else if (fg_IsBuildSystemOpener(m_Tokens, Token) || fg_IsBuildSystemCloser(m_Tokens, Token))
+				else if (fg_IsBuildSystemOpener(mp_Tokens, Token) || fg_IsBuildSystemCloser(mp_Tokens, Token))
 					break;
 
-				iLast = i;
-				iEndLine = fLine(i);
+				iLast = iToken;
+				iEndLine = fLine(iToken);
 			}
 
 			// A comment ending the statement is no part of its value; one inside it keeps its lines.
@@ -887,18 +891,18 @@ namespace NMib::NDevelop::NPrivate
 				iLast = umint(iBefore);
 			}
 
-			for (auto i = iFirst; bPlain && i <= iLast; ++i)
+			for (auto iToken = iFirst; bPlain && iToken <= iLast; ++iToken)
 			{
-				auto Kind = Tokens[i].m_Kind;
-				bPlain = Kind != ECodeTokenKind::mc_LineComment && Kind != ECodeTokenKind::mc_BlockComment && (!fIsCode(i) || !Tokens[i].m_bMultiLine);
+				auto Kind = Tokens[iToken].m_Kind;
+				bPlain = Kind != ECodeTokenKind::mc_LineComment && Kind != ECodeTokenKind::mc_BlockComment && (!fIsCode(iToken) || !Tokens[iToken].m_bMultiLine);
 			}
 
 			bool bSelected = true;
 			for (auto iSelected = iLine; iSelected <= iEndLine && bSelected; ++iSelected)
-				bSelected = fp_IsLineSelected(iSelected) && !m_ProtectedStart[iSelected];
+				bSelected = fp_IsLineSelected(iSelected) && !mp_ProtectedStart[iSelected];
 
-			auto iStatementStart = m_Lines.f_GetLineStart(iLine);
-			auto iStatementEnd = m_Lines.f_GetLineStart(iEndLine) + m_Lines.f_GetLine(iEndLine).m_nLength;
+			auto iStatementStart = mp_Lines.f_GetLineStart(iLine);
+			auto iStatementEnd = mp_Lines.f_GetLineStart(iEndLine) + mp_Lines.f_GetLine(iEndLine).m_nLength;
 			if (bPlain && bSelected && !fp_IsFormatOff(iStatementStart, iStatementEnd - iStatementStart))
 				fLayout(fLayout, Line.m_Level * nTab, iFirst, iLast, false);
 
@@ -911,7 +915,7 @@ namespace NMib::NDevelop::NPrivate
 			auto const &Gap = *iGap;
 			auto iPrevious = umint(fPrevious(iToken));
 			auto iStart = Tokens[iPrevious].f_GetEnd();
-			auto pCurrent = m_pSource + iStart;
+			auto pCurrent = mp_pSource + iStart;
 			auto nCurrent = Tokens[iToken].m_iOffset - iStart;
 
 			CStr Replacement;
@@ -919,16 +923,16 @@ namespace NMib::NDevelop::NPrivate
 			{
 				// A blank line between two members keeps setting them apart, whatever ends its lines: LF, CRLF or a lone CR.
 				umint nNewlines = 0;
-				for (umint i = 0; i < nCurrent; ++i)
-					nNewlines += pCurrent[i] == '\n' || (pCurrent[i] == '\r' && (i + 1 >= nCurrent || pCurrent[i + 1] != '\n'));
+				for (umint iChar = 0; iChar < nCurrent; ++iChar)
+					nNewlines += pCurrent[iChar] == '\n' || (pCurrent[iChar] == '\r' && (iChar + 1 >= nCurrent || pCurrent[iChar + 1] != '\n'));
 
-				bool bBlank = nNewlines > 1 && !fg_IsBuildSystemOpener(m_Tokens, Tokens[iPrevious]) && !fg_IsBuildSystemCloser(m_Tokens, Tokens[iToken]);
+				bool bBlank = nNewlines > 1 && !fg_IsBuildSystemOpener(mp_Tokens, Tokens[iPrevious]) && !fg_IsBuildSystemCloser(mp_Tokens, Tokens[iToken]);
 				Replacement = (bBlank ? Ending + Ending : Ending) + fp_MakeIndent(Gap.m_nIndent);
 			}
 			else
 				Replacement = fGapText(iPrevious, iToken);
 
-			m_BuildSystemPlaced[iToken] = 1;
+			mp_BuildSystemPlaced[iToken] = 1;
 
 			if (fg_IsSameText(Replacement, pCurrent, nCurrent))
 				continue;
@@ -941,17 +945,17 @@ namespace NMib::NDevelop::NPrivate
 	// the start or end of the file or right inside a bracket.
 	void CFormattingAnalyzer::fp_RuleBuildSystemBlankLines()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto nLines = m_Lines.f_GetLineCount();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto nLines = mp_Lines.f_GetLineCount();
 
 		// The empty line behind the final line terminator is where the file ends, not a line.
 		auto nContentLines = nLines;
-		if (nLines && !m_Lines.f_GetLine(nLines - 1).m_nLength && m_Lines.f_GetLine(nLines - 1).m_Ending == ETextLineEnding::mc_None)
+		if (nLines && !mp_Lines.f_GetLine(nLines - 1).m_nLength && mp_Lines.f_GetLine(nLines - 1).m_Ending == ETextLineEnding::mc_None)
 			--nContentLines;
 
 		auto fIsBlank = [&](umint _iLine)
 			{
-				return m_BuildSystemLines[_iLine].m_iFirst < 0 && !m_ProtectedStart[_iLine];
+				return mp_BuildSystemLines[_iLine].m_iFirst < 0 && !mp_ProtectedStart[_iLine];
 			}
 		;
 
@@ -969,30 +973,32 @@ namespace NMib::NDevelop::NPrivate
 			while (iRunEnd < nContentLines && fIsBlank(iRunEnd))
 				++iRunEnd;
 
-			bool bAfterOpen = iLine && m_BuildSystemLines[iLine - 1].m_iLast >= 0 && fg_IsBuildSystemOpener(m_Tokens, Tokens[umint(m_BuildSystemLines[iLine - 1].m_iLast)]);
-			bool bBeforeClose = iRunEnd < nContentLines && m_BuildSystemLines[iRunEnd].m_iFirst >= 0 && fg_IsBuildSystemCloser(m_Tokens, Tokens[umint(m_BuildSystemLines[iRunEnd].m_iFirst)]);
+			bool bAfterOpen = iLine && mp_BuildSystemLines[iLine - 1].m_iLast >= 0 && fg_IsBuildSystemOpener(mp_Tokens, Tokens[umint(mp_BuildSystemLines[iLine - 1].m_iLast)]);
+			bool bBeforeClose
+				= iRunEnd < nContentLines && mp_BuildSystemLines[iRunEnd].m_iFirst >= 0 && fg_IsBuildSystemCloser(mp_Tokens, Tokens[umint(mp_BuildSystemLines[iRunEnd].m_iFirst)])
+			;
 			bool bKeep = iLine && iRunEnd < nContentLines && !bAfterOpen && !bBeforeClose;
 			auto iRemove = iLine + (bKeep ? 1 : 0);
 			if (iRemove < iRunEnd)
 			{
 				// A byte order mark starting the file stays in front of the run, and in a file holding nothing else with the
 				// line ending the final newline rule gives it.
-				auto iRemoveStart = m_Lines.f_GetLineStart(iRemove);
+				auto iRemoveStart = mp_Lines.f_GetLineStart(iRemove);
 				if (!iRemoveStart)
 				{
-					iRemoveStart = fg_GetTextBomLength(m_Request.m_Source);
+					iRemoveStart = fg_GetTextBomLength(mp_Request.m_Source);
 					if (iRemoveStart && iRunEnd >= nContentLines)
-						iRemoveStart = m_Lines.f_GetLineEnd(0);
+						iRemoveStart = mp_Lines.f_GetLineEnd(0);
 				}
 
-				auto iRemoveEnd = m_Request.m_Source.f_GetLen();
+				auto iRemoveEnd = mp_Request.m_Source.f_GetLen();
 				if (iRunEnd < nLines)
-					iRemoveEnd = m_Lines.f_GetLineStart(iRunEnd);
+					iRemoveEnd = mp_Lines.f_GetLineStart(iRunEnd);
 				else if (iLine)
 				{
 					// The file ends without a terminator on a blank line, so the terminator in front
 					// of the run goes with it, and the final newline rule writes the file's last one.
-					iRemoveStart = m_Lines.f_GetLineContentEnd(iLine - 1);
+					iRemoveStart = mp_Lines.f_GetLineContentEnd(iLine - 1);
 				}
 
 				CStr Explanation

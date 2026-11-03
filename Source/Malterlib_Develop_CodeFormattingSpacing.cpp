@@ -202,8 +202,8 @@ namespace NMib::NDevelop
 					continue;
 
 				bool bMerges = true;
-				for (umint i = 0; i < nPunctuator && bMerges; ++i)
-					bMerges = pPunctuator[i] == (i < _Left.m_nLength ? pLeft[i] : pRight[i - _Left.m_nLength]);
+				for (umint iChar = 0; iChar < nPunctuator && bMerges; ++iChar)
+					bMerges = pPunctuator[iChar] == (iChar < _Left.m_nLength ? pLeft[iChar] : pRight[iChar - _Left.m_nLength]);
 
 				if (bMerges)
 					return true;
@@ -374,9 +374,9 @@ namespace NMib::NDevelop
 		if (fLeft("!") || fLeft("~"))
 		{
 			bool bOperatorName = false;
-			for (auto i = _iLeft; i; --i)
+			for (auto iEnd = _iLeft; iEnd; --iEnd)
 			{
-				auto const &Token = _Tokens.f_GetTokens()[i - 1];
+				auto const &Token = _Tokens.f_GetTokens()[iEnd - 1];
 				if (Token.m_Kind == ECodeTokenKind::mc_Whitespace || Token.m_Kind == ECodeTokenKind::mc_Newline || Token.m_Kind == ECodeTokenKind::mc_LineSplice)
 					continue;
 
@@ -862,10 +862,10 @@ namespace NMib::NDevelop
 						}
 
 						bool bDefault = false;
-						for (auto i = iStart + 1; i < Node.m_iFirstToken && !bDefault; ++i)
+						for (auto iToken = iStart + 1; iToken < Node.m_iFirstToken && !bDefault; ++iToken)
 						{
-							auto iInner = _Structure.f_FindEnclosingNode(i);
-							bDefault = iInner == Node.m_iParent && _Tokens.f_IsText(Tokens[i], "=");
+							auto iInner = _Structure.f_FindEnclosingNode(iToken);
+							bDefault = iInner == Node.m_iParent && _Tokens.f_IsText(Tokens[iToken], "=");
 						}
 
 						if (!bDefault)
@@ -1082,8 +1082,8 @@ namespace NMib::NDevelop
 
 				auto iBehind = fg_NextCode(_Tokens, _iRight);
 				bool bDirective = false;
-				for (auto i = _iRight + 1; iBehind >= 0 && i < umint(iBehind); ++i)
-					bDirective |= Tokens[i].m_Kind == ECodeTokenKind::mc_Preprocessor;
+				for (auto iToken = _iRight + 1; iBehind >= 0 && iToken < umint(iBehind); ++iToken)
+					bDirective |= Tokens[iToken].m_Kind == ECodeTokenKind::mc_Preprocessor;
 
 				auto const *pBehind = iBehind >= 0 ? &Tokens[umint(iBehind)] : nullptr;
 				bool bName
@@ -1328,8 +1328,8 @@ namespace NMib::NDevelop
 			}
 
 			bool bOneLine = true;
-			for (auto i = _iLeft + 1; i < _iRight && bOneLine; ++i)
-				bOneLine = Tokens[i].m_Kind == ECodeTokenKind::mc_Whitespace;
+			for (auto iToken = _iLeft + 1; iToken < _iRight && bOneLine; ++iToken)
+				bOneLine = Tokens[iToken].m_Kind == ECodeTokenKind::mc_Whitespace;
 
 			if (bOneLine)
 				return ECodeSpacing::mc_Space;

@@ -18,11 +18,11 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// closing marker. Where it does not fit it is broken at every member, each
 			// under that marker, however the source had broken or joined it.
 			CStr Chain;
-			for (umint i = 0; i < 16; ++i)
+			for (umint iCall = 0; iCall < 16; ++iCall)
 				Chain += ".f_CallSync()";
 
 			CStr Broken;
-			for (umint i = 0; i < 16; ++i)
+			for (umint iCall = 0; iCall < 16; ++iCall)
 				Broken += "\t.f_CallSync()\n";
 
 			fg_ExpectFormat
@@ -199,7 +199,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// above it; one documenting what it trails stays, written as a line comment with its marker, and so does one
 			// behind code too long by itself.
 			CStr CommentWords;
-			for (umint i = 0; i < 36; ++i)
+			for (umint iWord = 0; iWord < 36; ++iWord)
 				CommentWords += "Word ";
 
 			CommentWords = CommentWords.f_Trim();
@@ -233,8 +233,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// on the line below a NOLINTNEXTLINE, is neither split nor joined with another line's.
 			{
 				CStr Arguments;
-				for (umint i = 0; i < 30; ++i)
-					Arguments += "{}Argument{}"_f << (i ? ", " : "") << i;
+				for (umint iArgument = 0; iArgument < 30; ++iArgument)
+					Arguments += "{}Argument{}"_f << (iArgument ? ", " : "") << iArgument;
 
 				CStr Source = "void f()\n{\n\tint a = g(1); // NOLINT(bugprone-xyz) "
 					+ CommentWords
@@ -288,7 +288,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			fg_ExpectFormat("TrigraphSpliceKeepsBlockComment", "int a; /* ?" "?/ */\nint b;\n", "int a; /* ?" "?/ */\nint b;\n");
 			// A range written across lines is not joined onto the line of a comment behind it that would then be too long.
 			CStr MediumWords;
-			for (umint i = 0; i < 31; ++i)
+			for (umint iWord = 0; iWord < 31; ++iWord)
 				MediumWords += "Word ";
 
 			MediumWords = MediumWords.f_Trim();
@@ -304,10 +304,10 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// one it moves above.
 			CStr LongArgument;
 			CStr LongComment;
-			for (umint i = 0; i < 100; ++i)
+			for (umint iChar = 0; iChar < 100; ++iChar)
 				LongArgument += "a";
 
-			for (umint i = 0; i < 185; ++i)
+			for (umint iChar = 0; iChar < 185; ++iChar)
 				LongComment += "c";
 
 			fg_ExpectFormat
@@ -320,7 +320,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A statement the layout moves in is measured where it goes: the comment fits behind a namespace's member
 			// written at the namespace's own level, but not one level in, where it moves above it.
 			CStr NamespaceComment;
-			for (umint i = 0; i < 175; ++i)
+			for (umint iChar = 0; iChar < 175; ++iChar)
 				NamespaceComment += "c";
 
 			fg_ExpectFormat("TrailingCommentMovedIn", "namespace N\n{\nvoid f(); // " + NamespaceComment + "\n}\n", "namespace N\n{\n\t// " + NamespaceComment + "\n\tvoid f();\n}\n", false);
@@ -364,7 +364,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			{
 				CStr First;
 				CStr Second;
-				for (umint i = 0; i < 90; ++i)
+				for (umint iChar = 0; iChar < 90; ++iChar)
 				{
 					First += "a";
 					Second += "b";
@@ -492,7 +492,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A row of a list a conditional keeps the lines of is laid out as any element is, split where it is too long.
 			{
 				CStr Long;
-				for (umint i = 0; i < 100; ++i)
+				for (umint iChar = 0; iChar < 100; ++iChar)
 					Long += "x";
 
 				fg_ExpectFormat
@@ -527,7 +527,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// An element's template argument list joins with the empty argument list the split put below it, or not at all.
 			{
 				CStr Name;
-				for (umint i = 0; i < 168; ++i)
+				for (umint iChar = 0; iChar < 168; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -541,7 +541,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// So does one with the rest of a qualified name below it.
 			{
 				CStr Name;
-				for (umint i = 0; i < 160; ++i)
+				for (umint iChar = 0; iChar < 160; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -561,7 +561,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A lambda whose comma moves in front of it has its head split from the comma's line, and its body at its level.
 			{
 				CStr Type;
-				for (umint i = 0; i < 90; ++i)
+				for (umint iChar = 0; iChar < 90; ++iChar)
 					Type += "a";
 
 				fg_ExpectFormat
@@ -579,7 +579,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A link of a chain on what a call yields keeps the line the chain's layout gave it.
 			{
 				CStr Name;
-				for (umint i = 0; i < 150; ++i)
+				for (umint iChar = 0; iChar < 150; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -647,7 +647,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			fg_ExpectFormat("TrailingCommentBehindClosingMarker", "void f()\n{\n\t[]\n\t{\n\t}(); // " + LongComment + "\n}\n", "void f()\n{\n\t[]\n\t{\n\t}(); // " + LongComment + "\n}\n");
 			// A lambda's body is measured where it goes, in from the call it is an argument of.
 			CStr LambdaComment;
-			for (umint i = 0; i < 167; ++i)
+			for (umint iChar = 0; iChar < 167; ++iChar)
 				LambdaComment += "c";
 
 			fg_ExpectFormat
@@ -660,7 +660,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			;
 			// So is a statement a clause guards without braces, one level in from the clause.
 			CStr GuardedComment;
-			for (umint i = 0; i < 165; ++i)
+			for (umint iChar = 0; iChar < 165; ++iChar)
 				GuardedComment += "c";
 
 			fg_ExpectFormat
@@ -709,7 +709,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// too long to trail it goes above it.
 			{
 				CStr Name;
-				for (umint i = 0; i < 172; ++i)
+				for (umint iChar = 0; iChar < 172; ++iChar)
 					Name += "W";
 
 				fg_ExpectFormat
@@ -724,7 +724,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// One trailing a block behind the label and what follows it stays with the label's line.
 			{
 				CStr Comment;
-				for (umint i = 0; i < 175; ++i)
+				for (umint iChar = 0; iChar < 175; ++iChar)
 					Comment += "c";
 
 				fg_ExpectFormat
@@ -740,7 +740,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// part of its width.
 			{
 				CStr Name;
-				for (umint i = 0; i < 162; ++i)
+				for (umint iChar = 0; iChar < 162; ++iChar)
 					Name += "W";
 
 				fg_ExpectFormat
@@ -757,7 +757,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// So does one written over several lines, which becomes one line comment per line where the brace's line fits.
 			{
 				CStr Name;
-				for (umint i = 0; i < 150; ++i)
+				for (umint iChar = 0; iChar < 150; ++iChar)
 					Name += "W";
 
 				fg_ExpectFormat
@@ -772,7 +772,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			fg_ExpectFormat("TrailingCommentAboveQualifier", "const char *g_pA; // " + LongComment + "\n", "// " + LongComment + "\nchar const *g_pA;\n", false);
 			// One written further in than the layout puts it is measured where it goes too, the code fitting there.
 			CStr MovedOutArgument;
-			for (umint i = 0; i < 176; ++i)
+			for (umint iChar = 0; iChar < 176; ++iChar)
 				MovedOutArgument += "a";
 
 			fg_ExpectFormat
@@ -1175,7 +1175,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// source aligned it.
 			{
 				CStr Name;
-				for (umint i = 0; i < 138; ++i)
+				for (umint iChar = 0; iChar < 138; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -1189,7 +1189,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// So is code on a jump target's line.
 			{
 				CStr Name;
-				for (umint i = 0; i < 146; ++i)
+				for (umint iChar = 0; iChar < 146; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -1203,7 +1203,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A statement a clause guards without braces stands a level in from it, a comment's code behind a lambda in it as well.
 			{
 				CStr Words;
-				for (umint i = 0; i < 152; ++i)
+				for (umint iChar = 0; iChar < 152; ++iChar)
 					Words += "w";
 
 				fg_ExpectFormat
@@ -1224,7 +1224,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A comment behind the brace of a clause's body trails the clause from its start once its lines are joined.
 			{
 				CStr Words;
-				for (umint i = 0; i < 150; ++i)
+				for (umint iChar = 0; iChar < 150; ++iChar)
 					Words += "w";
 
 				fg_ExpectFormat
@@ -1240,7 +1240,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// statement behind the line the split leaves it on.
 			{
 				CStr Words;
-				for (umint i = 0; i < 175; ++i)
+				for (umint iChar = 0; iChar < 175; ++iChar)
 					Words += "w";
 
 				fg_ExpectFormat
@@ -1255,7 +1255,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A statement an 'else' guards on its line takes a line of its own, and its comment goes above it there.
 			{
 				CStr Words;
-				for (umint i = 0; i < 176; ++i)
+				for (umint iChar = 0; iChar < 176; ++iChar)
 					Words += "w";
 
 				fg_ExpectFormat
@@ -1270,7 +1270,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// An empty statement a clause guards stays on its line, and the clause written over lines is joined onto its first.
 			{
 				CStr Words;
-				for (umint i = 0; i < 170; ++i)
+				for (umint iChar = 0; iChar < 170; ++iChar)
 					Words += "w";
 
 				fg_ExpectFormat
@@ -1285,7 +1285,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// The clauses in front of the one owning a braced body count too: 'for (;;) switch (n) {'.
 			{
 				CStr Words;
-				for (umint i = 0; i < 173; ++i)
+				for (umint iChar = 0; iChar < 173; ++iChar)
 					Words += "w";
 
 				fg_ExpectFormat
@@ -1300,7 +1300,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A comment behind a comma the list's conversion moves in front of the next element trails the element in front.
 			{
 				CStr Words;
-				for (umint i = 0; i < 171; ++i)
+				for (umint iChar = 0; iChar < 171; ++iChar)
 					Words += "w";
 
 				fg_ExpectFormat
@@ -1315,7 +1315,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// Code a block comment keeps from being joined is measured as the spacing rules write it around the comment.
 			{
 				CStr Name;
-				for (umint i = 0; i < 142; ++i)
+				for (umint iChar = 0; iChar < 142; ++iChar)
 					Name += "a";
 
 				fg_ExpectFormat
@@ -1330,8 +1330,8 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// An attribute's parenthesis stands among the specifiers, and the parameter list behind the
 			// name opens instead.
 			CStr AttributeParameters;
-			for (umint i = 0; i < 6; ++i)
-				AttributeParameters += "{}void (*_fCallback{})(void)"_f << (i ? ", " : "") << i;
+			for (umint iParam = 0; iParam < 6; ++iParam)
+				AttributeParameters += "{}void (*_fCallback{})(void)"_f << (iParam ? ", " : "") << iParam;
 
 			fg_ExpectFormat
 				(
@@ -1377,7 +1377,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// A placement new gives in front of the type it constructs where the type does not fit behind it,
 			// rather than opening the type's template arguments.
 			CStr PlacementArgument;
-			for (umint i = 0; i < 150; ++i)
+			for (umint iChar = 0; iChar < 150; ++iChar)
 				PlacementArgument += "W";
 
 			fg_ExpectFormat
@@ -1444,7 +1444,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			;
 			// A named call streamed into a plain target opens rather than taking a line of its own.
 			CStr StreamedWord;
-			for (umint i = 0; i < 110; ++i)
+			for (umint iChar = 0; iChar < 110; ++iChar)
 				StreamedWord += "W";
 
 			fg_ExpectFormat
@@ -1670,7 +1670,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			// One too long for its header's line starts a line of its own at the header's level.
 			{
 				CStr Parameter;
-				for (umint i = 0; i < 160; ++i)
+				for (umint iChar = 0; iChar < 160; ++iChar)
 					Parameter += "a";
 
 				fg_ExpectFormat

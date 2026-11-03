@@ -25,28 +25,28 @@ namespace NMib::NDevelop::NPrivate
 {
 	void CFormattingAnalyzer::fp_PrepareBlockEnds()
 	{
-		auto nTokens = m_Tokens.f_GetTokens().f_GetLen();
+		auto nTokens = mp_Tokens.f_GetTokens().f_GetLen();
 
-		m_BlockEnds.f_SetLen(nTokens);
-		for (auto &iEnd : m_BlockEnds)
+		mp_BlockEnds.f_SetLen(nTokens);
+		for (auto &iEnd : mp_BlockEnds)
 			iEnd = nTokens;
 
-		m_OpenListEnds.f_SetLen(nTokens);
-		for (auto &iEnd : m_OpenListEnds)
+		mp_OpenListEnds.f_SetLen(nTokens);
+		for (auto &iEnd : mp_OpenListEnds)
 			iEnd = nTokens;
 
-		auto const &Nodes = m_Structure.f_GetNodes();
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 
-		m_KeepsListLines.f_SetLen(Nodes.f_GetLen());
-		for (auto &bKeeps : m_KeepsListLines)
+		mp_KeepsListLines.f_SetLen(Nodes.f_GetLen());
+		for (auto &bKeeps : mp_KeepsListLines)
 			bKeeps = 0;
 
 		for (umint iNode = 0; iNode < Nodes.f_GetLen(); ++iNode)
 		{
 			auto const &Node = Nodes[iNode];
 			if (Node.m_Kind == ECodeNodeKind::mc_Block && Node.m_Bracket == ECodeBracket::mc_Brace)
-				m_BlockEnds[Node.m_iFirstToken] = Node.m_iLastToken;
+				mp_BlockEnds[Node.m_iFirstToken] = Node.m_iLastToken;
 
 			if (!Node.m_bWrittenOpen)
 				continue;
@@ -57,13 +57,13 @@ namespace NMib::NDevelop::NPrivate
 			bool bKeeps = Node.m_bHasDirective || fp_IsDisabled(iInside, Tokens[Node.m_iLastToken].m_iOffset - iInside);
 			if (!bKeeps)
 			{
-				m_OpenListEnds[Node.m_iFirstToken] = Node.m_iLastToken;
+				mp_OpenListEnds[Node.m_iFirstToken] = Node.m_iLastToken;
 
 				continue;
 			}
 
-			for (auto iKeeps = iNode; iKeeps < Nodes.f_GetLen() && !m_KeepsListLines[iKeeps]; iKeeps = iKeeps ? Nodes[iKeeps].m_iParent : Nodes.f_GetLen())
-				m_KeepsListLines[iKeeps] = 1;
+			for (auto iKeeps = iNode; iKeeps < Nodes.f_GetLen() && !mp_KeepsListLines[iKeeps]; iKeeps = iKeeps ? Nodes[iKeeps].m_iParent : Nodes.f_GetLen())
+				mp_KeepsListLines[iKeeps] = 1;
 		}
 	}
 
@@ -72,21 +72,21 @@ namespace NMib::NDevelop::NPrivate
 	// heads inside alternative heads.
 	bool CFormattingAnalyzer::f_FindAlternativeHeads(TCVector<CAlternativeHeads> &o_Groups) const
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
-		auto nSource = m_Request.m_Source.f_GetLen();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto nSource = mp_Request.m_Source.f_GetLen();
 		TCVector<TCVector<umint>> Groups;
 		TCVector<umint> Open;
 
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor)
+			if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_Preprocessor)
 				continue;
 
-			auto Keyword = fp_GetDirectiveKeyword(i);
+			auto Keyword = fp_GetDirectiveKeyword(iToken);
 			if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
 			{
 				Open.f_Insert(Groups.f_GetLen());
-				Groups.f_Insert().f_Insert(i);
+				Groups.f_Insert().f_Insert(iToken);
 
 				continue;
 			}
@@ -98,7 +98,7 @@ namespace NMib::NDevelop::NPrivate
 			if (Open.f_IsEmpty())
 				return false;
 
-			Groups[Open.f_GetLast()].f_Insert(i);
+			Groups[Open.f_GetLast()].f_Insert(iToken);
 			if (!bBranch)
 				Open.f_Remove(Open.f_GetLen() - 1);
 		}
@@ -124,15 +124,15 @@ namespace NMib::NDevelop::NPrivate
 				CStr Opened;
 				bool bUnderflow = false;
 
-				for (auto i = Directives[iBranch] + 1; i < Directives[iBranch + 1]; ++i)
+				for (auto iToken = Directives[iBranch] + 1; iToken < Directives[iBranch + 1]; ++iToken)
 				{
-					auto const &Token = Tokens[i];
-					if (Token.m_Kind != ECodeTokenKind::mc_Punctuator || Skipped[i])
+					auto const &Token = Tokens[iToken];
+					if (Token.m_Kind != ECodeTokenKind::mc_Punctuator || Skipped[iToken])
 						continue;
 
-					if (m_Tokens.f_IsText(Token, "(") || m_Tokens.f_IsText(Token, "[") || m_Tokens.f_IsText(Token, "{"))
-						Opened.f_AddChar(m_pSource[Token.m_iOffset]);
-					else if (m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]") || m_Tokens.f_IsText(Token, "}"))
+					if (mp_Tokens.f_IsText(Token, "(") || mp_Tokens.f_IsText(Token, "[") || mp_Tokens.f_IsText(Token, "{"))
+						Opened.f_AddChar(mp_pSource[Token.m_iOffset]);
+					else if (mp_Tokens.f_IsText(Token, ")") || mp_Tokens.f_IsText(Token, "]") || mp_Tokens.f_IsText(Token, "}"))
 					{
 						if (Opened.f_IsEmpty())
 							bUnderflow = true;
@@ -153,15 +153,15 @@ namespace NMib::NDevelop::NPrivate
 			if (!bSameOpen)
 				return false;
 
-			for (auto i = Directives[1]; i < Directives.f_GetLast(); ++i)
-				Skipped[i] = true;
+			for (auto iToken = Directives[1]; iToken < Directives.f_GetLast(); ++iToken)
+				Skipped[iToken] = true;
 
 			auto &Group = o_Groups.f_Insert();
 
 			for (umint iDirective = 0; iDirective < Directives.f_GetLen(); ++iDirective)
 			{
 				auto const &Directive = Tokens[Directives[iDirective]];
-				auto Line = fg_LineSpan(m_Lines, Directive.m_iOffset, Directive.f_GetEnd(), nSource);
+				auto Line = fg_LineSpan(mp_Lines, Directive.m_iOffset, Directive.f_GetEnd(), nSource);
 				Group.m_Directives.f_Insert(Line);
 
 				if (iDirective)
@@ -198,14 +198,14 @@ namespace NMib::NDevelop::NPrivate
 	{
 		TCVector<CCodeFormattingRange> Spans;
 
-		for (auto const &Token : m_Tokens.f_GetTokens())
+		for (auto const &Token : mp_Tokens.f_GetTokens())
 		{
 			if (Token.m_Kind != ECodeTokenKind::mc_Preprocessor)
 				continue;
 
-			auto iLast = m_Lines.f_FindLine(Token.f_GetEnd() ? Token.f_GetEnd() - 1 : 0);
-			auto iStart = m_Lines.f_GetLineStart(m_Lines.f_FindLine(Token.m_iOffset));
-			auto iEnd = fg_Max(m_Lines.f_GetLineEnd(iLast), Token.f_GetEnd());
+			auto iLast = mp_Lines.f_FindLine(Token.f_GetEnd() ? Token.f_GetEnd() - 1 : 0);
+			auto iStart = mp_Lines.f_GetLineStart(mp_Lines.f_FindLine(Token.m_iOffset));
+			auto iEnd = fg_Max(mp_Lines.f_GetLineEnd(iLast), Token.f_GetEnd());
 			Spans.f_Insert(CCodeFormattingRange{iStart, iEnd - iStart});
 		}
 
@@ -214,12 +214,12 @@ namespace NMib::NDevelop::NPrivate
 
 	CStr CFormattingAnalyzer::fp_GetDirectiveKeyword(umint _iToken) const
 	{
-		auto const &Token = m_Tokens.f_GetTokens()[_iToken];
+		auto const &Token = mp_Tokens.f_GetTokens()[_iToken];
 		ch8 Keyword[16];
 		umint iAfter = 0;
-		auto nKeyword = fg_ReadDirectiveKeyword(m_pSource + Token.m_iOffset, Token.m_nLength, Keyword, iAfter);
+		auto nKeyword = fg_ReadDirectiveKeyword(mp_pSource + Token.m_iOffset, Token.m_nLength, Keyword, iAfter);
 		if (nKeyword > sizeof(Keyword))
-			return CStr(m_pSource + Token.m_iOffset, Token.m_nLength); // No keyword is that long, so it matches none.
+			return CStr(mp_pSource + Token.m_iOffset, Token.m_nLength); // No keyword is that long, so it matches none.
 
 		// The standard's keywords are constants, so asking for one allocates nothing.
 		static constexpr CStr const *c_pKeywords[] =
@@ -258,7 +258,7 @@ namespace NMib::NDevelop::NPrivate
 	// alternatives inside one construct rather than pieces of one spread over several.
 	bool CFormattingAnalyzer::fp_IsDirectiveParallel(umint _iDirective, umint _iOpen, umint _iClose) const
 	{
-		auto const &Nodes = m_Structure.f_GetNodes();
+		auto const &Nodes = mp_Structure.f_GetNodes();
 		if (Nodes.f_IsEmpty())
 			return false;
 
@@ -311,10 +311,10 @@ namespace NMib::NDevelop::NPrivate
 	// is transparent only fixes the line it stands on, exactly as a line comment does.
 	void CFormattingAnalyzer::fp_PrepareDirectives()
 	{
-		auto const &Tokens = m_Tokens.f_GetTokens();
+		auto const &Tokens = mp_Tokens.f_GetTokens();
 
-		m_OpaqueDirective.f_SetLen(Tokens.f_GetLen());
-		for (auto &bOpaque : m_OpaqueDirective)
+		mp_OpaqueDirective.f_SetLen(Tokens.f_GetLen());
+		for (auto &bOpaque : mp_OpaqueDirective)
 			bOpaque = 0;
 
 		struct CConditional
@@ -326,16 +326,16 @@ namespace NMib::NDevelop::NPrivate
 		TCVector<CConditional> Conditionals;
 		TCVector<umint> Open;
 
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 		{
-			if (Tokens[i].m_Kind != ECodeTokenKind::mc_Preprocessor)
+			if (Tokens[iToken].m_Kind != ECodeTokenKind::mc_Preprocessor)
 				continue;
 
-			auto Keyword = fp_GetDirectiveKeyword(i);
+			auto Keyword = fp_GetDirectiveKeyword(iToken);
 			if (Keyword == "if" || Keyword == "ifdef" || Keyword == "ifndef")
 			{
 				Open.f_Insert(Conditionals.f_GetLen());
-				Conditionals.f_Insert().m_Directives.f_Insert(i);
+				Conditionals.f_Insert().m_Directives.f_Insert(iToken);
 
 				continue;
 			}
@@ -348,13 +348,13 @@ namespace NMib::NDevelop::NPrivate
 			// group unknown, so nothing may be read across it.
 			if (Open.f_IsEmpty())
 			{
-				m_OpaqueDirective[i] = 1;
+				mp_OpaqueDirective[iToken] = 1;
 
 				continue;
 			}
 
 			auto &Conditional = Conditionals[Open.f_GetLast()];
-			Conditional.m_Directives.f_Insert(i);
+			Conditional.m_Directives.f_Insert(iToken);
 			if (!bBranch)
 			{
 				Conditional.m_bClosed = true;
@@ -376,15 +376,15 @@ namespace NMib::NDevelop::NPrivate
 				aint nDepth = 0;
 				aint nLowest = 0;
 
-				for (auto i = Directives[iBranch] + 1; i < Directives[iBranch + 1]; ++i)
+				for (auto iToken = Directives[iBranch] + 1; iToken < Directives[iBranch + 1]; ++iToken)
 				{
-					auto const &Token = Tokens[i];
+					auto const &Token = Tokens[iToken];
 					if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 						continue;
 
-					if (m_Tokens.f_IsText(Token, "(") || m_Tokens.f_IsText(Token, "[") || m_Tokens.f_IsText(Token, "{"))
+					if (mp_Tokens.f_IsText(Token, "(") || mp_Tokens.f_IsText(Token, "[") || mp_Tokens.f_IsText(Token, "{"))
 						++nDepth;
-					else if (m_Tokens.f_IsText(Token, ")") || m_Tokens.f_IsText(Token, "]") || m_Tokens.f_IsText(Token, "}"))
+					else if (mp_Tokens.f_IsText(Token, ")") || mp_Tokens.f_IsText(Token, "]") || mp_Tokens.f_IsText(Token, "}"))
 					{
 						--nDepth;
 						nLowest = nDepth < nLowest ? nDepth : nLowest;
@@ -395,58 +395,58 @@ namespace NMib::NDevelop::NPrivate
 			}
 
 			bool bParallel = bBalanced;
-			for (umint i = 0; bParallel && i < Directives.f_GetLen(); ++i)
-				bParallel = fp_IsDirectiveParallel(Directives[i], Directives[0], Directives.f_GetLast());
+			for (umint iDirective = 0; bParallel && iDirective < Directives.f_GetLen(); ++iDirective)
+				bParallel = fp_IsDirectiveParallel(Directives[iDirective], Directives[0], Directives.f_GetLast());
 
 			if (bParallel)
 				continue;
 
 			if (!bBalanced)
 			{
-				auto &Span = m_Conditionals.f_Insert();
+				auto &Span = mp_Conditionals.f_Insert();
 				Span.m_iOffset = Tokens[Directives[0]].m_iOffset;
 				Span.m_nLength = Tokens[Directives.f_GetLast()].f_GetEnd() - Span.m_iOffset;
 			}
 
 			for (auto iDirective : Directives)
-				m_OpaqueDirective[iDirective] = 1;
+				mp_OpaqueDirective[iDirective] = 1;
 		}
 
-		m_OpaqueBefore.f_SetLen(Tokens.f_GetLen() + 1);
-		m_OpaqueBefore[0] = 0;
-		for (umint i = 0; i < Tokens.f_GetLen(); ++i)
-			m_OpaqueBefore[i + 1] = m_OpaqueBefore[i] + m_OpaqueDirective[i];
+		mp_OpaqueBefore.f_SetLen(Tokens.f_GetLen() + 1);
+		mp_OpaqueBefore[0] = 0;
+		for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
+			mp_OpaqueBefore[iToken + 1] = mp_OpaqueBefore[iToken] + mp_OpaqueDirective[iToken];
 	}
 
 	bool CFormattingAnalyzer::fp_SpansLines(umint _iFirst, umint _iLast) const
 	{
-		return m_Lines.f_FindLine(m_Tokens.f_GetTokens()[_iFirst].m_iOffset) != m_Lines.f_FindLine(m_Tokens.f_GetTokens()[_iLast].f_GetEnd() - 1);
+		return mp_Lines.f_FindLine(mp_Tokens.f_GetTokens()[_iFirst].m_iOffset) != mp_Lines.f_FindLine(mp_Tokens.f_GetTokens()[_iLast].f_GetEnd() - 1);
 	}
 
 	// A node the builder could not close names a token past the end, so the range is taken
 	// to where the source does end.
 	bool CFormattingAnalyzer::fp_HasOpaqueDirective(umint _iFirst, umint _iLast) const
 	{
-		auto nTokens = m_Tokens.f_GetTokens().f_GetLen();
+		auto nTokens = mp_Tokens.f_GetTokens().f_GetLen();
 		if (_iFirst >= nTokens)
 			return false;
 
-		return m_OpaqueBefore[(_iLast < nTokens ? _iLast : nTokens - 1) + 1] > m_OpaqueBefore[_iFirst];
+		return mp_OpaqueBefore[(_iLast < nTokens ? _iLast : nTokens - 1) + 1] > mp_OpaqueBefore[_iFirst];
 	}
 
 	// The indentation of the line the token stands on in the source, whatever the layout
 	// has decided since: the lines a body was written against.
 	umint CFormattingAnalyzer::fp_GetSourceLineIndent(umint _iToken) const
 	{
-		auto iLine = m_Lines.f_FindLine(m_Tokens.f_GetTokens()[_iToken].m_iOffset);
-		auto iStart = m_Lines.f_GetLineStart(iLine);
-		auto iEnd = m_Lines.f_GetLineContentEnd(iLine);
+		auto iLine = mp_Lines.f_FindLine(mp_Tokens.f_GetTokens()[_iToken].m_iOffset);
+		auto iStart = mp_Lines.f_GetLineStart(iLine);
+		auto iEnd = mp_Lines.f_GetLineContentEnd(iLine);
 		auto iIndent = iStart;
-		while (iIndent < iEnd && fg_IsSpaceOrTab(m_pSource[iIndent]))
+		while (iIndent < iEnd && fg_IsSpaceOrTab(mp_pSource[iIndent]))
 			++iIndent;
 
 		umint nColumns = 0;
-		if (!fg_MeasureTextColumns(m_pSource + iStart, iIndent - iStart, m_Request.m_Settings.m_nTabWidth, nColumns))
+		if (!fg_MeasureTextColumns(mp_pSource + iStart, iIndent - iStart, mp_Request.m_Settings.m_nTabWidth, nColumns))
 			return 0;
 
 		return nColumns;

@@ -146,10 +146,10 @@ namespace NMib::NDevelop
 		// holds a multibyte sequence needs the decoder.
 		{
 			umint nColumns = 0;
-			umint i = 0;
-			for (; i < _nLength; ++i)
+			umint iChar = 0;
+			for (; iChar < _nLength; ++iChar)
 			{
-				auto Character = uch8(_pText[i]);
+				auto Character = uch8(_pText[iChar]);
 				if (Character >= 0x80)
 					break;
 
@@ -160,7 +160,7 @@ namespace NMib::NDevelop
 				nColumns += nAdvance;
 			}
 
-			if (i == _nLength)
+			if (iChar == _nLength)
 			{
 				o_nColumns = nColumns;
 

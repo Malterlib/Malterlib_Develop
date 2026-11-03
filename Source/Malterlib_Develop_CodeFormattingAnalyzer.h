@@ -18,8 +18,8 @@ namespace NMib::NDevelop
 
 namespace NMib::NDevelop::NPrivate
 {
-	extern CStr const gc_FormatOffDirective;
-	extern CStr const gc_FormatOnDirective;
+	inline constexpr CStr gc_FormatOffDirective = gc_Str<"// malterlib-format off">;
+	inline constexpr CStr gc_FormatOnDirective = gc_Str<"// malterlib-format on">;
 
 	// Wider than any line: what a block measures as, so that no range holding one fits.
 	inline constexpr umint gc_nBlockWidth = umint(1) << 24;
@@ -342,55 +342,55 @@ namespace NMib::NDevelop::NPrivate
 		void fp_RuleBuildSystemBlankLines();
 		void fp_RuleBuildSystemLineBreaks();
 
-		CCodeFormattingRequest const &m_Request;
-		ch8 const *m_pSource = nullptr;                            // m_Request's source, which no analysis changes.
-		CCodeTokenStream m_Tokens;
-		CCodeStructure m_Structure;
-		CTextLineMap m_Lines;
-		bool m_bAllowConversions = true;                           // Only the analysis of the original source converts return types.
-		bool m_bAllowQualifiers = true;                            // Qualifiers move first, in a stage of their own, so no other conversion has to know of them.
-		CStr m_Baseline;                                           // The source with every conversion made, which the result matches token for token.
-		bool m_bProbing = false;                                   // The statement walk only decides conversions, and lays nothing out.
-		bool m_bOperatorSplit = false;                             // The statement broke at operators, so a block belongs to a continuation.
-		umint m_iRangeBody = TCLimitsInt<umint>::mc_Max;           // The brace of a body that opens at the level of the range in front of it.
-		umint m_iSplitFirstParen = 0;                              // A declaration is never split before its name.
-		umint m_nHeadDepth = 0;                                    // How many head layouts are in progress around the current one.
-		NContainer::TCVector<umint> m_FailedHeads;                 // First, last, indent and continuation of each head the outermost layout failed to split.
-		umint m_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
-		NContainer::TCVector<umint> m_TokenDepth;                  // Bracket nesting of each token, for finding a range's own level.
-		NContainer::TCVector<umint> m_BlockEnds;                   // Indexed by token: the closing brace of the block the token opens, or the token count.
-		NContainer::TCVector<umint> m_OpenListEnds;                // Indexed by token: the closing marker of a list written open that the token opens.
-		NContainer::TCVector<uint8> m_KeepsListLines;              // Indexed by node: it holds a list written across lines that keeps them.
-		NContainer::TCVector<uint8> m_OpaqueDirective;             // Indexed by token: a directive whose branches cut a construct, so nothing is read across it.
-		NContainer::TCVector<umint> m_OpaqueBefore;                // Indexed by token: how many opaque directives stand in front of it.
-		NContainer::TCVector<CCodeFormattingRange> m_Conditionals; // Source spans of the '#if' groups, for saying which one a structure was cut by.
-		NContainer::TCVector<uint8> m_GapState;                    // Indexed by token: what the gap in front of it becomes.
-		mutable NContainer::TCVector<uint8> m_CanonicalSpacing;    // Indexed by token: the standard's spelling of the gap in front of it, plus one, or zero when not yet asked.
-		mutable NContainer::TCVector<uint8> m_InlineSpacing;       // Indexed by token: the spacing rules' spelling of the gap in front of it, plus one, or zero when not yet asked.
-		mutable NContainer::TCVector<umint> m_TokenColumns;        // Indexed by token: its width in columns, plus one, or zero when not yet measured.
-		NContainer::TCVector<umint> m_GapIndent;                   // The indentation a break in front of the token takes.
-		NContainer::TCVector<uint8> m_CommentMoved;                // Indexed by token: a comment on a line of its own that moves, 2 to the code under it's level.
-		NContainer::TCVector<uint8> m_CommaGone;                   // Indexed by token: a comma a list's conversion takes out.
-		NContainer::TCVector<uint8> m_BlankBefore;                 // A blank line stands in front of the token, which the layout writes where it writes the gap.
-		NContainer::TCVector<umint> m_CommentIndent;               // The indentation such a comment's line takes.
-		NContainer::TCVector<CCodeFormattingEdit> m_Structural;    // Token changes: return types moved behind their parameter lists, braces dropped.
-		NContainer::TCVector<uint8> m_ProtectedStart;
-		NContainer::TCVector<uint8> m_ProtectedEnd;
-		NContainer::TCVector<CCodeFormattingRange> m_Disabled;
-		NContainer::TCVector<CCodeFormattingRange> m_Owned;        // Text a directive lays out itself, which no other rule edits.
-		NContainer::TCVector<CCodeFormattingRange> m_Effective;
-		NContainer::TCVector<CListLayout> m_ListLayouts;
-		NContainer::TCVector<umint> m_ListLayoutOfNode;            // Indexed by node: its layout plus one, or zero.
-		NContainer::TCVector<umint> m_AlignDirectives;             // The comment tokens of 'align: =' directives.
-		NContainer::TCVector<CCodeFormattingEdit> m_Edits;
-		NContainer::TCVector<NStr::CStr> m_EditExplanations;
-		NContainer::TCVector<uint8> m_EditDropped;
-		mutable NContainer::TCVector<uint8> m_SuppressedLines;     // Indexed by line, one more than there are: a NOLINT or NOLINTNEXTLINE suppresses it.
-		mutable bool m_bSuppressedLinesFound = false;
-		NContainer::TCVector<CJoinCandidate> m_JoinCandidates;
-		NContainer::TCVector<CCodeFormattingDiagnostic> m_Diagnostics;
-		NContainer::TCVector<CBuildSystemLine> m_BuildSystemLines;
-		NContainer::TCVector<uint8> m_BuildSystemPlaced;           // Indexed by token: the value layout writes the gap in front of it.
-		bool m_bWholeFile = false;
+		CCodeFormattingRequest const &mp_Request;
+		ch8 const *mp_pSource = nullptr;                            // mp_Request's source, which no analysis changes.
+		CCodeTokenStream mp_Tokens;
+		CCodeStructure mp_Structure;
+		CTextLineMap mp_Lines;
+		bool mp_bAllowConversions = true;                           // Only the analysis of the original source converts return types.
+		bool mp_bAllowQualifiers = true;                            // Qualifiers move first, in a stage of their own, so no other conversion has to know of them.
+		CStr mp_Baseline;                                           // The source with every conversion made, which the result matches token for token.
+		bool mp_bProbing = false;                                   // The statement walk only decides conversions, and lays nothing out.
+		bool mp_bOperatorSplit = false;                             // The statement broke at operators, so a block belongs to a continuation.
+		umint mp_iRangeBody = TCLimitsInt<umint>::mc_Max;           // The brace of a body that opens at the level of the range in front of it.
+		umint mp_iSplitFirstParen = 0;                              // A declaration is never split before its name.
+		umint mp_nHeadDepth = 0;                                    // How many head layouts are in progress around the current one.
+		NContainer::TCVector<umint> mp_FailedHeads;                 // First, last, indent and continuation of each head the outermost layout failed to split.
+		umint mp_iSplitTrailingReturn = TCLimitsInt<umint>::mc_Max;
+		NContainer::TCVector<umint> mp_TokenDepth;                  // Bracket nesting of each token, for finding a range's own level.
+		NContainer::TCVector<umint> mp_BlockEnds;                   // Indexed by token: the closing brace of the block the token opens, or the token count.
+		NContainer::TCVector<umint> mp_OpenListEnds;                // Indexed by token: the closing marker of a list written open that the token opens.
+		NContainer::TCVector<uint8> mp_KeepsListLines;              // Indexed by node: it holds a list written across lines that keeps them.
+		NContainer::TCVector<uint8> mp_OpaqueDirective;             // Indexed by token: a directive whose branches cut a construct, so nothing is read across it.
+		NContainer::TCVector<umint> mp_OpaqueBefore;                // Indexed by token: how many opaque directives stand in front of it.
+		NContainer::TCVector<CCodeFormattingRange> mp_Conditionals; // Source spans of the '#if' groups, for saying which one a structure was cut by.
+		NContainer::TCVector<uint8> mp_GapState;                    // Indexed by token: what the gap in front of it becomes.
+		mutable NContainer::TCVector<uint8> mp_CanonicalSpacing;    // Indexed by token: the standard's spelling of the gap in front of it, plus one, or zero when not yet asked.
+		mutable NContainer::TCVector<uint8> mp_InlineSpacing;       // Indexed by token: the spacing rules' spelling of the gap in front of it, plus one, or zero when not yet asked.
+		mutable NContainer::TCVector<umint> mp_TokenColumns;        // Indexed by token: its width in columns, plus one, or zero when not yet measured.
+		NContainer::TCVector<umint> mp_GapIndent;                   // The indentation a break in front of the token takes.
+		NContainer::TCVector<uint8> mp_CommentMoved;                // Indexed by token: a comment on a line of its own that moves, 2 to the code under it's level.
+		NContainer::TCVector<uint8> mp_CommaGone;                   // Indexed by token: a comma a list's conversion takes out.
+		NContainer::TCVector<uint8> mp_BlankBefore;                 // A blank line stands in front of the token, which the layout writes where it writes the gap.
+		NContainer::TCVector<umint> mp_CommentIndent;               // The indentation such a comment's line takes.
+		NContainer::TCVector<CCodeFormattingEdit> mp_Structural;    // Token changes: return types moved behind their parameter lists, braces dropped.
+		NContainer::TCVector<uint8> mp_ProtectedStart;
+		NContainer::TCVector<uint8> mp_ProtectedEnd;
+		NContainer::TCVector<CCodeFormattingRange> mp_Disabled;
+		NContainer::TCVector<CCodeFormattingRange> mp_Owned;        // Text a directive lays out itself, which no other rule edits.
+		NContainer::TCVector<CCodeFormattingRange> mp_Effective;
+		NContainer::TCVector<CListLayout> mp_ListLayouts;
+		NContainer::TCVector<umint> mp_ListLayoutOfNode;            // Indexed by node: its layout plus one, or zero.
+		NContainer::TCVector<umint> mp_AlignDirectives;             // The comment tokens of 'align: =' directives.
+		NContainer::TCVector<CCodeFormattingEdit> mp_Edits;
+		NContainer::TCVector<NStr::CStr> mp_EditExplanations;
+		NContainer::TCVector<uint8> mp_EditDropped;
+		mutable NContainer::TCVector<uint8> mp_SuppressedLines;     // Indexed by line, one more than there are: a suppression comment of clang-tidy covers it.
+		mutable bool mp_bSuppressedLinesFound = false;
+		NContainer::TCVector<CJoinCandidate> mp_JoinCandidates;
+		NContainer::TCVector<CCodeFormattingDiagnostic> mp_Diagnostics;
+		NContainer::TCVector<CBuildSystemLine> mp_BuildSystemLines;
+		NContainer::TCVector<uint8> mp_BuildSystemPlaced;           // Indexed by token: the value layout writes the gap in front of it.
+		bool mp_bWholeFile = false;
 	};
 }

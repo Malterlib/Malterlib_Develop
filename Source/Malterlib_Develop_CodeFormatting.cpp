@@ -98,11 +98,11 @@ namespace
 	umint fg_ToOriginal(CSourceVariant const &_Variant, umint _iOffset, bool _bBehind)
 	{
 		umint nDeleted = 0;
-		for (umint i = 0; i < _Variant.m_DeletedAt.f_GetLen(); ++i)
+		for (umint iDeleted = 0; iDeleted < _Variant.m_DeletedAt.f_GetLen(); ++iDeleted)
 		{
-			auto iDeletedAt = _Variant.m_DeletedAt[i];
+			auto iDeletedAt = _Variant.m_DeletedAt[iDeleted];
 			if (iDeletedAt < _iOffset || (iDeletedAt == _iOffset && _bBehind))
-				nDeleted += _Variant.m_Deleted[i].m_nLength;
+				nDeleted += _Variant.m_Deleted[iDeleted].m_nLength;
 		}
 
 		return _iOffset + nDeleted;
@@ -141,9 +141,9 @@ namespace
 		}
 
 		auto pSource = _Source.f_GetStr();
-		for (auto i = iStart; i < iEnd; ++i)
+		for (auto iChar = iStart; iChar < iEnd; ++iChar)
 		{
-			auto Char = pSource[i];
+			auto Char = pSource[iChar];
 			if (Char != ' ' && Char != '\t' && Char != '\r' && Char != '\n')
 				return false;
 		}
@@ -155,19 +155,19 @@ namespace
 				continue;
 
 			umint nNewlines = 0;
-			for (auto i = iStart; i < iCut; ++i)
-				nNewlines += pSource[i] == '\n';
+			for (auto iChar = iStart; iChar < iCut; ++iChar)
+				nNewlines += pSource[iChar] == '\n';
 
 			umint iSplit = 0;
 			umint nSeen = 0;
 			auto pRest = Rest.f_GetStr();
 
-			for (umint i = 0; i < Rest.f_GetLen() && nSeen < nNewlines; ++i)
+			for (umint iChar = 0; iChar < Rest.f_GetLen() && nSeen < nNewlines; ++iChar)
 			{
-				if (pRest[i] == '\n')
+				if (pRest[iChar] == '\n')
 				{
 					++nSeen;
-					iSplit = i + 1;
+					iSplit = iChar + 1;
 				}
 			}
 
@@ -455,10 +455,10 @@ namespace
 			)
 		;
 
-		for (umint i = 1; i < Edits.f_GetLen(); ++i)
+		for (umint iEdit = 1; iEdit < Edits.f_GetLen(); ++iEdit)
 		{
-			auto const &Previous = Edits[i - 1];
-			auto const &Edit = Edits[i];
+			auto const &Previous = Edits[iEdit - 1];
+			auto const &Edit = Edits[iEdit];
 			if (Previous.f_GetEnd() > Edit.m_iOffset || (!Edit.m_nLength && Previous.m_iOffset == Edit.m_iOffset))
 				return fFallback();
 		}
@@ -710,12 +710,12 @@ namespace NMib::NDevelop
 		auto First = fg_NormalizeCodeTokens(_First, _Language);
 		auto Second = fg_NormalizeCodeTokens(_Second, _Language);
 
-		for (umint i = 0; i < fg_Min(First.f_GetLen(), Second.f_GetLen()); ++i)
+		for (umint iToken = 0; iToken < fg_Min(First.f_GetLen(), Second.f_GetLen()); ++iToken)
 		{
-			if (First[i] == Second[i])
+			if (First[iToken] == Second[iToken])
 				continue;
 
-			return "token {} became '{}' instead of '{}'"_f << i << Second[i] << First[i];
+			return "token {} became '{}' instead of '{}'"_f << iToken << Second[iToken] << First[iToken];
 		}
 
 		if (First.f_GetLen() == Second.f_GetLen())
@@ -909,10 +909,10 @@ namespace NMib::NDevelop
 		if (First.f_GetLen() != Second.f_GetLen())
 			return false;
 
-		for (umint i = 0; i < First.f_GetLen(); ++i)
+		for (umint iToken = 0; iToken < First.f_GetLen(); ++iToken)
 		{
-			auto const &Left = First[i];
-			auto const &Right = Second[i];
+			auto const &Left = First[iToken];
+			auto const &Right = Second[iToken];
 			auto pLeft = Left.m_pText ? Left.m_pText : Left.m_Normalized.f_GetStr();
 			auto pRight = Right.m_pText ? Right.m_pText : Right.m_Normalized.f_GetStr();
 			auto nLeft = Left.m_pText ? Left.m_nLength : Left.m_Normalized.f_GetLen();
@@ -920,9 +920,9 @@ namespace NMib::NDevelop
 			if (Left.m_Kind != Right.m_Kind || nLeft != nRight)
 				return false;
 
-			for (umint j = 0; j < nLeft; ++j)
+			for (umint iChar = 0; iChar < nLeft; ++iChar)
 			{
-				if (pLeft[j] != pRight[j])
+				if (pLeft[iChar] != pRight[iChar])
 					return false;
 			}
 		}
@@ -938,9 +938,6 @@ namespace NMib::NDevelop
 
 namespace NMib::NDevelop::NPrivate
 {
-	CStr const gc_FormatOffDirective = "// malterlib-format off";
-	CStr const gc_FormatOnDirective = "// malterlib-format on";
-
 	bool fg_IsCodeToken(CCodeToken const &_Token)
 	{
 		switch (_Token.m_Kind)
@@ -1216,10 +1213,10 @@ namespace NMib::NDevelop::NPrivate
 				}
 
 				bool bMoved = false;
-				for (umint i = 0; i < 4 && !bMoved; ++i)
+				for (umint iMoved = 0; iMoved < 4 && !bMoved; ++iMoved)
 				{
-					bMoved = Tokens.f_IsText(Token, c_pMoved[i]);
-					MovedCounts[i] += bMoved;
+					bMoved = Tokens.f_IsText(Token, c_pMoved[iMoved]);
+					MovedCounts[iMoved] += bMoved;
 				}
 
 				if (bMoved)
@@ -1368,9 +1365,9 @@ namespace NMib::NDevelop::NPrivate
 			// Edits that only touch each other, as insertions at one offset do, are each shifted back on their own.
 			if (!nConversions)
 			{
-				for (umint i = iFirstEdit; i < iEdit; ++i)
+				for (umint iGroupEdit = iFirstEdit; iGroupEdit < iEdit; ++iGroupEdit)
 				{
-					auto Edit = _Edits[i];
+					auto Edit = _Edits[iGroupEdit];
 					Edit.m_iOffset = umint(aint(Edit.m_iOffset) - nDelta);
 					o_Edits.f_Insert(Edit);
 				}
@@ -1391,9 +1388,9 @@ namespace NMib::NDevelop::NPrivate
 				CStr::CAppender Appender(Text);
 				umint iCopied = iStart;
 
-				for (umint i = iFirstEdit; i < iEdit; ++i)
+				for (umint iGroupEdit = iFirstEdit; iGroupEdit < iEdit; ++iGroupEdit)
 				{
-					auto const &Edit = _Edits[i];
+					auto const &Edit = _Edits[iGroupEdit];
 					Appender.f_AddString(pConverted + iCopied, Edit.m_iOffset - iCopied);
 					Appender += Edit.m_Replacement;
 					iCopied = Edit.f_GetEnd();
@@ -1416,12 +1413,12 @@ namespace NMib::NDevelop::NPrivate
 	// Whether a directive's text holds a raw string literal spanning lines.
 	bool fg_HoldsRawStringLines(ch8 const *_pText, umint _nLength)
 	{
-		for (umint i = 0; i + 1 < _nLength; ++i)
+		for (umint iChar = 0; iChar + 1 < _nLength; ++iChar)
 		{
-			if (_pText[i] != 'R' || _pText[i + 1] != '"')
+			if (_pText[iChar] != 'R' || _pText[iChar + 1] != '"')
 				continue;
 
-			auto iWord = i;
+			auto iWord = iChar;
 
 			auto fWordChar = [](ch8 _Char)
 				{
@@ -1432,11 +1429,11 @@ namespace NMib::NDevelop::NPrivate
 			while (iWord && fWordChar(_pText[iWord - 1]))
 				--iWord;
 
-			CStr Prefix(_pText + iWord, i + 1 - iWord);
+			CStr Prefix(_pText + iWord, iChar + 1 - iWord);
 			if (Prefix != "R" && Prefix != "u8R" && Prefix != "LR" && Prefix != "uR" && Prefix != "UR")
 				continue;
 
-			auto iOpen = i + 2;
+			auto iOpen = iChar + 2;
 			while (iOpen < _nLength)
 			{
 				auto Char = _pText[iOpen];
@@ -1449,7 +1446,7 @@ namespace NMib::NDevelop::NPrivate
 			if (iOpen >= _nLength || _pText[iOpen] != '(')
 				continue;
 
-			CStr Close = ")" + CStr(_pText + i + 2, iOpen - i - 2) + "\"";
+			CStr Close = ")" + CStr(_pText + iChar + 2, iOpen - iChar - 2) + "\"";
 			for (auto iEnd = iOpen + 1; iEnd < _nLength; ++iEnd)
 			{
 				if (_pText[iEnd] == '\n' || _pText[iEnd] == '\r')
@@ -1457,7 +1454,7 @@ namespace NMib::NDevelop::NPrivate
 
 				if (iEnd + Close.f_GetLen() <= _nLength && CStr(_pText + iEnd, Close.f_GetLen()) == Close)
 				{
-					i = iEnd;
+					iChar = iEnd;
 
 					break;
 				}
@@ -1472,12 +1469,12 @@ namespace NMib::NDevelop::NPrivate
 	bool fg_HoldsSplicedLiteral(ch8 const *_pText, umint _nLength)
 	{
 		ch8 Quote = 0;
-		for (umint i = 0; i < _nLength; ++i)
+		for (umint iChar = 0; iChar < _nLength; ++iChar)
 		{
-			auto Char = _pText[i];
+			auto Char = _pText[iChar];
 			if (Quote)
 			{
-				if (Char == '\\' && i + 1 < _nLength)
+				if (Char == '\\' && iChar + 1 < _nLength)
 				{
 					// A splice may have blanks between its backslash and the line's end, as the lexer reads it. Splices are taken
 					// out before escapes are read, so the backslash an escape would take can splice as well: '\\\\' over a line end.
@@ -1491,10 +1488,10 @@ namespace NMib::NDevelop::NPrivate
 						}
 					;
 
-					if (fSplices(i) || (_pText[i + 1] == '\\' && fSplices(i + 1)))
+					if (fSplices(iChar) || (_pText[iChar + 1] == '\\' && fSplices(iChar + 1)))
 						return true;
 
-					++i;
+					++iChar;
 				}
 				else if (Char == Quote || Char == '\n')
 					Quote = 0;
@@ -1502,16 +1499,16 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 			}
 
-			if (Char == '/' && i + 1 < _nLength && _pText[i + 1] == '/')
+			if (Char == '/' && iChar + 1 < _nLength && _pText[iChar + 1] == '/')
 				return false;
 
-			if (Char == '/' && i + 1 < _nLength && _pText[i + 1] == '*')
+			if (Char == '/' && iChar + 1 < _nLength && _pText[iChar + 1] == '*')
 			{
-				i += 2;
-				while (i + 1 < _nLength && (_pText[i] != '*' || _pText[i + 1] != '/'))
-					++i;
+				iChar += 2;
+				while (iChar + 1 < _nLength && (_pText[iChar] != '*' || _pText[iChar + 1] != '/'))
+					++iChar;
 
-				++i;
+				++iChar;
 			}
 			else if (Char == '"' || Char == '\'')
 				Quote = Char;
@@ -1539,12 +1536,12 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		for (umint i = 1; i + 1 < _nLength; ++i)
+		for (umint iChar = 1; iChar + 1 < _nLength; ++iChar)
 		{
-			if (_pText[i] != '\\')
+			if (_pText[iChar] != '\\')
 				continue;
 
-			auto iNext = i + 1;
+			auto iNext = iChar + 1;
 			while (iNext + 1 < _nLength && (_pText[iNext] == ' ' || _pText[iNext] == '\t' || _pText[iNext] == '\v' || _pText[iNext] == '\f'))
 				++iNext;
 
@@ -1554,7 +1551,7 @@ namespace NMib::NDevelop::NPrivate
 			if (_pText[iNext] != '\n' && _pText[iNext] != '\r')
 				continue;
 
-			auto Before = _pText[i - 1];
+			auto Before = _pText[iChar - 1];
 			auto After = iNext + 1 < _nLength ? _pText[iNext + 1] : ch8(' ');
 			bool bBlankBefore = Before == ' ' || Before == '\t';
 			bool bBlankAfter = After == ' ' || After == '\t' || After == '\n' || After == '\r' || After == '\\';

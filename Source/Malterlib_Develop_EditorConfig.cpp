@@ -420,9 +420,9 @@ namespace NMib::NDevelop
 
 		auto pChain = co_await fp_GetChain(pCache, CFile::fs_GetPath(FilePath));
 		CEditorConfigProperties Properties;
-		for (umint i = pChain->f_GetLen(); i; --i)
+		for (umint iEnd = pChain->f_GetLen(); iEnd; --iEnd)
 		{
-			auto const &Entry = (*pChain)[i - 1];
+			auto const &Entry = (*pChain)[iEnd - 1];
 			Entry.m_Configuration.f_Apply(CFile::fs_MakePathRelative(FilePath, Entry.m_Directory), Properties);
 		}
 
@@ -440,9 +440,9 @@ namespace NMib::NDevelop
 		// The documents in the directory itself count: they reach every file below it.
 		auto pChain = co_await fp_GetChain(pCache, Directory);
 		CEditorConfigSubtreeProperties Properties;
-		for (umint i = pChain->f_GetLen(); i; --i)
+		for (umint iEnd = pChain->f_GetLen(); iEnd; --iEnd)
 		{
-			auto const &Entry = (*pChain)[i - 1];
+			auto const &Entry = (*pChain)[iEnd - 1];
 			Entry.m_Configuration.f_ApplyBelow(CFile::fs_MakePathRelative(Directory, Entry.m_Directory), Properties);
 		}
 
