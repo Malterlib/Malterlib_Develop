@@ -131,11 +131,11 @@ namespace NMib::NDevelop
 					DMibError("{} must be true or false"_f << Key);
 
 				if (Key == "AlignTrailingComments")
-					Result.m_bAlignTrailingComments = Value.f_Boolean();
+					Result.m_AlignTrailingComments = Value.f_Boolean();
 				else if (Key == "AlignEnumValues")
-					Result.m_bAlignEnumValues = Value.f_Boolean();
+					Result.m_AlignEnumValues = Value.f_Boolean();
 				else
-					Result.m_bTrailingScopeAtStatementLevel = Value.f_Boolean();
+					Result.m_TrailingScopeAtStatementLevel = Value.f_Boolean();
 
 				continue;
 			}
@@ -186,14 +186,14 @@ namespace NMib::NDevelop
 	// A list the document holds replaces or adds to the one it extends, which is applied first.
 	void CCodeFormattingStyle::f_Apply(CCodeFormattingStyleDocument const &_Document)
 	{
-		if (_Document.m_bAlignTrailingComments)
-			m_bAlignTrailingComments = *_Document.m_bAlignTrailingComments;
+		if (_Document.m_AlignTrailingComments)
+			m_bAlignTrailingComments = *_Document.m_AlignTrailingComments;
 
-		if (_Document.m_bAlignEnumValues)
-			m_bAlignEnumValues = *_Document.m_bAlignEnumValues;
+		if (_Document.m_AlignEnumValues)
+			m_bAlignEnumValues = *_Document.m_AlignEnumValues;
 
-		if (_Document.m_bTrailingScopeAtStatementLevel)
-			m_bTrailingScopeAtStatementLevel = *_Document.m_bTrailingScopeAtStatementLevel;
+		if (_Document.m_TrailingScopeAtStatementLevel)
+			m_bTrailingScopeAtStatementLevel = *_Document.m_TrailingScopeAtStatementLevel;
 
 		if (_Document.m_nAlignTrailingCommentsMaximumColumn)
 			m_nAlignTrailingCommentsMaximumColumn = *_Document.m_nAlignTrailingCommentsMaximumColumn;

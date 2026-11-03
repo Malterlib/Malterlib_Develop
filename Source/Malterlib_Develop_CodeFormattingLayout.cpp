@@ -1376,7 +1376,7 @@ namespace NMib::NDevelop::NPrivate
 	// where it starts with none or nothing follows them: '__attribute__((weak)) [[nodiscard]]' in front of 'void f()'.
 	aint CFormattingAnalyzer::fp_FindLeadingAttributesEnd(umint _iFirst, umint _iLast) const
 	{
-		constexpr ch8 const *c_pSpecifiers[] =
+		constexpr ch8 const *c_Specifiers[] =
 			{
 				"extern"
 				, "static"
@@ -1394,7 +1394,7 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		constexpr ch8 const *c_pAttributes[] =
+		constexpr ch8 const *c_Attributes[] =
 			{
 				"__attribute__"
 				, "__attribute"
@@ -1411,14 +1411,14 @@ namespace NMib::NDevelop::NPrivate
 		{
 			auto const &Token = Tokens[umint(iToken)];
 			bool bSpecifier = false;
-			for (auto pSpecifier : c_pSpecifiers)
+			for (auto pSpecifier : c_Specifiers)
 				bSpecifier |= mp_Tokens.f_IsText(Token, pSpecifier);
 
 			if (bSpecifier)
 				continue;
 
 			bool bAttribute = false;
-			for (auto pAttribute : c_pAttributes)
+			for (auto pAttribute : c_Attributes)
 				bAttribute |= mp_Tokens.f_IsText(Token, pAttribute);
 
 			auto iGroupStart = iToken;
@@ -1946,7 +1946,7 @@ namespace NMib::NDevelop::NPrivate
 				fMoveComment(iComment);
 		}
 
-		constexpr ch8 const *c_pStatementKeywords[] =
+		constexpr ch8 const *c_StatementKeywords[] =
 			{
 				"else"
 				, "while"
@@ -2010,7 +2010,7 @@ namespace NMib::NDevelop::NPrivate
 				if (!fIsCaseLabel(_iLast + 1))
 					return false;
 
-				constexpr ch8 const *c_pJumps[] =
+				constexpr ch8 const *c_Jumps[] =
 					{
 						"break"
 						, "return"
@@ -2025,7 +2025,7 @@ namespace NMib::NDevelop::NPrivate
 				if (mp_Tokens.f_HasRole(Last, ECodeNameRole::mc_NoReturnMacro))
 					return false;
 
-				for (auto pJump : c_pJumps)
+				for (auto pJump : c_Jumps)
 				{
 					if (mp_Tokens.f_IsText(Last, pJump))
 						return false;
@@ -2335,7 +2335,7 @@ namespace NMib::NDevelop::NPrivate
 						break;
 					}
 
-					constexpr ch8 const *c_pCompound[] =
+					constexpr ch8 const *c_Compound[] =
 						{
 							"if"
 							, "for"
@@ -2351,7 +2351,7 @@ namespace NMib::NDevelop::NPrivate
 					;
 
 					bool bCompound = false;
-					for (auto pKeyword : c_pCompound)
+					for (auto pKeyword : c_Compound)
 						bCompound |= mp_Tokens.f_IsText(OtherFirst, pKeyword);
 
 					bSimple = Other.m_Kind == ECodeNodeKind::mc_Statement && !bCompound && ++nStatements == 1;
@@ -2509,7 +2509,7 @@ namespace NMib::NDevelop::NPrivate
 			if (!bStays && !bFirstOnLine && bAfterBlock && !bAfterDefinition)
 			{
 				bool bKeyword = false;
-				for (auto pKeyword : c_pStatementKeywords)
+				for (auto pKeyword : c_StatementKeywords)
 					bKeyword |= mp_Tokens.f_IsText(First, pKeyword);
 
 				bStays = !bKeyword;

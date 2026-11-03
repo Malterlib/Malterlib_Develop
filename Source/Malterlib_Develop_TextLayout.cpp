@@ -175,14 +175,14 @@ namespace NMib::NDevelop
 
 		if (_nLength)
 		{
-			CStrIteratorUTF8 End(_pText + _nLength, 0);
-			for (CStrIteratorUTF8 Iterator(_pText, _nLength);; ++Iterator)
+			CStrIteratorUTF8 iTextEnd(_pText + _nLength, 0);
+			for (CStrIteratorUTF8 iCodePoint(_pText, _nLength);; ++iCodePoint)
 			{
-				auto iEnd = _nLength - umint(End - Iterator);
+				auto iEnd = _nLength - umint(iTextEnd - iCodePoint);
 				umint nAdvance = 1;
-				if (Iterator.f_IsBroken() || !Iterator.f_IsWholeCodePoint())
+				if (iCodePoint.f_IsBroken() || !iCodePoint.f_IsWholeCodePoint())
 					nAdvance = iEnd - iPrevious;
-				else if (*Iterator == '\t')
+				else if (*iCodePoint == '\t')
 					nAdvance = _nTabWidth - nColumns % _nTabWidth;
 
 				if (nColumns > TCLimitsInt<umint>::mc_Max - nAdvance)
@@ -191,7 +191,7 @@ namespace NMib::NDevelop
 				nColumns += nAdvance;
 				iPrevious = iEnd;
 
-				if (Iterator - End >= 0)
+				if (iCodePoint - iTextEnd >= 0)
 					break;
 			}
 		}

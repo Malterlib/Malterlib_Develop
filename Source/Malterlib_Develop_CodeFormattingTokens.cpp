@@ -241,7 +241,7 @@ namespace NMib::NDevelop::NPrivate
 		if (pChar < pEnd && (fg_CharIsAnsiAlphabetical(*pChar) || fg_CharIsNumber(*pChar)))
 			return false;
 
-		static constexpr ch8 const *c_pKeywords[] =
+		static constexpr ch8 const *c_Keywords[] =
 			{
 				"if"
 				, "ifdef"
@@ -264,7 +264,7 @@ namespace NMib::NDevelop::NPrivate
 		;
 
 		auto nKeyword = umint(pChar - pKeyword);
-		for (auto pCandidate : c_pKeywords)
+		for (auto pCandidate : c_Keywords)
 		{
 			if (umint(fg_StrLen(pCandidate)) == nKeyword && NMemory::fg_MemCmp((uint8 const *)pKeyword, (uint8 const *)pCandidate, nKeyword) == 0)
 				return true;
@@ -547,7 +547,7 @@ namespace NMib::NDevelop::NPrivate
 			return true;
 		case ECodeTokenKind::mc_Identifier:
 			{
-				constexpr ch8 const *c_pLeadsOperand[] =
+				constexpr ch8 const *c_LeadsOperand[] =
 					{
 						"return"
 						, "co_return"
@@ -563,7 +563,7 @@ namespace NMib::NDevelop::NPrivate
 						, "alignof"
 					}
 				;
-				for (auto pKeyword : c_pLeadsOperand)
+				for (auto pKeyword : c_LeadsOperand)
 				{
 					if (mp_Tokens.f_IsText(Token, pKeyword))
 						return false;
@@ -917,7 +917,7 @@ namespace NMib::NDevelop::NPrivate
 	// A compound assignment gives its left hand side a value the way '=' does.
 	bool CFormattingAnalyzer::fp_IsAssignment(umint _iToken) const
 	{
-		constexpr ch8 const *c_pAssignments[] =
+		constexpr ch8 const *c_Assignments[] =
 			{
 				"="
 				, "+="
@@ -937,7 +937,7 @@ namespace NMib::NDevelop::NPrivate
 		if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 			return false;
 
-		for (auto pAssignment : c_pAssignments)
+		for (auto pAssignment : c_Assignments)
 		{
 			if (mp_Tokens.f_IsText(Token, pAssignment))
 				return true;
@@ -948,7 +948,7 @@ namespace NMib::NDevelop::NPrivate
 
 	bool CFormattingAnalyzer::fp_IsFunctionQualifier(umint _iToken) const
 	{
-		constexpr ch8 const *c_pQualifiers[] =
+		constexpr ch8 const *c_Qualifiers[] =
 			{
 				"const"
 				, "volatile"
@@ -962,7 +962,7 @@ namespace NMib::NDevelop::NPrivate
 		;
 
 		auto const &Token = mp_Tokens.f_GetTokens()[_iToken];
-		for (auto pQualifier : c_pQualifiers)
+		for (auto pQualifier : c_Qualifiers)
 		{
 			if (mp_Tokens.f_IsText(Token, pQualifier))
 				return true;

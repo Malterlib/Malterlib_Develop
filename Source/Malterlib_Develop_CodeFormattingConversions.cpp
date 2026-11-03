@@ -13,7 +13,7 @@ namespace NMib::NDevelop::NPrivate
 	void CFormattingAnalyzer::fp_ConvertSpecifiers()
 	{
 		auto const &Tokens = mp_Tokens.f_GetTokens();
-		constexpr ch8 const *c_pSpecifiers[] =
+		constexpr ch8 const *c_Specifiers[] =
 			{
 				"inline"
 				, "constinit"
@@ -53,7 +53,7 @@ namespace NMib::NDevelop::NPrivate
 
 				// A qualifier among the specifiers is one the qualifier conversion moves behind the type in the same stage.
 				bool bSpecifier = mp_Tokens.f_HasRole(Next, ECodeNameRole::mc_SpecifierMacro) || mp_Tokens.f_IsText(Next, "const") || mp_Tokens.f_IsText(Next, "volatile");
-				for (auto pSpecifier : c_pSpecifiers)
+				for (auto pSpecifier : c_Specifiers)
 					bSpecifier |= mp_Tokens.f_IsText(Next, pSpecifier);
 
 				if (!bSpecifier)
@@ -849,7 +849,7 @@ namespace NMib::NDevelop::NPrivate
 				GroupEnd[Node.m_iFirstToken] = Node.m_iLastToken;
 		}
 
-		constexpr ch8 const *c_pSpecifiers[] =
+		constexpr ch8 const *c_Specifiers[] =
 			{
 				"static"
 				, "inline"
@@ -866,7 +866,7 @@ namespace NMib::NDevelop::NPrivate
 				, "register"
 			}
 		;
-		constexpr ch8 const *c_pOpeners[] =
+		constexpr ch8 const *c_Openers[] =
 			{
 				"("
 				, ","
@@ -882,7 +882,7 @@ namespace NMib::NDevelop::NPrivate
 				, "new"
 			}
 		;
-		constexpr ch8 const *c_pFundamental[] =
+		constexpr ch8 const *c_Fundamental[] =
 			{
 				"signed"
 				, "unsigned"
@@ -900,7 +900,7 @@ namespace NMib::NDevelop::NPrivate
 				, "void"
 			}
 		;
-		constexpr ch8 const *c_pElaborated[] =
+		constexpr ch8 const *c_Elaborated[] =
 			{
 				"struct"
 				, "class"
@@ -911,7 +911,7 @@ namespace NMib::NDevelop::NPrivate
 
 		// What a function's qualifier is followed by, and what an expression starts with:
 		// names a type is never spelled with.
-		constexpr ch8 const *c_pNoType[] =
+		constexpr ch8 const *c_NoTypeKeywords[] =
 			{
 				"override"
 				, "final"
@@ -946,9 +946,9 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		auto fIsAny = [&](umint _iToken, auto const &_pTexts)
+		auto fIsAny = [&](umint _iToken, auto const &_Texts)
 			{
-				for (auto pText : _pTexts)
+				for (auto pText : _Texts)
 				{
 					if (mp_Tokens.f_IsText(Tokens[_iToken], pText))
 						return true;
@@ -975,7 +975,7 @@ namespace NMib::NDevelop::NPrivate
 			{
 				umint iEnd = c_NoType;
 				auto iToken = _iFirst;
-				if (mp_Tokens.f_IsText(Tokens[iToken], "typename") || fIsAny(iToken, c_pElaborated))
+				if (mp_Tokens.f_IsText(Tokens[iToken], "typename") || fIsAny(iToken, c_Elaborated))
 				{
 					auto iNext = fp_NextCode(iToken);
 					if (iNext < 0)
@@ -984,7 +984,7 @@ namespace NMib::NDevelop::NPrivate
 					iToken = umint(iNext);
 
 					// 'enum class' and 'enum struct' name a scoped enumeration.
-					if (fIsAny(iToken, c_pElaborated))
+					if (fIsAny(iToken, c_Elaborated))
 					{
 						iNext = fp_NextCode(iToken);
 						if (iNext < 0)
@@ -1009,12 +1009,12 @@ namespace NMib::NDevelop::NPrivate
 					if (iBehind >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBehind)], "::"))
 						return c_NoType;
 				}
-				else if (fIsAny(iToken, c_pFundamental))
+				else if (fIsAny(iToken, c_Fundamental))
 				{
 					// In C 'bool' combines with no other word, and behind one it is a name until C23 reserves it: 'const int bool'.
 					auto fContinuesFundamental = [&](aint _iToken)
 						{
-							if (_iToken < 0 || !fIsAny(umint(_iToken), c_pFundamental))
+							if (_iToken < 0 || !fIsAny(umint(_iToken), c_Fundamental))
 								return false;
 
 							auto const &Token = Tokens[umint(_iToken)];
@@ -1029,7 +1029,7 @@ namespace NMib::NDevelop::NPrivate
 					// Words going on behind specifiers are the same type's, which the next pass would move the qualifier behind:
 					// 'const long static int'.
 					auto iBehind = fp_NextCode(iEnd);
-					while (iBehind >= 0 && fIsAny(umint(iBehind), c_pSpecifiers))
+					while (iBehind >= 0 && fIsAny(umint(iBehind), c_Specifiers))
 						iBehind = fp_NextCode(umint(iBehind));
 
 					if (fContinuesFundamental(iBehind))
@@ -1050,7 +1050,7 @@ namespace NMib::NDevelop::NPrivate
 					bool bNamed = false;
 					while (true)
 					{
-						bool bName = Tokens[iToken].m_Kind == ECodeTokenKind::mc_Identifier && !fIsQualifier(iToken) && !fIsAny(iToken, c_pNoType) && !fIsAny(iToken, c_pSpecifiers);
+						bool bName = Tokens[iToken].m_Kind == ECodeTokenKind::mc_Identifier && !fIsQualifier(iToken) && !fIsAny(iToken, c_NoTypeKeywords) && !fIsAny(iToken, c_Specifiers);
 						if (!bName)
 						{
 							bNamed = false;
@@ -1122,7 +1122,7 @@ namespace NMib::NDevelop::NPrivate
 
 		// What a type is followed by where it declares something: a declarator, or a name. An attribute or an 'asm' label
 		// follows the name declared, 'int const value __attribute__((unused))', and so can a macro: 'CFoo const a DAttr'.
-		constexpr ch8 const *c_pDeclaratorSuffixes[] = {"__attribute__", "__attribute", "asm", "__asm__", "__asm"};
+		constexpr ch8 const *c_DeclaratorSuffixes[] = {"__attribute__", "__attribute", "asm", "__asm__", "__asm"};
 		auto fDeclares = [&](aint _iToken)
 			{
 				if (_iToken < 0)
@@ -1136,8 +1136,8 @@ namespace NMib::NDevelop::NPrivate
 					||
 					(
 						Token.m_Kind == ECodeTokenKind::mc_Identifier
-						&& !fIsAny(umint(_iToken), c_pNoType)
-						&& !fIsAny(umint(_iToken), c_pDeclaratorSuffixes)
+						&& !fIsAny(umint(_iToken), c_NoTypeKeywords)
+						&& !fIsAny(umint(_iToken), c_DeclaratorSuffixes)
 						&& !mp_Tokens.f_HasRole(Token, ECodeNameRole::mc_Macro)
 						&& !mp_Tokens.f_HasRole(Token, ECodeNameRole::mc_SpecifierMacro)
 					)
@@ -1193,7 +1193,7 @@ namespace NMib::NDevelop::NPrivate
 					iInFront = fp_PreviousCode(umint(iKeyword));
 				}
 
-				bool bAtStart = iInFront < 0 || fIsAny(umint(iInFront), c_pOpeners) || fIsAny(umint(iInFront), c_pSpecifiers);
+				bool bAtStart = iInFront < 0 || fIsAny(umint(iInFront), c_Openers) || fIsAny(umint(iInFront), c_Specifiers);
 				if (!bBehindAttribute || (iInFront >= 0 && mp_Tokens.f_IsText(Tokens[umint(iInFront)], ")")) || !bAtStart)
 					continue;
 			}
@@ -1218,16 +1218,16 @@ namespace NMib::NDevelop::NPrivate
 
 			// Specifiers in front lead only where nothing names the type in front of them: 'int static const x' has its type.
 			auto iBeforeSpecifiers = iBefore;
-			while (iBeforeSpecifiers >= 0 && fIsAny(umint(iBeforeSpecifiers), c_pSpecifiers))
+			while (iBeforeSpecifiers >= 0 && fIsAny(umint(iBeforeSpecifiers), c_Specifiers))
 				iBeforeSpecifiers = fp_PreviousCode(umint(iBeforeSpecifiers));
 
-			bool bLeads = iBeforeSpecifiers < 0 || fIsAny(umint(iBeforeSpecifiers), c_pOpeners) || (bBehindAttribute && iBeforeSpecifiers == iBefore);
+			bool bLeads = iBeforeSpecifiers < 0 || fIsAny(umint(iBeforeSpecifiers), c_Openers) || (bBehindAttribute && iBeforeSpecifiers == iBefore);
 
 			// Attributes behind a declarator's '*' or '&' belong to it, and so does the qualifier behind them:
 			// 'int *[[]] [[]] const p'.
 			if (bLeads && iBeforeSpecifiers >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBeforeSpecifiers)], "]"))
 			{
-				constexpr ch8 const *c_pDeclarators[] = {"*", "&", "&&"};
+				constexpr ch8 const *c_Declarators[] = {"*", "&", "&&"};
 				auto const &Nodes = mp_Structure.f_GetNodes();
 				auto iBeforeOpen = aint(iBeforeSpecifiers);
 				while (iBeforeOpen >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBeforeOpen)], "]"))
@@ -1236,7 +1236,7 @@ namespace NMib::NDevelop::NPrivate
 					iBeforeOpen = iClosed < Nodes.f_GetLen() ? fp_PreviousCode(Nodes[iClosed].m_iFirstToken) : aint(-1);
 				}
 
-				if (iBeforeOpen >= 0 && fIsAny(umint(iBeforeOpen), c_pDeclarators))
+				if (iBeforeOpen >= 0 && fIsAny(umint(iBeforeOpen), c_Declarators))
 					continue;
 			}
 			if (!bLeads && iBeforeSpecifiers != iBefore && Tokens[umint(iBeforeSpecifiers)].m_Kind == ECodeTokenKind::mc_Identifier)
@@ -1253,7 +1253,7 @@ namespace NMib::NDevelop::NPrivate
 				if (iStatement < Nodes.f_GetLen() && Nodes[iStatement].m_Kind == ECodeNodeKind::mc_Statement && Nodes[iStatement].m_iLastToken >= iToken)
 				{
 					for (auto iKey = Nodes[iStatement].m_iFirstToken; iKey < Nodes[iClosed].m_iFirstToken && !bDefinition; ++iKey)
-						bDefinition = fIsAny(iKey, c_pElaborated);
+						bDefinition = fIsAny(iKey, c_Elaborated);
 				}
 
 				if (bDefinition)
@@ -1274,7 +1274,7 @@ namespace NMib::NDevelop::NPrivate
 
 			// Specifiers written behind the qualifier stay where they are.
 			auto iType = fp_NextCode(iRunLast);
-			while (iType >= 0 && fIsAny(umint(iType), c_pSpecifiers))
+			while (iType >= 0 && fIsAny(umint(iType), c_Specifiers))
 				iType = fp_NextCode(umint(iType));
 
 			if (iType < 0)
@@ -1323,8 +1323,8 @@ namespace NMib::NDevelop::NPrivate
 				&&
 				(mp_Tokens.f_IsText(Tokens[umint(iBefore)], "->") || (mp_Tokens.f_IsText(Tokens[umint(iBefore)], "=") && iUsing >= 0 && mp_Tokens.f_IsText(Tokens[umint(iUsing)], "using")))
 			;
-			constexpr ch8 const *c_pFundamentals[] = {"int", "char", "short", "long", "signed", "unsigned", "bool", "float", "double", "void", "auto"};
-			if (iType == aint(iEnd) && bEndsDeclaration && !bTypeOnly && !fIsAny(umint(iType), c_pFundamentals))
+			constexpr ch8 const *c_Fundamentals[] = {"int", "char", "short", "long", "signed", "unsigned", "bool", "float", "double", "void", "auto"};
+			if (iType == aint(iEnd) && bEndsDeclaration && !bTypeOnly && !fIsAny(umint(iType), c_Fundamentals))
 				continue;
 
 			// Behind its type the qualifier has a name in front of it, which is the place it
@@ -1511,7 +1511,7 @@ namespace NMib::NDevelop::NPrivate
 			bNamedFunction = mp_Tokens.f_IsText(Tokens[iOperator], "operator") && mp_Structure.f_FindEnclosingNode(iOperator) == _iNode;
 		if (!bDefinition && !bInClassBody && !bNamedFunction)
 		{
-			constexpr ch8 const *c_pTypeWords[] =
+			constexpr ch8 const *c_TypeWords[] =
 				{
 					"void"
 					, "bool"
@@ -1623,7 +1623,7 @@ namespace NMib::NDevelop::NPrivate
 						bTemplateType = iBehind >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBehind)], "<") && mp_Structure.f_IsAngleBracket(umint(iBehind));
 
 					bool bWord = false;
-					for (auto pWord : c_pTypeWords)
+					for (auto pWord : c_TypeWords)
 						bWord = bWord || mp_Tokens.f_IsText(Token, pWord);
 
 					bTypeWord = bTypeWord || bWord;
@@ -1738,7 +1738,7 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		// Skip a template header and the declaration specifiers before the return type.
-		constexpr ch8 const *c_pSpecifiers[] =
+		constexpr ch8 const *c_Specifiers[] =
 			{
 				"static"
 				, "virtual"
@@ -1763,7 +1763,7 @@ namespace NMib::NDevelop::NPrivate
 		{
 			auto const &Token = Tokens[iReturn];
 			bool bSkip = mp_Tokens.f_HasRole(Token, ECodeNameRole::mc_SpecifierMacro);
-			for (auto pSpecifier : c_pSpecifiers)
+			for (auto pSpecifier : c_Specifiers)
 				bSkip |= mp_Tokens.f_IsText(Token, pSpecifier);
 
 			if (mp_Tokens.f_IsText(Token, "template"))
@@ -1855,7 +1855,7 @@ namespace NMib::NDevelop::NPrivate
 
 		// A calling convention belongs to the declarator, and behind the parameter list it is ignored: '__stdcall int f()'. A GNU
 		// attribute in front can apply to the type, which 'auto' would take instead: '__attribute__((vector_size(16))) int f()'.
-		constexpr ch8 const *c_pConventions[] =
+		constexpr ch8 const *c_Conventions[] =
 			{
 				"__stdcall"
 				, "__cdecl"
@@ -1884,7 +1884,7 @@ namespace NMib::NDevelop::NPrivate
 			if (mp_Tokens.f_IsText(Tokens[iToken], "__attribute__") || mp_Tokens.f_IsText(Tokens[iToken], "__attribute"))
 				return false;
 
-			for (auto pConvention : c_pConventions)
+			for (auto pConvention : c_Conventions)
 			{
 				if (mp_Tokens.f_IsText(Tokens[iToken], pConvention))
 					return false;
@@ -1914,7 +1914,7 @@ namespace NMib::NDevelop::NPrivate
 		// A keyword is spelled like an identifier, so a statement that opens with one reads
 		// as a type unless it is named here. 'return g_Dispatch(x) / [] {}' is an expression
 		// whose first word would otherwise pass for its return type.
-		constexpr ch8 const *c_pStatementKeywords[] =
+		constexpr ch8 const *c_StatementKeywords[] =
 			{
 				"return"
 				, "co_return"
@@ -1955,7 +1955,7 @@ namespace NMib::NDevelop::NPrivate
 		// A name that follows a complete type at the type's own level is not part of it:
 		// an attribute macro stands there, and moving it along would misplace it. Only the
 		// words a type is spelled with may follow another name.
-		constexpr ch8 const *c_pTypeWords[] =
+		constexpr ch8 const *c_TypeWords[] =
 			{
 				"const"
 				, "volatile"
@@ -2013,14 +2013,14 @@ namespace NMib::NDevelop::NPrivate
 
 			if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
 			{
-				for (auto pKeyword : c_pStatementKeywords)
+				for (auto pKeyword : c_StatementKeywords)
 				{
 					if (mp_Tokens.f_IsText(Token, pKeyword))
 						return false;
 				}
 
 				bool bTypeWord = false;
-				for (auto pWord : c_pTypeWords)
+				for (auto pWord : c_TypeWords)
 					bTypeWord |= mp_Tokens.f_IsText(Token, pWord);
 
 				// These introduce the name behind them rather than completing a type: 'typename TCFoo<t_C>::CNode'. Behind a
@@ -2204,7 +2204,7 @@ namespace NMib::NDevelop::NPrivate
 						++nNames;
 
 					// A keyword is a word of the type, never the name: an unnamed parameter ends in one, 'CArgument const &'.
-					constexpr ch8 const *c_pTypeKeywords[] =
+					constexpr ch8 const *c_TypeKeywords[] =
 						{
 							"const"
 							, "volatile"
@@ -2225,7 +2225,7 @@ namespace NMib::NDevelop::NPrivate
 					;
 
 					bool bKeyword = false;
-					for (auto pKeyword : c_pTypeKeywords)
+					for (auto pKeyword : c_TypeKeywords)
 						bKeyword = bKeyword || mp_Tokens.f_IsText(ParameterToken, pKeyword);
 
 					if (!bAttribute && !bMacro && !bKeyword)
@@ -2291,7 +2291,7 @@ namespace NMib::NDevelop::NPrivate
 			return false;
 
 		// A keyword of the return type is no name a parameter can hide: 'unsigned long f(void (*_p)(unsigned long))'.
-		constexpr ch8 const *c_pReturnKeywords[] =
+		constexpr ch8 const *c_ReturnKeywords[] =
 			{
 				"const"
 				, "volatile"
@@ -2316,7 +2316,7 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 
 			bool bKeyword = false;
-			for (auto pKeyword : c_pReturnKeywords)
+			for (auto pKeyword : c_ReturnKeywords)
 				bKeyword = bKeyword || mp_Tokens.f_IsText(TypeToken, pKeyword);
 
 			if (bKeyword)
@@ -2617,7 +2617,7 @@ namespace NMib::NDevelop::NPrivate
 		// one: one opening with a word that starts a declaration, or with a name followed by a name or a '*'.
 		if (mp_Tokens.f_IsC(Tokens[Inner.m_iFirstToken]) && Tokens[Inner.m_iFirstToken].m_Kind == ECodeTokenKind::mc_Identifier)
 		{
-			constexpr ch8 const *c_pDeclarationStarts[] =
+			constexpr ch8 const *c_DeclarationStarts[] =
 				{
 					"auto"
 					, "char"
@@ -2700,7 +2700,7 @@ namespace NMib::NDevelop::NPrivate
 			;
 
 			auto const &First = Tokens[Inner.m_iFirstToken];
-			for (auto pWord : c_pDeclarationStarts)
+			for (auto pWord : c_DeclarationStarts)
 			{
 				if (mp_Tokens.f_IsText(First, pWord))
 					return false;

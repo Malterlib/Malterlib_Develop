@@ -820,7 +820,7 @@ namespace NMib::NDevelop::NPrivate
 				if (Operator.m_Kind != ECodeTokenKind::mc_Punctuator || mp_Structure.f_IsAngleBracket(umint(iOperator)))
 					return false;
 
-				constexpr ch8 const *c_pOperators[] =
+				constexpr ch8 const *c_Operators[] =
 					{
 						"/"
 						, "%"
@@ -833,7 +833,7 @@ namespace NMib::NDevelop::NPrivate
 						, "-"
 					}
 				;
-				for (auto pOperator : c_pOperators)
+				for (auto pOperator : c_Operators)
 				{
 					if (mp_Tokens.f_IsText(Operator, pOperator))
 						return true;
@@ -1524,7 +1524,7 @@ namespace NMib::NDevelop::NPrivate
 		umint iTrailingReturn = TCLimitsInt<umint>::mc_Max;
 		if (bDeclarator && iFirstParenGroupStart && fg_ClosesParameterList(mp_Tokens, mp_Structure, iFirstParenGroup))
 		{
-			constexpr ch8 const *c_pQualifiers[] =
+			constexpr ch8 const *c_Qualifiers[] =
 				{
 					"const"
 					, "volatile"
@@ -1571,7 +1571,7 @@ namespace NMib::NDevelop::NPrivate
 				}
 
 				bAfterQualifier = false;
-				for (auto pQualifier : c_pQualifiers)
+				for (auto pQualifier : c_Qualifiers)
 					bAfterQualifier |= mp_Tokens.f_IsText(Tokens[umint(iToken)], pQualifier);
 
 				if (!bAfterQualifier)
@@ -1729,7 +1729,7 @@ namespace NMib::NDevelop::NPrivate
 
 				// A requires expression stands where an operand does, as in a concept's definition: '= cA<T> &&' over
 				// 'requires (T _Value)'. It is no clause the declaration ends in.
-				constexpr ch8 const *c_pOperandLeads[] =
+				constexpr ch8 const *c_OperandLeads[] =
 					{
 						"="
 						, "("
@@ -1749,7 +1749,7 @@ namespace NMib::NDevelop::NPrivate
 
 				auto iLead = fp_PreviousCode(umint(iToken));
 				bool bExpression = false;
-				for (auto pLead : c_pOperandLeads)
+				for (auto pLead : c_OperandLeads)
 					bExpression |= iLead >= 0 && mp_Tokens.f_IsText(Tokens[umint(iLead)], pLead);
 
 				// Behind a parameter list a '&&' qualifies the function, behind its cv-qualifiers too, and the clause behind it is
@@ -2639,7 +2639,7 @@ namespace NMib::NDevelop::NPrivate
 		if (iLead >= 0 && (bBraceBehind || (!bRefQualifier && !bEndsStatement)) && mp_Tokens.f_IsText(Tokens[umint(iLead)], "&&"))
 			return true;
 
-		constexpr ch8 const *c_pOperandLeads[] =
+		constexpr ch8 const *c_OperandLeads[] =
 			{
 				"="
 				, "("
@@ -2656,7 +2656,7 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		for (auto pLead : c_pOperandLeads)
+		for (auto pLead : c_OperandLeads)
 		{
 			if (iLead >= 0 && mp_Tokens.f_IsText(Tokens[umint(iLead)], pLead))
 				return true;

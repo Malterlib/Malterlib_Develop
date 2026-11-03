@@ -155,7 +155,7 @@ namespace NMib::NDevelop
 			if (_Left.m_Kind != ECodeTokenKind::mc_Punctuator || _Right.m_Kind != ECodeTokenKind::mc_Punctuator)
 				return false;
 
-			constexpr ch8 const *c_pPunctuators[] =
+			constexpr ch8 const *c_Punctuators[] =
 				{
 					"::"
 					, "->*"
@@ -192,7 +192,7 @@ namespace NMib::NDevelop
 			auto pLeft = _Tokens.f_GetTextPointer(_Left);
 			auto pRight = _Tokens.f_GetTextPointer(_Right);
 
-			for (auto pPunctuator : c_pPunctuators)
+			for (auto pPunctuator : c_Punctuators)
 			{
 				umint nPunctuator = 0;
 				while (pPunctuator[nPunctuator])
@@ -344,7 +344,7 @@ namespace NMib::NDevelop
 			// Behind a whole argument list these take it for their left operand, or give a
 			// default to what it names: 'cHas<t_C> ? a : b', 'typename t_C = TCFoo<int>'. A
 			// colon there as often starts a specialization's base clause, on a line of its own.
-			constexpr ch8 const *c_pInfix[] =
+			constexpr ch8 const *c_Infix[] =
 				{
 					"?"
 					, "="
@@ -363,7 +363,7 @@ namespace NMib::NDevelop
 				}
 			;
 
-			if (fg_IsAnyText(_Tokens, Right, c_pInfix))
+			if (fg_IsAnyText(_Tokens, Right, c_Infix))
 				return ECodeSpacing::mc_Space;
 
 			return ECodeSpacing::mc_Preserve;
@@ -540,7 +540,7 @@ namespace NMib::NDevelop
 					= Before.m_Kind == ECodeTokenKind::mc_Number
 					|| Before.m_Kind == ECodeTokenKind::mc_StringLiteral
 					|| Before.m_Kind == ECodeTokenKind::mc_CharLiteral
-					|| (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_pExpressionKeywords))
+					|| (Before.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Before, gc_ExpressionKeywords))
 					|| (_Tokens.f_IsText(Before, ")") && !fg_IsCast(_Tokens, _Structure, umint(iBefore)))
 					|| _Tokens.f_IsText(Before, "]")
 					|| (_Structure.f_IsAngleBracket(umint(iBefore)) && _Tokens.f_IsText(Before, ">"))
@@ -597,7 +597,7 @@ namespace NMib::NDevelop
 					return ECodeSpacing::mc_None;
 			}
 
-			constexpr ch8 const *c_pSpacedKeywords[] =
+			constexpr ch8 const *c_SpacedKeywords[] =
 				{
 					"if"
 					, "for"
@@ -616,7 +616,7 @@ namespace NMib::NDevelop
 				}
 			;
 
-			for (auto pKeyword : c_pSpacedKeywords)
+			for (auto pKeyword : c_SpacedKeywords)
 			{
 				if (_Tokens.f_IsText(Left, pKeyword))
 					return ECodeSpacing::mc_Space;
@@ -624,7 +624,7 @@ namespace NMib::NDevelop
 
 			// A block pointer's declarator stands apart from the type in front of it, which a '^' opening a
 			// parenthesis, never an operand of the operator, says: 'void (^fReport)(void *_pMemory)'.
-			if (Left.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Left, gc_pExpressionKeywords))
+			if (Left.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Left, gc_ExpressionKeywords))
 			{
 				auto iCaret = fg_NextCode(_Tokens, _iRight);
 				auto iDeclarator = _Structure.f_FindNodeOpeningAt(_iRight);
@@ -783,10 +783,10 @@ namespace NMib::NDevelop
 
 					// A calling convention only stands in a declarator: 'NTSTATUS (__stdcall *m_pLoad)(PWCHAR _pPath)'.
 					bool bConvention = false;
-					if (pInner && pInner->m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, *pInner, gc_pExpressionKeywords))
+					if (pInner && pInner->m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, *pInner, gc_ExpressionKeywords))
 					{
 						auto iStar = fg_NextCode(_Tokens, umint(iInner));
-						constexpr ch8 const *c_pConventions[] =
+						constexpr ch8 const *c_Conventions[] =
 							{
 								"__stdcall"
 								, "__cdecl"
@@ -796,7 +796,7 @@ namespace NMib::NDevelop
 							}
 						;
 
-						bConvention = fg_IsAnyText(_Tokens, *pInner, c_pConventions);
+						bConvention = fg_IsAnyText(_Tokens, *pInner, c_Conventions);
 						auto const *pStar = iStar >= 0 ? &Tokens[umint(iStar)] : nullptr;
 						if (pStar && (_Tokens.f_IsText(*pStar, "*") || _Tokens.f_IsText(*pStar, "&")))
 							pInner = pStar;
@@ -966,7 +966,7 @@ namespace NMib::NDevelop
 		// parameter's 'this ::CFoo &_Self' and 'requires ::cA<T>'.
 		if (fRight("::") && Left.m_Kind == ECodeTokenKind::mc_Identifier)
 		{
-			constexpr ch8 const *c_pDeclarationKeywords[] =
+			constexpr ch8 const *c_DeclarationKeywords[] =
 				{
 					"using"
 					, "this"
@@ -996,14 +996,14 @@ namespace NMib::NDevelop
 				}
 			;
 
-			if (fg_IsAnyText(_Tokens, Left, gc_pExpressionKeywords) || fg_IsAnyText(_Tokens, Left, c_pDeclarationKeywords))
+			if (fg_IsAnyText(_Tokens, Left, gc_ExpressionKeywords) || fg_IsAnyText(_Tokens, Left, c_DeclarationKeywords))
 				return ECodeSpacing::mc_Space;
 		}
 
 		// So does one behind an operator that only stands between operands: 'Value += ::fg_Get()'.
 		if (fRight("::"))
 		{
-			constexpr ch8 const *c_pBinaryOperators[] =
+			constexpr ch8 const *c_BinaryOperators[] =
 				{
 					"="
 					, "+="
@@ -1027,7 +1027,7 @@ namespace NMib::NDevelop
 				}
 			;
 
-			if (fg_IsAnyText(_Tokens, Left, c_pBinaryOperators))
+			if (fg_IsAnyText(_Tokens, Left, c_BinaryOperators))
 				return ECodeSpacing::mc_Space;
 		}
 
@@ -1060,11 +1060,11 @@ namespace NMib::NDevelop
 			// convention macro, and the declarator stands apart from it, as the sources write
 			// 'void * DMibCrossmoduleAPI fs_Alloc(umint _Size)'.
 			bool bQualifier = _Tokens.f_IsText(Right, "const") || _Tokens.f_IsText(Right, "volatile");
-			if (Right.m_Kind == ECodeTokenKind::mc_Identifier && !bQualifier && !fg_IsAnyText(_Tokens, Right, gc_pExpressionKeywords))
+			if (Right.m_Kind == ECodeTokenKind::mc_Identifier && !bQualifier && !fg_IsAnyText(_Tokens, Right, gc_ExpressionKeywords))
 			{
 				// The name has to follow on the same branch of a conditional, and a word that
 				// never names a declaration is no name: 'auto &&_fThis' / '#else' / 'this auto'.
-				constexpr ch8 const *c_pNoName[] =
+				constexpr ch8 const *c_NoName[] =
 					{
 						"this"
 						, "auto"
@@ -1090,8 +1090,8 @@ namespace NMib::NDevelop
 					= pBehind
 					&& !bDirective
 					&& pBehind->m_Kind == ECodeTokenKind::mc_Identifier
-					&& !fg_IsAnyText(_Tokens, *pBehind, gc_pExpressionKeywords)
-					&& !fg_IsAnyText(_Tokens, *pBehind, c_pNoName)
+					&& !fg_IsAnyText(_Tokens, *pBehind, gc_ExpressionKeywords)
+					&& !fg_IsAnyText(_Tokens, *pBehind, c_NoName)
 				;
 				if (bName)
 					return ECodeSpacing::mc_Space;
@@ -1104,8 +1104,8 @@ namespace NMib::NDevelop
 				return ECodeSpacing::mc_Space;
 
 			// A specifier behind a trailing return type declares nothing: '-> CFoo * override'.
-			constexpr ch8 const *c_pSpecifiers[] = {"override", "final", "noexcept", "requires", "mutable"};
-			if (fg_IsAnyText(_Tokens, Right, c_pSpecifiers))
+			constexpr ch8 const *c_Specifiers[] = {"override", "final", "noexcept", "requires", "mutable"};
+			if (fg_IsAnyText(_Tokens, Right, c_Specifiers))
 				return ECodeSpacing::mc_Space;
 
 			// A structured binding's names hug the declarator the way a name does: 'auto &[A, B]'.
@@ -1146,7 +1146,7 @@ namespace NMib::NDevelop
 		// What follows a parameter list is the function's qualifiers and specifiers, and
 		// they are separated from it and from each other. Without a spelling for these the
 		// declaration cannot be measured as one line, and so could never be joined.
-		constexpr ch8 const *c_pQualifiers[] =
+		constexpr ch8 const *c_Qualifiers[] =
 			{
 				"const"
 				, "volatile"
@@ -1168,7 +1168,7 @@ namespace NMib::NDevelop
 			auto iNode = fg_FindGroupClosingAt(_Structure, _iLeft, ECodeBracket::mc_None);
 			if (iNode >= 0)
 			{
-				constexpr ch8 const *c_pApart[] =
+				constexpr ch8 const *c_Apart[] =
 					{
 						"new"
 						, "alignas"
@@ -1184,9 +1184,9 @@ namespace NMib::NDevelop
 				auto iKeyword = fg_PreviousCode(_Tokens, _Structure.f_GetNodes()[umint(iNode)].m_iFirstToken);
 				auto const *pKeyword = iKeyword >= 0 ? &Tokens[umint(iKeyword)] : nullptr;
 				bool bApart
-					= pKeyword && (fg_IsAnyText(_Tokens, *pKeyword, c_pApart) || (Right.m_Kind == ECodeTokenKind::mc_Identifier && _Tokens.f_HasRole(*pKeyword, ECodeNameRole::mc_Macro)))
+					= pKeyword && (fg_IsAnyText(_Tokens, *pKeyword, c_Apart) || (Right.m_Kind == ECodeTokenKind::mc_Identifier && _Tokens.f_HasRole(*pKeyword, ECodeNameRole::mc_Macro)))
 				;
-				if (bApart && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))
+				if (bApart && !fg_IsAnyText(_Tokens, Right, c_Qualifiers))
 					return ECodeSpacing::mc_Space;
 			}
 
@@ -1236,7 +1236,7 @@ namespace NMib::NDevelop
 			}
 
 			bool bOperand
-				= (Right.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Right, c_pQualifiers))
+				= (Right.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(_Tokens, Right, c_Qualifiers))
 				|| Right.m_Kind == ECodeTokenKind::mc_Number
 				|| fg_IsDeclaratorText(_Tokens, Right)
 				|| fRight("-")
@@ -1252,12 +1252,12 @@ namespace NMib::NDevelop
 		// is its parameter list. Behind any other it takes an address or joins two operands.
 		bool bRefQualifies = !fLeft(")") || (!fRight("&") && !fRight("&&")) || fg_ClosesParameterList(_Tokens, _Structure, _iLeft);
 		bool bAfterDeclarator = (fLeft(")") && bRefQualifies) || fg_IsRefQualifier(_Tokens, _iLeft);
-		for (auto pQualifier : c_pQualifiers)
+		for (auto pQualifier : c_Qualifiers)
 			bAfterDeclarator |= fLeft(pQualifier) && !fLeft("&") && !fLeft("&&");
 
 		if (bAfterDeclarator)
 		{
-			for (auto pQualifier : c_pQualifiers)
+			for (auto pQualifier : c_Qualifiers)
 			{
 				if (fRight(pQualifier))
 					return ECodeSpacing::mc_Space;
@@ -1272,7 +1272,7 @@ namespace NMib::NDevelop
 		// own inside a list or an enum stands next to a name too, and keeps that line.
 		if (Left.m_Kind == ECodeTokenKind::mc_Identifier && Right.m_Kind == ECodeTokenKind::mc_Identifier)
 		{
-			constexpr ch8 const *c_pKeywords[] =
+			constexpr ch8 const *c_Keywords[] =
 				{
 					"auto"
 					, "template"
@@ -1321,7 +1321,7 @@ namespace NMib::NDevelop
 				}
 			;
 
-			for (auto pKeyword : c_pKeywords)
+			for (auto pKeyword : c_Keywords)
 			{
 				if (_Tokens.f_IsText(Left, pKeyword) || _Tokens.f_IsText(Right, pKeyword))
 					return ECodeSpacing::mc_Space;
@@ -1443,7 +1443,7 @@ namespace NMib::NDevelop
 			}
 		}
 
-		constexpr ch8 const *c_pBinaryOperators[] =
+		constexpr ch8 const *c_BinaryOperators[] =
 			{
 				"=="
 				, "!="
@@ -1473,7 +1473,7 @@ namespace NMib::NDevelop
 			}
 		;
 
-		for (auto pOperator : c_pBinaryOperators)
+		for (auto pOperator : c_BinaryOperators)
 		{
 			if (_Tokens.f_IsText(Left, pOperator) || _Tokens.f_IsText(Right, pOperator))
 				return ECodeSpacing::mc_Space;

@@ -343,9 +343,9 @@ namespace NMib::NDevelop::NPrivate
 
 			// A label has a depth of its own, and the comment above it stays with the body it follows, and moves with
 			// that body where it was written at its depth.
-			constexpr ch8 const *c_pLabels[] = {"public", "private", "protected", "case", "default", "@public", "@private", "@protected", "@package"};
+			constexpr ch8 const *c_Labels[] = {"public", "private", "protected", "case", "default", "@public", "@private", "@protected", "@package"};
 			bool bLabel = false;
-			for (auto pLabel : c_pLabels)
+			for (auto pLabel : c_Labels)
 				bLabel |= mp_Tokens.f_IsText(Tokens[iReference], pLabel);
 
 			bool bAtBodyDepth = false;

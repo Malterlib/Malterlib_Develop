@@ -17,7 +17,7 @@ namespace
 		if (_Token.m_Kind != ECodeTokenKind::mc_Punctuator || _Token.m_nLength < 2)
 			return false;
 
-		constexpr ch8 const *c_pSpacedOperators[] =
+		constexpr ch8 const *c_SpacedOperators[] =
 			{
 				"=="
 				, "!="
@@ -38,7 +38,7 @@ namespace
 			}
 		;
 
-		for (auto pOperator : c_pSpacedOperators)
+		for (auto pOperator : c_SpacedOperators)
 		{
 			if (_Tokens.f_IsText(_Token, pOperator))
 				return true;

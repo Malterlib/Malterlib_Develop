@@ -701,9 +701,9 @@ namespace NMib::NDevelop
 						return iSignificant;
 
 					auto const &Behind = Tokens[mp_Significant[iSignificant + 1]];
-					constexpr ch8 const *c_pEnds[] = {"*", ")", "{", ";", ",", ">"};
+					constexpr ch8 const *c_Ends[] = {"*", ")", "{", ";", ",", ">"};
 					bool bEnds = bDeclares && Behind.m_Kind == ECodeTokenKind::mc_Identifier;
-					for (auto pEnd : c_pEnds)
+					for (auto pEnd : c_Ends)
 						bEnds = bEnds || mp_pTokens->f_IsText(Behind, pEnd);
 
 					// An '@interface''s protocols end its line, and a method can follow: '- (void)f;'.
@@ -792,7 +792,7 @@ namespace NMib::NDevelop
 		// fundamental type, but where a functional cast, 'a < int(b)', or a qualifier, 'int const', goes on with it.
 		auto fFundamentalFirst = [&]() -> bool
 			{
-				constexpr ch8 const *c_pFundamental[] =
+				constexpr ch8 const *c_Fundamental[] =
 					{
 						"void"
 						, "bool"
@@ -819,7 +819,7 @@ namespace NMib::NDevelop
 				auto const &First = Tokens[mp_Significant[_iToken + 1]];
 				auto const &Behind = Tokens[mp_Significant[_iToken + 2]];
 				bool bFundamental = false;
-				for (auto pType : c_pFundamental)
+				for (auto pType : c_Fundamental)
 					bFundamental = bFundamental || mp_pTokens->f_IsText(First, pType);
 
 				return bFundamental && !mp_pTokens->f_IsText(Behind, "(") && !mp_pTokens->f_IsText(Behind, "{");
@@ -1099,7 +1099,7 @@ namespace NMib::NDevelop
 	// instead of a terminator: 'mutable { for (auto &Entry : Entries) { ... } }'.
 	bool CCodeStructure::fp_IsBlockBrace(umint _iToken) const
 	{
-		constexpr ch8 const *c_pStatementKeywords[] =
+		constexpr ch8 const *c_StatementKeywords[] =
 			{
 				"if"
 				, "else"
@@ -1132,7 +1132,7 @@ namespace NMib::NDevelop
 				if (nDepth != 1)
 					continue;
 
-				for (auto pKeyword : c_pStatementKeywords)
+				for (auto pKeyword : c_StatementKeywords)
 				{
 					if (mp_pTokens->f_IsText(Token, pKeyword))
 						return true;
@@ -1166,7 +1166,7 @@ namespace NMib::NDevelop
 	// 'Names[(int)_Value]' and '[&, pValue = (CFoo *)nullptr]'.
 	void CCodeStructure::fp_ClassifyMessageSend(umint _iNode, umint _iOpen, umint _iClose)
 	{
-		constexpr ch8 const *c_pPrefixKeywords[] =
+		constexpr ch8 const *c_PrefixKeywords[] =
 			{
 				"return"
 				, "co_return"
@@ -1191,7 +1191,7 @@ namespace NMib::NDevelop
 				switch (_Token.m_Kind)
 				{
 				case ECodeTokenKind::mc_Identifier:
-					for (auto pKeyword : c_pPrefixKeywords)
+					for (auto pKeyword : c_PrefixKeywords)
 					{
 						if (mp_pTokens->f_IsText(_Token, pKeyword))
 							return false;
@@ -1225,7 +1225,7 @@ namespace NMib::NDevelop
 						if (iParen)
 						{
 							auto const &Clause = Tokens[mp_Significant[iParen - 1]];
-							constexpr ch8 const *c_pClauses[] =
+							constexpr ch8 const *c_Clauses[] =
 								{
 									"if"
 									, "while"
@@ -1237,7 +1237,7 @@ namespace NMib::NDevelop
 								}
 							;
 
-							for (auto pClause : c_pClauses)
+							for (auto pClause : c_Clauses)
 								bSubscript &= !mp_pTokens->f_IsText(Clause, pClause);
 						}
 
@@ -1669,7 +1669,7 @@ namespace NMib::NDevelop
 			if (Owner.m_Kind == ECodeNodeKind::mc_File)
 				return false;
 
-			constexpr ch8 const *c_pScopes[] =
+			constexpr ch8 const *c_Scopes[] =
 				{
 					"namespace"
 					, "extern"
@@ -1682,7 +1682,7 @@ namespace NMib::NDevelop
 				}
 			;
 
-			if (fg_IsAnyText(*mp_pTokens, Tokens[Owner.m_iFirstToken], c_pScopes))
+			if (fg_IsAnyText(*mp_pTokens, Tokens[Owner.m_iFirstToken], c_Scopes))
 				return false;
 
 			if (Owner.m_Kind == ECodeNodeKind::mc_Statement)
@@ -1706,7 +1706,7 @@ namespace NMib::NDevelop
 
 		// An attribute or a type's operator belongs to what follows it, and a keyword taking a parenthesis goes on behind it:
 		// 'new (pMemory)' over 'CFoo(1);'.
-		constexpr ch8 const *c_pLeading[] =
+		constexpr ch8 const *c_Leading[] =
 			{
 				"typeof"
 				, "__typeof__"
@@ -1737,7 +1737,7 @@ namespace NMib::NDevelop
 			}
 		;
 
-		if (fg_IsAnyText(*mp_pTokens, Tokens[mp_Significant[_iFirst]], c_pLeading))
+		if (fg_IsAnyText(*mp_pTokens, Tokens[mp_Significant[_iFirst]], c_Leading))
 			return false;
 
 		umint nNewlines = 0;
@@ -1753,7 +1753,7 @@ namespace NMib::NDevelop
 	// layout of a declaration starts a line with.
 	bool CCodeStructure::fp_IsUnlistedMacro(umint _iFirst, umint _iNext) const
 	{
-		constexpr ch8 const *c_pTakesParenthesis[] =
+		constexpr ch8 const *c_TakesParenthesis[] =
 			{
 				"return"
 				, "throw"
@@ -1804,7 +1804,7 @@ namespace NMib::NDevelop
 				, "protected"
 			}
 		;
-		constexpr ch8 const *c_pDeclarationStarts[] =
+		constexpr ch8 const *c_DeclarationStarts[] =
 			{
 				"namespace"
 				, "class"
@@ -1835,7 +1835,7 @@ namespace NMib::NDevelop
 
 		auto const &Tokens = mp_pTokens->f_GetTokens();
 		auto const &First = Tokens[mp_Significant[_iFirst]];
-		constexpr ch8 const *c_pKeywords[] =
+		constexpr ch8 const *c_Keywords[] =
 			{
 				"const"
 				, "volatile"
@@ -1859,7 +1859,7 @@ namespace NMib::NDevelop
 			}
 		;
 
-		bool bKeyword = fg_IsAnyText(*mp_pTokens, First, c_pTakesParenthesis) || fg_IsAnyText(*mp_pTokens, First, c_pDeclarationStarts) || fg_IsAnyText(*mp_pTokens, First, c_pKeywords);
+		bool bKeyword = fg_IsAnyText(*mp_pTokens, First, c_TakesParenthesis) || fg_IsAnyText(*mp_pTokens, First, c_DeclarationStarts) || fg_IsAnyText(*mp_pTokens, First, c_Keywords);
 		if (First.m_Kind != ECodeTokenKind::mc_Identifier || bKeyword || mp_pTokens->f_GetTextPointer(First)[0] == '@')
 			return false;
 
@@ -1874,7 +1874,7 @@ namespace NMib::NDevelop
 			return true;
 
 		// Nor does a name go on into a statement a keyword starts: 'BOOST_MATH_STD_USING' over 'if (a)'.
-		constexpr ch8 const *c_pStatementStarts[] =
+		constexpr ch8 const *c_StatementStarts[] =
 			{
 				"if"
 				, "for"
@@ -1890,7 +1890,7 @@ namespace NMib::NDevelop
 			}
 		;
 
-		if (fg_IsAnyText(*mp_pTokens, Label, c_pStatementStarts))
+		if (fg_IsAnyText(*mp_pTokens, Label, c_StatementStarts))
 			return true;
 
 		// Nor does a name alone on its line go on behind a blank line or a directive, however far in what follows starts:
@@ -1912,7 +1912,7 @@ namespace NMib::NDevelop
 		if (fp_GetColumn(mp_Significant[_iNext]) > fp_GetColumn(mp_Significant[_iFirst]))
 			return false;
 
-		if (fg_IsAnyText(*mp_pTokens, Tokens[mp_Significant[_iNext]], c_pDeclarationStarts))
+		if (fg_IsAnyText(*mp_pTokens, Tokens[mp_Significant[_iNext]], c_DeclarationStarts))
 			return true;
 
 		// Nor into a label, a name with a ':' behind it: 'THROW(...)' over 'bailout:'.
@@ -1934,7 +1934,7 @@ namespace NMib::NDevelop
 		// Or a name alone on its line, as another macro of the kind is, behind a blank line or a directive, which no
 		// declaration's words stand apart by: 'BOOL' over 'APIENTRY' over 'CreatePipeEx(...)' is one.
 		auto const &Next = Tokens[mp_Significant[_iNext]];
-		if (Next.m_Kind != ECodeTokenKind::mc_Identifier || fg_IsAnyText(*mp_pTokens, Next, c_pTakesParenthesis) || fg_IsAnyText(*mp_pTokens, Next, c_pKeywords))
+		if (Next.m_Kind != ECodeTokenKind::mc_Identifier || fg_IsAnyText(*mp_pTokens, Next, c_TakesParenthesis) || fg_IsAnyText(*mp_pTokens, Next, c_Keywords))
 			return false;
 
 		// Or the macro's next invocation, a call of the same name: 'DFoo(A)' over 'DFoo(B)'.
@@ -2007,7 +2007,7 @@ namespace NMib::NDevelop
 					bool bName = Behind.m_Kind == ECodeTokenKind::mc_Identifier;
 					bool bCall = bName && iBehind + 1 < mp_Significant.f_GetLen() && mp_pTokens->f_IsText(Tokens[mp_Significant[iBehind + 1]], "(");
 					bool bInRun
-						= bCall && nNewlines == 1 && fp_GetColumn(mp_Significant[iBehind]) == fp_GetColumn(mp_Significant[_iFirst]) && !fg_IsAnyText(*mp_pTokens, Behind, c_pTakesParenthesis)
+						= bCall && nNewlines == 1 && fp_GetColumn(mp_Significant[iBehind]) == fp_GetColumn(mp_Significant[_iFirst]) && !fg_IsAnyText(*mp_pTokens, Behind, c_TakesParenthesis)
 					;
 					if (bInRun)
 					{
@@ -2018,7 +2018,7 @@ namespace NMib::NDevelop
 
 					// An attribute keyword on the next line goes on with the declaration the calls are a head of: 'DExport(A)'
 					// over '__attribute__((x))' over 'void f();'.
-					bool bAttribute = nNewlines == 1 && fg_IsAnyText(*mp_pTokens, Behind, c_pTakesParenthesis);
+					bool bAttribute = nNewlines == 1 && fg_IsAnyText(*mp_pTokens, Behind, c_TakesParenthesis);
 					bool bAtRun = fp_GetColumn(mp_Significant[iBehind]) == fp_GetColumn(mp_Significant[_iFirst]);
 					bStatements = mp_pTokens->f_IsText(Behind, "}") || nNewlines > 1 || (nNewlines && bName && !bAttribute && bAtRun);
 
@@ -2052,7 +2052,7 @@ namespace NMib::NDevelop
 		// The layout writes the names of a declaration's head on one line, so they are read up to where the declarator
 		// goes on wherever the source breaks them: 'BOOL APIENTRY CreatePipeEx(...)', 'kmp_int32 volatile tail_id;'. Short
 		// of a parameter list a declaration has a type and a name, where one name alone is assigned or called: 'a = 1;'.
-		constexpr ch8 const *c_pDeclaratorEnds[] =
+		constexpr ch8 const *c_DeclaratorEnds[] =
 			{
 				";"
 				, "="
@@ -2070,14 +2070,14 @@ namespace NMib::NDevelop
 			if (mp_pTokens->f_IsText(Gap, "("))
 				return true;
 
-			if (fg_IsAnyText(*mp_pTokens, Gap, c_pDeclaratorEnds))
+			if (fg_IsAnyText(*mp_pTokens, Gap, c_DeclaratorEnds))
 				return nNames > 1;
 
 			nNames += Gap.m_Kind == ECodeTokenKind::mc_Identifier;
 
 			bool bName
 				= !fg_IsSignificant(Gap.m_Kind)
-				|| (Gap.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(*mp_pTokens, Gap, c_pTakesParenthesis))
+				|| (Gap.m_Kind == ECodeTokenKind::mc_Identifier && !fg_IsAnyText(*mp_pTokens, Gap, c_TakesParenthesis))
 				|| mp_pTokens->f_IsText(Gap, "::")
 				|| mp_pTokens->f_IsText(Gap, "*")
 				|| mp_pTokens->f_IsText(Gap, "&")
@@ -2205,7 +2205,7 @@ namespace NMib::NDevelop
 
 					// Only a function's statements guard: in a class's or a namespace's body the call heads a declaration
 					// written on the lines below it, as a qualifier or a requires clause behind it does.
-					constexpr ch8 const *c_pDeclarationTails[] =
+					constexpr ch8 const *c_DeclarationTails[] =
 						{
 							"requires"
 							, "noexcept"
@@ -2233,7 +2233,7 @@ namespace NMib::NDevelop
 					bool bInBody = fp_IsInFunctionBlock(_iParent);
 
 					// No keyword or operator naming a type is a clause's: 'typeof(x) y', 'return (int)' over 'f()'.
-					constexpr ch8 const *c_pTypeOperators[] =
+					constexpr ch8 const *c_TypeOperators[] =
 						{
 							"typeof"
 							, "__typeof__"
@@ -2279,10 +2279,10 @@ namespace NMib::NDevelop
 					bGuards
 						= bInBody
 						&& !bHoldsBrace
-						&& !fg_IsAnyText(*mp_pTokens, First, c_pTypeOperators)
+						&& !fg_IsAnyText(*mp_pTokens, First, c_TypeOperators)
 						&& nNewlines == 1
 						&& Guarded.m_Kind == ECodeTokenKind::mc_Identifier
-						&& !fg_IsAnyText(*mp_pTokens, Guarded, c_pDeclarationTails)
+						&& !fg_IsAnyText(*mp_pTokens, Guarded, c_DeclarationTails)
 						&& fp_GetColumn(mp_Significant[iBlock]) > fp_GetColumn(mp_Significant[_iToken])
 					;
 				}
@@ -2314,7 +2314,7 @@ namespace NMib::NDevelop
 
 		// A keyword that only introduces the statement after it ends here, and so does one of Objective-C's that
 		// ends a section or opens a visibility of its own.
-		constexpr ch8 const *c_pAlone[] =
+		constexpr ch8 const *c_Alone[] =
 			{
 				"else"
 				, "do"
@@ -2333,7 +2333,7 @@ namespace NMib::NDevelop
 		;
 
 		bool bAlone = false;
-		for (auto pKeyword : c_pAlone)
+		for (auto pKeyword : c_Alone)
 			bAlone |= mp_pTokens->f_IsText(First, pKeyword);
 
 		if (bAlone)
@@ -2377,7 +2377,7 @@ namespace NMib::NDevelop
 		if (mp_pTokens->f_IsText(Tokens[mp_Significant[_iToken]], "template"))
 			mp_Nodes[iNode].m_bTemplateHeader = true;
 
-		constexpr ch8 const *c_pSectionWords[] =
+		constexpr ch8 const *c_SectionWords[] =
 			{
 				"@interface"
 				, "@implementation"
@@ -2398,7 +2398,7 @@ namespace NMib::NDevelop
 			bool bProtocolSection
 				= mp_pTokens->f_IsText(Token, "@protocol") && !(iSignificant + 1 < mp_Significant.f_GetLen() && mp_pTokens->f_IsText(Tokens[mp_Significant[iSignificant + 1]], "("))
 			;
-			if (iSignificant > _iToken && (bProtocolSection || fg_IsAnyText(*mp_pTokens, Token, c_pSectionWords)))
+			if (iSignificant > _iToken && (bProtocolSection || fg_IsAnyText(*mp_pTokens, Token, c_SectionWords)))
 			{
 				fp_Finish(iNode, mp_Significant[iSignificant - 1]);
 
@@ -2414,7 +2414,7 @@ namespace NMib::NDevelop
 				if (iSignificant > _iToken)
 				{
 					auto const &Previous = Tokens[mp_Significant[iSignificant - 1]];
-					constexpr ch8 const *c_pDeclaratorEnds[] =
+					constexpr ch8 const *c_DeclaratorEnds[] =
 						{
 							")"
 							, "const"
@@ -2431,7 +2431,7 @@ namespace NMib::NDevelop
 					bool bBehindBody = iSignificant > _iToken + 1 && mp_pTokens->f_IsText(Previous, "&&") && mp_pTokens->f_IsText(Tokens[mp_Significant[iSignificant - 2]], "}");
 					// A clause behind a declarator follows its parameter list, so a constraint's '&&' in a header's clause starts none:
 					// 'requires cA<T> && requires {'.
-					if (!bRequiresClause && bDeclaratorParameters && fg_IsAnyText(*mp_pTokens, Previous, c_pDeclaratorEnds) && !mp_pTokens->f_IsText(Previous, "requires") && !bBehindBody)
+					if (!bRequiresClause && bDeclaratorParameters && fg_IsAnyText(*mp_pTokens, Previous, c_DeclaratorEnds) && !mp_pTokens->f_IsText(Previous, "requires") && !bBehindBody)
 					{
 						bRequiresClause = true;
 						iClauseRequires = iSignificant;
@@ -2472,7 +2472,7 @@ namespace NMib::NDevelop
 				// A width behind the ':' makes it an unnamed bit-field, 'uint32 : 3', which
 				// is spelled like a label and declares one thing rather than naming a place. So
 				// does a fundamental type in front of it, whatever names the width: 'unsigned : NumBits'.
-				constexpr ch8 const *c_pFundamental[] =
+				constexpr ch8 const *c_Fundamental[] =
 					{
 						"unsigned"
 						, "signed"
@@ -2495,7 +2495,7 @@ namespace NMib::NDevelop
 					&&
 					(
 						(iSignificant + 1 < mp_Significant.f_GetLen() && Tokens[mp_Significant[iSignificant + 1]].m_Kind == ECodeTokenKind::mc_Number)
-						|| fg_IsAnyText(*mp_pTokens, LabelFirst, c_pFundamental)
+						|| fg_IsAnyText(*mp_pTokens, LabelFirst, c_Fundamental)
 						|| (mp_Nodes[_iParent].m_bClassBody && mp_pTokens->f_HasRole(LabelFirst, ECodeNameRole::mc_Type))
 					)
 				;
@@ -2554,7 +2554,7 @@ namespace NMib::NDevelop
 				// the clause's brackets: 'requires (sizeof(t_C) > 1) struct CFoo {'.
 				if (iHead + 1 < iSignificant && mp_pTokens->f_IsText(Tokens[mp_Significant[iHead]], "requires"))
 				{
-					constexpr ch8 const *c_pHeadKeys[] = {"struct", "class", "union"};
+					constexpr ch8 const *c_HeadKeys[] = {"struct", "class", "union"};
 					umint nDepth = 0;
 					for (auto iClause = iHead + 1; iClause < iSignificant; ++iClause)
 					{
@@ -2565,7 +2565,7 @@ namespace NMib::NDevelop
 							++nDepth;
 						else if (nDepth && (mp_pTokens->f_IsText(ClauseToken, ")") || mp_pTokens->f_IsText(ClauseToken, "]") || (bAngle && mp_pTokens->f_IsText(ClauseToken, ">"))))
 							--nDepth;
-						else if (!nDepth && fg_IsAnyText(*mp_pTokens, ClauseToken, c_pHeadKeys))
+						else if (!nDepth && fg_IsAnyText(*mp_pTokens, ClauseToken, c_HeadKeys))
 						{
 							iHead = iClause;
 
@@ -2582,7 +2582,7 @@ namespace NMib::NDevelop
 				// variables a definition declares stand in front of its class key: 'static const struct {' over '} g_A[] ='.
 				auto fSpecifier = [&](umint _iHead)
 					{
-						constexpr ch8 const *c_pSpecifiers[] =
+						constexpr ch8 const *c_Specifiers[] =
 							{
 								"inline"
 								, "export"
@@ -2602,7 +2602,7 @@ namespace NMib::NDevelop
 							= mp_pTokens->f_IsText(Head, "extern") && _iHead + 1 < mp_Significant.f_GetLen() && Tokens[mp_Significant[_iHead + 1]].m_Kind == ECodeTokenKind::mc_StringLiteral
 						;
 
-						return fg_IsAnyText(*mp_pTokens, Head, c_pSpecifiers) && !bLinkage;
+						return fg_IsAnyText(*mp_pTokens, Head, c_Specifiers) && !bLinkage;
 					}
 				;
 
@@ -2616,8 +2616,8 @@ namespace NMib::NDevelop
 
 				// So does one holding what no class body can, a designator or a nested list in front, or a last member with no
 				// terminator: 'struct tm Time{.tm_sec = 0}'.
-				constexpr ch8 const *c_pClassKeys[] = {"struct", "class", "union"};
-				if (!bInitializer && fg_IsAnyText(*mp_pTokens, First, c_pClassKeys))
+				constexpr ch8 const *c_ClassKeys[] = {"struct", "class", "union"};
+				if (!bInitializer && fg_IsAnyText(*mp_pTokens, First, c_ClassKeys))
 				{
 					umint nDepth = 0;
 					umint iClose = iSignificant;
@@ -2699,7 +2699,7 @@ namespace NMib::NDevelop
 					// its parenthesis is the constraint in front of the body: 'void f() requires (cA<T>)' over '{'.
 					if (bBehindRequires && iLead > _iToken)
 					{
-						constexpr ch8 const *c_pOperandLeads[] =
+						constexpr ch8 const *c_OperandLeads[] =
 							{
 								"requires"
 								, "="
@@ -2720,7 +2720,7 @@ namespace NMib::NDevelop
 						// The 'requires' that starts a clause is never an expression's, behind a declarator's '&&' too: 'auto f() ->'
 						// over 'CFoo && requires (cA<T>)'.
 						auto const &BeforeKeyword = Tokens[mp_Significant[iLead - 1]];
-						bRequirementsBody = fg_IsAnyText(*mp_pTokens, BeforeKeyword, c_pOperandLeads) && iLead != iClauseRequires;
+						bRequirementsBody = fg_IsAnyText(*mp_pTokens, BeforeKeyword, c_OperandLeads) && iLead != iClauseRequires;
 					}
 				}
 
@@ -2769,7 +2769,7 @@ namespace NMib::NDevelop
 				// fg_F() {', where a requires clause's parenthesis stands in front of the class key, 'requires (sizeof(T) > 1) struct
 				// CFoo {', and an alignment's, an attribute's, a macro's and a template argument's stand behind it or nested deeper:
 				// 'struct alignas(8) [[deprecated("old")]] CFoo : TCBase<void (int)>'. An operator's declarator names a function too.
-				constexpr ch8 const *c_pNotNames[] =
+				constexpr ch8 const *c_NotNames[] =
 					{
 						"alignas"
 						, "_Alignas"
@@ -2783,7 +2783,7 @@ namespace NMib::NDevelop
 					}
 				;
 
-				bool bClassKey = bDefinition && fg_IsAnyText(*mp_pTokens, First, c_pClassKeys);
+				bool bClassKey = bDefinition && fg_IsAnyText(*mp_pTokens, First, c_ClassKeys);
 				bool bParametersBehindKey = false;
 				umint nDepth = 0;
 				for (auto iBehindKey = iHead + 1; bClassKey && iBehindKey < iSignificant && !bParametersBehindKey; ++iBehindKey)
@@ -2803,7 +2803,7 @@ namespace NMib::NDevelop
 							||
 							(
 								Name.m_Kind == ECodeTokenKind::mc_Identifier
-								&& !fg_IsAnyText(*mp_pTokens, Name, c_pNotNames)
+								&& !fg_IsAnyText(*mp_pTokens, Name, c_NotNames)
 								&& !mp_pTokens->f_HasRole(Name, ECodeNameRole::mc_Macro)
 								&& !mp_pTokens->f_HasRole(Name, ECodeNameRole::mc_SpecifierMacro)
 							)
@@ -2906,8 +2906,8 @@ namespace NMib::NDevelop
 
 					// A declarator's parameter list stands behind its name, where a constraint's parenthesis stands behind
 					// 'requires' or an operator joining constraints.
-					constexpr ch8 const *c_pConstraintLeads[] = {"requires", "&&", "||", "!", "and", "or", "not", "("};
-					bDeclaratorParameters |= !bAttribute && !fg_IsAnyText(*mp_pTokens, Before, c_pConstraintLeads);
+					constexpr ch8 const *c_ConstraintLeads[] = {"requires", "&&", "||", "!", "and", "or", "not", "("};
+					bDeclaratorParameters |= !bAttribute && !fg_IsAnyText(*mp_pTokens, Before, c_ConstraintLeads);
 				}
 
 				mp_Nodes[iNode].m_SplitPoints.f_Insert(mp_Significant[iSignificant]);

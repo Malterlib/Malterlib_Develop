@@ -17,7 +17,7 @@ namespace NMib::NDevelop
 namespace NMib::NDevelop::NPrivate
 {
 	// Keywords that stand in front of a name or a parenthesis without declaring anything.
-	inline constexpr ch8 const *gc_pExpressionKeywords[] =
+	inline constexpr ch8 const *gc_ExpressionKeywords[] =
 		{
 			"if"
 			, "for"
@@ -49,7 +49,7 @@ namespace NMib::NDevelop::NPrivate
 	;
 
 	template <umint tf_nTexts>
-	bool fg_IsAnyText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token, ch8 const * const (&_pTexts)[tf_nTexts]);
+	bool fg_IsAnyText(CCodeTokenStream const &_Tokens, CCodeToken const &_Token, ch8 const * const (&_Texts)[tf_nTexts]);
 	bool fg_IsSignificant(ECodeTokenKind _Kind);
 	bool fg_IsAsmSectionSeparator(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iToken);
 	aint fg_PreviousCode(CCodeTokenStream const &_Tokens, umint _iToken);

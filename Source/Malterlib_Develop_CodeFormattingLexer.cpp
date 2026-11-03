@@ -450,7 +450,7 @@ namespace
 
 	bool fg_LexPunctuator(CLexerCursor &_Cursor)
 	{
-		constexpr ch8 const *c_pPunctuators[] =
+		constexpr ch8 const *c_Punctuators[] =
 			{
 				"<<="
 				, ">>="
@@ -501,7 +501,7 @@ namespace
 			return true;
 		}
 
-		for (auto pPunctuator : c_pPunctuators)
+		for (auto pPunctuator : c_Punctuators)
 		{
 			if (pPunctuator[0] != First)
 				continue;
@@ -563,7 +563,7 @@ namespace NMib::NDevelop
 		{
 			fp_MarkCppBranches();
 
-			constexpr ch8 const *c_pCppKeywords[] =
+			constexpr ch8 const *c_CppKeywords[] =
 				{
 					"catch"
 					, "char8_t"
@@ -615,7 +615,7 @@ namespace NMib::NDevelop
 				if (Token.m_Kind != ECodeTokenKind::mc_Identifier || Token.m_bCpp)
 					continue;
 
-				for (auto pKeyword : c_pCppKeywords)
+				for (auto pKeyword : c_CppKeywords)
 					Token.m_bPlainName |= f_IsText(Token, pKeyword);
 			}
 		}

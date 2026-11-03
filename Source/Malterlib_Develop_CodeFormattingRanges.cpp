@@ -1520,7 +1520,7 @@ namespace NMib::NDevelop::NPrivate
 			bool bTailOperator = false;
 			if (iTail >= 0 && umint(iTail) < _iLast && !mp_Structure.f_IsAngleBracket(umint(iTail)))
 			{
-				constexpr ch8 const *c_pOperators[] =
+				constexpr ch8 const *c_Operators[] =
 					{
 						"+"
 						, "-"
@@ -1545,7 +1545,7 @@ namespace NMib::NDevelop::NPrivate
 					}
 				;
 
-				for (auto pOperator : c_pOperators)
+				for (auto pOperator : c_Operators)
 					bTailOperator |= mp_Tokens.f_IsText(mp_Tokens.f_GetTokens()[umint(iTail)], pOperator);
 			}
 
@@ -1985,7 +1985,7 @@ namespace NMib::NDevelop::NPrivate
 					bCut = true;
 				else if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline)
 				{
-					constexpr ch8 const *c_pEnds[] =
+					constexpr ch8 const *c_Ends[] =
 						{
 							";"
 							, ","
@@ -1996,7 +1996,7 @@ namespace NMib::NDevelop::NPrivate
 					;
 
 					bool bEnds = false;
-					for (auto pEnd : c_pEnds)
+					for (auto pEnd : c_Ends)
 						bEnds |= mp_Tokens.f_IsText(Tokens[iBehind], pEnd);
 
 					bKeepsSplit = bCut && !bEnds;

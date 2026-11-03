@@ -222,7 +222,7 @@ namespace NMib::NDevelop::NPrivate
 			return CStr(mp_pSource + Token.m_iOffset, Token.m_nLength); // No keyword is that long, so it matches none.
 
 		// The standard's keywords are constants, so asking for one allocates nothing.
-		static constexpr CStr const *c_pKeywords[] =
+		static constexpr CStr const *c_Keywords[] =
 			{
 				&gc_Str<"if">.m_Str
 				, &gc_Str<"ifdef">.m_Str
@@ -244,7 +244,7 @@ namespace NMib::NDevelop::NPrivate
 			}
 		;
 
-		for (auto pKeyword : c_pKeywords)
+		for (auto pKeyword : c_Keywords)
 		{
 			if (fg_IsSameText(*pKeyword, Keyword, nKeyword))
 				return *pKeyword;

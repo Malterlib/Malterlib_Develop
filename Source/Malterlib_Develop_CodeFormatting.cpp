@@ -1163,7 +1163,7 @@ namespace NMib::NDevelop::NPrivate
 	// move and as two after it.
 	CStr fg_GetReorderInvariant(CStr const &_Source, ECodeLanguage _Language)
 	{
-		constexpr ch8 const *c_pMoved[] =
+		constexpr ch8 const *c_Moved[] =
 			{
 				"const"
 				, "volatile"
@@ -1215,7 +1215,7 @@ namespace NMib::NDevelop::NPrivate
 				bool bMoved = false;
 				for (umint iMoved = 0; iMoved < 4 && !bMoved; ++iMoved)
 				{
-					bMoved = Tokens.f_IsText(Token, c_pMoved[iMoved]);
+					bMoved = Tokens.f_IsText(Token, c_Moved[iMoved]);
 					MovedCounts[iMoved] += bMoved;
 				}
 

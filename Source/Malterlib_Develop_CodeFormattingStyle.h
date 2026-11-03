@@ -38,9 +38,9 @@ namespace NMib::NDevelop
 
 		NStr::CStr m_Extends;                                                        // Relative to the document's directory; empty when it extends nothing.
 		NStorage::TCOptional<CListChange> m_Lists[umint(ECodeNamingList::mc_Count)]; // Unset keeps what it extends.
-		NStorage::TCOptional<bool> m_bAlignTrailingComments;                         // Unset keeps what it extends.
-		NStorage::TCOptional<bool> m_bAlignEnumValues;                               // Unset keeps what it extends.
-		NStorage::TCOptional<bool> m_bTrailingScopeAtStatementLevel;                 // Unset keeps what it extends.
+		NStorage::TCOptional<bool> m_AlignTrailingComments;                          // Unset keeps what it extends.
+		NStorage::TCOptional<bool> m_AlignEnumValues;                                // Unset keeps what it extends.
+		NStorage::TCOptional<bool> m_TrailingScopeAtStatementLevel;                  // Unset keeps what it extends.
 		NStorage::TCOptional<umint> m_nAlignTrailingCommentsMaximumColumn;           // Unset keeps what it extends; zero is no limit.
 	};
 
