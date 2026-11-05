@@ -379,6 +379,15 @@ namespace
 				continue;
 			}
 
+			// A number's digit separators are no quotes: '1'000'.
+			bool bNumberStart = fg_CharIsNumber(Char) || (Char == '.' && fg_CharIsNumber(_Cursor.f_Peek(1)));
+			if (bNumberStart && (!_Cursor.m_iOffset || !fg_IsIdentifierChar(_Cursor.m_pStart[_Cursor.m_iOffset - 1])))
+			{
+				fg_LexNumber(_Cursor);
+
+				continue;
+			}
+
 			if (Char == '"' || Char == '\'')
 			{
 				// An apostrophe in directive text, such as in a comment word, is not a literal.
