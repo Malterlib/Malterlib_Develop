@@ -1754,6 +1754,24 @@ namespace
 					fg_ExpectFormat("RawStringBody", "auto x = R\"(\n    keep\n)\";\n", "auto x = R\"(\n    keep\n)\";\n");
 					fg_ExpectFormat("BlockCommentBody", "/* text\n    keep\n */\n", "/* text\n\tkeep\n*/\n");
 					fg_ExpectFormat("BlockCommentLines", "/*\n    a\n      b\n */\nint g_A;\n", "/*\na\n  b\n*/\nint g_A;\n", false);
+					{
+						DMibTestPath("CommentSpaceExplanation");
+						TCVector<CStr> Explanations;
+						for (CStr const &Source : {"/*\n    a\n */\nint g_A;\n", "//\t\ta\n//\t\t\tb\nint g_A;\n"})
+						{
+							for (auto const &Diagnostic : fg_AnalyzeCodeFormatting(fg_Request(Source)).m_Diagnostics)
+							{
+								if (Diagnostic.m_Rule == "comment-space")
+									Explanations.f_Insert(Diagnostic.m_Explanation);
+							}
+						}
+
+						CStr Explanation
+							= "a comment's text starts one space behind its line markers, its lines keeping where they stand relative to each other, and a block "
+								"comment's lines stand at the column of its opening marker"
+						;
+						DMibExpect(Explanations, ==, (TCVector<CStr>{Explanation, Explanation, Explanation}));
+					}
 					// A macro's body is not: its lines stand one level in from the directive.
 					fg_ExpectFormat("MacroBody", "#define A \\\n    B\n", "#define A \\\n\tB\n");
 				};
