@@ -165,6 +165,7 @@ namespace NMib::NDevelop
 	bool fg_HoldsArguments(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup);
 	bool fg_HoldsParameters(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iGroup);
 	bool fg_IsFunctionBody(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iBlock);
+	bool fg_IsNamespaceOrLinkageBlock(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iBlock);
 
 	// True when the ')' at _iClose ends a parameter list rather than a call's arguments.
 	bool fg_ClosesParameterList(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iClose);
