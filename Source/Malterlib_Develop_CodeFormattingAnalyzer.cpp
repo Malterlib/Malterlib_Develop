@@ -1790,6 +1790,8 @@ namespace NMib::NDevelop::NPrivate
 					Explanation = "a comment describes the element in front of it, which the comma behind it goes past, and no comma ends a braced list";
 				else if (Edit.m_Rule == "trailing-comment")
 					Explanation = "a comment trailing a line is a line comment, on a line of its own above it where it makes the line too long";
+				else if (Edit.m_Rule == "comment-space")
+					Explanation = "the blanks every line of a comment starts with behind its markers are one space";
 
 				fp_AddDiagnostic(Edit.m_Rule, Edit.m_iOffset, Edit.m_nLength, Explanation, true);
 			}
