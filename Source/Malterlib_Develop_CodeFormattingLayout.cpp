@@ -2067,7 +2067,7 @@ namespace NMib::NDevelop::NPrivate
 				if (bAfterBlock)
 				{
 					auto iHead = aint(Previous.m_iFirstToken);
-					if (mp_Tokens.f_IsText(Tokens[umint(iHead)], "inline"))
+					while (iHead >= 0 && (mp_Tokens.f_IsText(Tokens[umint(iHead)], "export") || mp_Tokens.f_IsText(Tokens[umint(iHead)], "inline")))
 						iHead = fp_NextCode(umint(iHead));
 
 					auto const *pHead = iHead >= 0 ? &Tokens[umint(iHead)] : nullptr;

@@ -1099,6 +1099,33 @@ namespace NMib::NDevelop::NCodeFormattingTest
 				;
 				CStr EndingInBlockComment = "namespace N\n{\n#define DA 1\n// A\n/* Note */ // Extra\n\n#define DB 2\n}\n";
 				fg_ExpectFormat("RunEndingInTrailedBlockCommentKeepsItsLines", EndingInBlockComment, EndingInBlockComment);
+				for (CStr const &Head : {"extern void f()", "inline extern void f()", "export extern \"C\" void f()"})
+				{
+					DMibTestPath(Head);
+					fg_ExpectFormat
+						(
+							"CommentInExternFunctionInFrontOfDirective"
+							, Head + "\n{\n\tg();\n// A\n#define DA 1\n\th();\n}\n"
+							, Head + "\n{\n\tg();\n\t// A\n#define DA 1\n\th();\n}\n"
+						)
+					;
+				}
+				for (CStr const &Head : {"extern \"C\"", "export extern \"C\""})
+				{
+					DMibTestPath(Head);
+					fg_ExpectFormat("CommentUnderDirectiveInLinkageBlock", Head + "\n{\n#define DA 1\n// A\n\n#define DB 2\n}\n", Head + "\n{\n#define DA 1\n\t// A\n\n#define DB 2\n}\n");
+				}
+				fg_ExpectFormat("DeclarationBehindExportedNamespace", "export namespace N {} C g_Value;\n", "export namespace N\n{\n}\nC g_Value;\n");
+				for (auto const &[Name, Specifiers] : TCVector<TCTuple<CStr, CStr>>{{"Inline", "inline "}, {"Exported", "export "}, {"ExportedInline", "export inline "}})
+				{
+					fg_ExpectFormat
+						(
+							"CommentUnderDirectiveIn" + Name + "Namespace"
+							, Specifiers + "namespace N\n{\n#define DA 1\n// A\n\n#define DB 2\n}\n"
+							, Specifiers + "namespace N\n{\n#define DA 1\n\t// A\n\n#define DB 2\n}\n"
+						)
+					;
+				}
 				CStr Nested = "namespace N\n{\n#define DA 1\n// Parent\n\t// Child\n\n#define DB 2\n}\n";
 				fg_ExpectFormat("NestedCommentUnderDirectiveKeepsItsLines", Nested, Nested);
 				CStr Columns = "namespace N\n{\n#define DA 1\n// Parent\n    // Child\n   // Other\n\n#define DB 2\n}\n";

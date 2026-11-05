@@ -1704,7 +1704,6 @@ namespace NMib::NDevelop
 	bool fg_IsFunctionBody(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iBlock)
 	{
 		auto const &Nodes = _Structure.f_GetNodes();
-		auto const &Tokens = _Tokens.f_GetTokens();
 		auto const &Block = Nodes[_iBlock];
 		if (Block.m_Kind != ECodeNodeKind::mc_Block || Block.m_iParent >= Nodes.f_GetLen())
 			return false;
@@ -1720,33 +1719,49 @@ namespace NMib::NDevelop
 		if (Owner.m_Kind != ECodeNodeKind::mc_Statement || fg_IsClassHead(_Tokens, _Structure, iOwner) || _Structure.f_IsEnumBody(_iBlock))
 			return false;
 
-		auto const &First = Tokens[Owner.m_iFirstToken];
-		if (_Tokens.f_IsText(First, "namespace"))
+		return !fg_IsNamespaceOrLinkageBlock(_Tokens, _Structure, _iBlock);
+	}
+
+	// Whether the block is a namespace's or a linkage specification's, after the specifiers 'export' and 'inline' too:
+	// 'export inline namespace N {' and 'export extern "C" {'. A linkage block's brace stands behind its language's name,
+	// where a function an 'extern' declares has its declarator: 'extern "C" {' and 'extern "C" void f() {'.
+	bool fg_IsNamespaceOrLinkageBlock(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iBlock)
+	{
+		auto const &Nodes = _Structure.f_GetNodes();
+		auto const &Tokens = _Tokens.f_GetTokens();
+		auto const &Block = Nodes[_iBlock];
+		if (Block.m_Kind != ECodeNodeKind::mc_Block || Block.m_iParent >= Nodes.f_GetLen() || Nodes[Block.m_iParent].m_Kind != ECodeNodeKind::mc_Statement)
 			return false;
 
-		// A linkage block's brace stands behind its language's name, where a function an 'extern' declares has its
-		// declarator: 'extern "C" {' and 'extern "C" void f() {'.
-		if (_Tokens.f_IsText(First, "extern"))
-		{
-			umint iBefore = 0;
-			for (auto iToken = Owner.m_iFirstToken; iToken < Block.m_iFirstToken; ++iToken)
-			{
-				auto Kind = Tokens[iToken].m_Kind;
-				bool bCode
-					= Kind == ECodeTokenKind::mc_Identifier
-					|| Kind == ECodeTokenKind::mc_Number
-					|| Kind == ECodeTokenKind::mc_CharLiteral
-					|| Kind == ECodeTokenKind::mc_StringLiteral
-					|| Kind == ECodeTokenKind::mc_Punctuator
-				;
-				if (bCode)
-					iBefore = iToken;
-			}
+		auto const &Owner = Nodes[Block.m_iParent];
+		auto iHead = aint(Owner.m_iFirstToken);
+		while (iHead >= 0 && (_Tokens.f_IsText(Tokens[umint(iHead)], "export") || _Tokens.f_IsText(Tokens[umint(iHead)], "inline")))
+			iHead = fg_NextCode(_Tokens, umint(iHead));
+		if (iHead < 0 || umint(iHead) >= Block.m_iFirstToken)
+			return false;
 
-			return Tokens[iBefore].m_Kind != ECodeTokenKind::mc_StringLiteral;
+		if (_Tokens.f_IsText(Tokens[umint(iHead)], "namespace"))
+			return true;
+
+		if (!_Tokens.f_IsText(Tokens[umint(iHead)], "extern"))
+			return false;
+
+		umint iBefore = umint(iHead);
+		for (auto iToken = umint(iHead); iToken < Block.m_iFirstToken; ++iToken)
+		{
+			auto Kind = Tokens[iToken].m_Kind;
+			bool bCode
+				= Kind == ECodeTokenKind::mc_Identifier
+				|| Kind == ECodeTokenKind::mc_Number
+				|| Kind == ECodeTokenKind::mc_CharLiteral
+				|| Kind == ECodeTokenKind::mc_StringLiteral
+				|| Kind == ECodeTokenKind::mc_Punctuator
+			;
+			if (bCode)
+				iBefore = iToken;
 		}
 
-		return true;
+		return Tokens[iBefore].m_Kind == ECodeTokenKind::mc_StringLiteral;
 	}
 
 	// A capture list stands where an operand cannot: a subscript follows a name, a call, a

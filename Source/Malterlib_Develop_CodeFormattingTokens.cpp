@@ -351,13 +351,7 @@ namespace NMib::NDevelop::NPrivate
 				if (iNode >= Nodes.f_GetLen() || !iNode)
 					return false;
 
-				auto iOwner = Nodes[iNode].m_iParent;
-				if (Nodes[iNode].m_Kind != ECodeNodeKind::mc_Block || iOwner >= Nodes.f_GetLen() || Nodes[iOwner].m_Kind != ECodeNodeKind::mc_Statement)
-					return true;
-
-				auto const &First = Tokens[Nodes[iOwner].m_iFirstToken];
-
-				return !mp_Tokens.f_IsText(First, "namespace") && !mp_Tokens.f_IsText(First, "extern");
+				return !fg_IsNamespaceOrLinkageBlock(mp_Tokens, mp_Structure, iNode);
 			}
 		;
 
