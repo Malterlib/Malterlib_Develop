@@ -351,7 +351,8 @@ namespace
 
 	// A directive runs to the first line terminator that is neither spliced nor inside a
 	// block comment. Conditional branches are not evaluated; every branch is lexed as text.
-	bool fg_LexPreprocessor(CLexerCursor &_Cursor)
+	// o_pComment is set where the directive holds a comment.
+	bool fg_LexPreprocessor(CLexerCursor &_Cursor, bool *o_pComment = nullptr)
 	{
 		bool bUnterminated = false;
 		auto iDirective = _Cursor.m_iOffset;
@@ -445,6 +446,8 @@ namespace
 			if (Char == '/' && _Cursor.f_Peek(1) == '*')
 			{
 				bUnterminated |= fg_LexBlockComment(_Cursor);
+				if (o_pComment)
+					*o_pComment = true;
 
 				continue;
 			}
@@ -452,6 +455,8 @@ namespace
 			if (Char == '/' && _Cursor.f_Peek(1) == '/')
 			{
 				fg_LexLineComment(_Cursor);
+				if (o_pComment)
+					*o_pComment = true;
 
 				continue;
 			}
@@ -886,6 +891,19 @@ namespace NMib::NDevelop
 	CStr CCodeTokenStream::f_GetText(CCodeToken const &_Token) const
 	{
 		return mp_Source.f_Extract(_Token.m_iOffset, _Token.m_nLength);
+	}
+
+	// Whether a directive holds a comment, outside its string, character and raw string literals: '#define DA 1 // Details'.
+	bool CCodeTokenStream::f_HoldsDirectiveComment(CCodeToken const &_Directive) const
+	{
+		if (_Directive.m_Kind != ECodeTokenKind::mc_Preprocessor)
+			return false;
+
+		CLexerCursor Cursor{mp_Source.f_GetStr(), _Directive.f_GetEnd(), _Directive.m_iOffset};
+		bool bComment = false;
+		fg_LexPreprocessor(Cursor, &bComment);
+
+		return bComment;
 	}
 
 	CStr const &CCodeTokenStream::f_GetSource() const

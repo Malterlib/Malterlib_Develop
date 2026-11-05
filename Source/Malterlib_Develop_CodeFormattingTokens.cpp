@@ -273,6 +273,65 @@ namespace NMib::NDevelop::NPrivate
 		return false;
 	}
 
+	// A comment of a run of comment lines: first on its line, and no directive taken out of the code.
+	bool CFormattingAnalyzer::fp_IsRunCommentLine(umint _iToken) const
+	{
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto Kind = Tokens[_iToken].m_Kind;
+
+		return (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment) && fp_IsFirstOnLine(_iToken) && !fp_IsCommentedDirective(_iToken);
+	}
+
+	// The line breaks between two tokens, or the most there can be when something other than blanks is between.
+	umint CFormattingAnalyzer::fp_CountNewlinesBetween(umint _iFrom, umint _iTo) const
+	{
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		umint nNewlines = 0;
+		for (auto iGap = _iFrom + 1; iGap < _iTo; ++iGap)
+		{
+			if (Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline)
+				++nNewlines;
+			else if (Tokens[iGap].m_Kind != ECodeTokenKind::mc_Whitespace)
+				return TCLimitsInt<umint>::mc_Max;
+		}
+
+		return nNewlines;
+	}
+
+	// Whether a blank line is between two tokens, also with comments between them.
+	bool CFormattingAnalyzer::fp_HasBlankLineBetween(umint _iFrom, umint _iTo) const
+	{
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		umint nNewlines = 0;
+		for (auto iGap = _iFrom + 1; iGap < _iTo; ++iGap)
+		{
+			auto Kind = Tokens[iGap].m_Kind;
+			if (Kind == ECodeTokenKind::mc_Newline)
+			{
+				if (++nNewlines > 1)
+					return true;
+			}
+			else if (Kind != ECodeTokenKind::mc_Whitespace)
+				nNewlines = 0;
+		}
+
+		return false;
+	}
+
+	// The next token that is no blank, or -1.
+	aint CFormattingAnalyzer::fp_NextFilled(umint _iToken) const
+	{
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		for (auto iNext = _iToken + 1; iNext < Tokens.f_GetLen(); ++iNext)
+		{
+			auto Kind = Tokens[iNext].m_Kind;
+			if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline)
+				return aint(iNext);
+		}
+
+		return -1;
+	}
+
 	// The code the comment lines ending at the one given stand above, starting its line: the code behind the directives
 	// between where a construct other than a namespace holds it, as a directive there is no level of the code's.
 	aint CFormattingAnalyzer::fp_FindCodeBelowComments(umint _iLast) const

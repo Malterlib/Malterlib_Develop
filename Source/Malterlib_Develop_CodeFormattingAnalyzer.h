@@ -150,6 +150,14 @@ namespace NMib::NDevelop::NPrivate
 			umint m_nColumns = 0;   // Elements per row, zero for as many as fit.
 		};
 
+		// Where a comment run stands outside a function's code when no code below it decides.
+		struct CCommentRunScope
+		{
+			aint m_iAbove = -1;       // The first token of the statement above it, which it stands where
+			aint m_iBlock = -1;       // The block at whose depth it stands, the node count for the file's scope
+			bool m_bFallback = false; // Not under the statement above in front of a directive that goes with no code, which moves only whole runs
+		};
+
 		struct CJoinCandidate
 		{
 			umint m_iOffset = 0; // Where the joined construct starts in the source.
@@ -197,6 +205,11 @@ namespace NMib::NDevelop::NPrivate
 		bool fp_IsCommentLine(umint _iToken) const;
 		bool fp_IsCommentedDirective(umint _iToken) const;
 		aint fp_FindCodeBelowComments(umint _iLast) const;
+		bool fp_IsRunCommentLine(umint _iToken) const;
+		umint fp_CountNewlinesBetween(umint _iFrom, umint _iTo) const;
+		bool fp_HasBlankLineBetween(umint _iFrom, umint _iTo) const;
+		aint fp_NextFilled(umint _iToken) const;
+		CCommentRunScope fp_FindCommentRunScope(umint _iFirst, umint _iLast, aint _iCode) const;
 		bool fp_IsTrailingBlockComment(umint _iToken) const;
 		bool fp_IsNameComment(umint _iToken) const;
 		bool fp_AreWords(umint _iLeft, umint _iRight) const;

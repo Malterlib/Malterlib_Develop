@@ -89,6 +89,7 @@ namespace NMib::NDevelop
 		bool f_HasSameText(CCodeToken const &_Left, CCodeToken const &_Right) const;
 		ch8 const *f_GetTextPointer(CCodeToken const &_Token) const;
 		NStr::CStr f_GetText(CCodeToken const &_Token) const;
+		bool f_HoldsDirectiveComment(CCodeToken const &_Directive) const;
 		NStr::CStr const &f_GetSource() const;
 		ECodeLanguage f_GetLanguage() const;
 		// Whether the token is C, read without what C++ adds: in a C file, outside its C++ branches.

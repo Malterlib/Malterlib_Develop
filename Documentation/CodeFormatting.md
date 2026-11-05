@@ -1043,9 +1043,17 @@ brace they stand among the members, since an access label stands at the brace's
 level. Inside a construct other than a namespace a directive is no level of the
 code's, so comments in front of one stand where the code behind it does; outside
 functions, comments in front of a directive other than a conditional's or a
-pragma stand where the statement above them does. A comment line continuing a
-trailing comment, written further in than the code that comment trails, stays
-with it. A directive taken out of the code with a line comment,
+pragma, or parted from a conditional's or a pragma below them by a blank line,
+where no code past the directives places them, stand where the statement above
+them does, and those under a directive or a block's opening brace, with only
+other comments between, at the depth of the block, moving only whole: a run
+holding a block comment or a line comment continued with a backslash, one whose
+markers stand at different columns, one selected only in part, or one with
+another comment on the line directly above or below it, a directive's included
+and a directive spanning lines counting as one, keeps its lines. Inside an unfinished statement or an
+initializer the comments keep their lines. A comment line continuing a trailing
+comment, written further in than the code that comment trails, stays with
+it. A directive taken out of the code with a line comment,
 `//#define DDebug`, stands at column one as directives do, keeps its text, and
 parts the comment lines around it into runs of their own.
 
