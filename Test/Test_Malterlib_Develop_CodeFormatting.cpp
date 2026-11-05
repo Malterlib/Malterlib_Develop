@@ -388,6 +388,20 @@ namespace
 					DMibExpect(Stream.f_GetText(Tokens[0]), ==, "#define DCount 1'000 /* It's\na count */");
 				};
 
+				DMibTestCategory("DirectiveHeaderName")
+				{
+					CCodeTokenStream Stream("#include <a/*b.h>\nint g_A; /* x */\n");
+					auto const &Tokens = Stream.f_GetTokens();
+					DMibAssertTrue(!Tokens.f_IsEmpty());
+					DMibExpect(Stream.f_GetText(Tokens[0]), ==, "#include <a/*b.h>");
+
+					// Only an inclusion and a conditional have header names.
+					CCodeTokenStream Defined("#define DHasFile __has_include(<a /* >\n*/ >)\nint g_A;\n");
+					auto const &DefinedTokens = Defined.f_GetTokens();
+					DMibAssertTrue(!DefinedTokens.f_IsEmpty());
+					DMibExpect(Defined.f_GetText(DefinedTokens[0]), ==, "#define DHasFile __has_include(<a /* >\n*/ >)");
+				};
+
 				DMibTestCategory("Lossless")
 				{
 					auto fRoundTrip = [&](CStr const &_Case, CStr const &_Source)

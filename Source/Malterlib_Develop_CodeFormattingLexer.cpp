@@ -354,7 +354,64 @@ namespace
 	bool fg_LexPreprocessor(CLexerCursor &_Cursor)
 	{
 		bool bUnterminated = false;
+		auto iDirective = _Cursor.m_iOffset;
 		++_Cursor.m_iOffset;
+
+		// The header name of an inclusion, and of '__has_include' in a conditional, where only it is one.
+		auto iKeyword = _Cursor.m_iOffset;
+		while (iKeyword < _Cursor.m_nLength && fg_IsHorizontalSpace(_Cursor.m_pStart[iKeyword]))
+			++iKeyword;
+		auto iKeywordEnd = iKeyword;
+		while (iKeywordEnd < _Cursor.m_nLength && fg_IsIdentifierChar(_Cursor.m_pStart[iKeywordEnd]))
+			++iKeywordEnd;
+		auto pKeyword = _Cursor.m_pStart + iKeyword;
+		auto nKeyword = iKeywordEnd - iKeyword;
+		bool bInclusion = fg_IsOneOf(pKeyword, nKeyword, {"include", "import", "include_next"});
+		bool bConditional = fg_IsOneOf(pKeyword, nKeyword, {"if", "elif"});
+
+		// A header name, 'include//Empty.h' in '#include <include//Empty.h>' and in '__has_include(<a//b.h>)', is one unit.
+		auto fStartsHeaderName = [&](umint _iLess)
+			{
+				auto pText = _Cursor.m_pStart;
+				auto iBack = _iLess;
+				auto fSkipSpaceBack = [&]
+					{
+						while (iBack > iDirective && fg_IsHorizontalSpace(pText[iBack - 1]))
+							--iBack;
+					}
+				;
+				auto fIdentifierBack = [&]
+					{
+						auto iEnd = iBack;
+						while (iBack > iDirective && fg_IsIdentifierChar(pText[iBack - 1]))
+							--iBack;
+
+						return iEnd - iBack;
+					}
+				;
+
+				fSkipSpaceBack();
+				if (iBack > iDirective && pText[iBack - 1] == '(')
+				{
+					if (!bConditional)
+						return false;
+
+					--iBack;
+					fSkipSpaceBack();
+					auto nName = fIdentifierBack();
+
+					return fg_IsOneOf(pText + iBack, nName, {"__has_include", "__has_include_next"});
+				}
+
+				fIdentifierBack();
+				if (!bInclusion || iBack != iKeyword)
+					return false;
+
+				fSkipSpaceBack();
+
+				return iBack == iDirective + 1;
+			}
+		;
 
 		while (!_Cursor.f_AtEnd())
 		{
@@ -364,6 +421,26 @@ namespace
 			auto Char = _Cursor.f_Peek();
 			if (fg_IsLineBreak(Char))
 				break;
+
+			if (Char == '<' && fStartsHeaderName(_Cursor.m_iOffset))
+			{
+				++_Cursor.m_iOffset;
+				while (!_Cursor.f_AtEnd())
+				{
+					if (_Cursor.f_SkipSplice())
+						continue;
+
+					auto NameChar = _Cursor.f_Peek();
+					if (fg_IsLineBreak(NameChar))
+						break;
+
+					++_Cursor.m_iOffset;
+					if (NameChar == '>')
+						break;
+				}
+
+				continue;
+			}
 
 			if (Char == '/' && _Cursor.f_Peek(1) == '*')
 			{
