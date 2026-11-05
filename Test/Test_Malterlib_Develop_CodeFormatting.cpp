@@ -380,6 +380,14 @@ namespace
 					DMibExpect(Stream.f_GetText(Tokens[10]), ==, "#define A \\\n\tB");
 				};
 
+				DMibTestCategory("DirectiveDigitSeparator")
+				{
+					CCodeTokenStream Stream("#define DCount 1'000 /* It's\na count */\nint g_A;\n");
+					auto const &Tokens = Stream.f_GetTokens();
+					DMibAssertTrue(!Tokens.f_IsEmpty());
+					DMibExpect(Stream.f_GetText(Tokens[0]), ==, "#define DCount 1'000 /* It's\na count */");
+				};
+
 				DMibTestCategory("Lossless")
 				{
 					auto fRoundTrip = [&](CStr const &_Case, CStr const &_Source)
