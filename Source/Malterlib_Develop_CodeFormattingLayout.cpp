@@ -834,43 +834,7 @@ namespace NMib::NDevelop::NPrivate
 		{
 			auto nTab = mp_Request.m_Settings.m_nTabWidth;
 
-			auto fCommentLine = [&](umint _iToken)
-				{
-					auto Kind = Tokens[_iToken].m_Kind;
-
-					return (Kind == ECodeTokenKind::mc_LineComment || Kind == ECodeTokenKind::mc_BlockComment) && fp_IsFirstOnLine(_iToken) && !fp_IsCommentedDirective(_iToken);
-				}
-			;
-
-			auto fNewlines = [&](umint _iFrom, umint _iTo)
-				{
-					umint nNewlines = 0;
-					for (auto iGap = _iFrom + 1; iGap < _iTo; ++iGap)
-					{
-						if (Tokens[iGap].m_Kind == ECodeTokenKind::mc_Newline)
-							++nNewlines;
-						else if (Tokens[iGap].m_Kind != ECodeTokenKind::mc_Whitespace)
-							return TCLimitsInt<umint>::mc_Max;
-					}
-
-					return nNewlines;
-				}
-			;
-
-			// The next token that is no blank, and the one in front of a token that is no blank.
-			auto fNextFilled = [&](umint _iToken) -> aint
-				{
-					for (auto iNext = _iToken + 1; iNext < Tokens.f_GetLen(); ++iNext)
-					{
-						auto Kind = Tokens[iNext].m_Kind;
-						if (Kind != ECodeTokenKind::mc_Whitespace && Kind != ECodeTokenKind::mc_Newline)
-							return aint(iNext);
-					}
-
-					return -1;
-				}
-			;
-
+			// The token in front of a token that is no blank.
 			auto fPreviousFilled = [&](umint _iToken) -> aint
 				{
 					for (auto iPrevious = aint(_iToken) - 1; iPrevious >= 0; --iPrevious)
@@ -890,11 +854,11 @@ namespace NMib::NDevelop::NPrivate
 			aint iLastContinuation = -1;
 			for (umint iToken = 0; iToken < Tokens.f_GetLen(); ++iToken)
 			{
-				if (!fCommentLine(iToken))
+				if (!fp_IsRunCommentLine(iToken))
 					continue;
 
 				auto iBefore = fPreviousFilled(iToken);
-				if (iBefore >= 0 && fCommentLine(umint(iBefore)) && fNewlines(umint(iBefore), iToken) == 1)
+				if (iBefore >= 0 && fp_IsRunCommentLine(umint(iBefore)) && fp_CountNewlinesBetween(umint(iBefore), iToken) == 1)
 				{
 					if (iBefore != iLastContinuation)
 						continue;
@@ -958,7 +922,7 @@ namespace NMib::NDevelop::NPrivate
 					(
 						(
 							fp_GetSourceLineIndent(iToken) > fp_GetTrailedCodeIndent(umint(iBefore))
-							&& (fNewlines(umint(iBefore), iToken) == 1 || fp_GetSourceLineIndent(iToken) > fLaidOutLineIndent(umint(iBefore)))
+							&& (fp_CountNewlinesBetween(umint(iBefore), iToken) == 1 || fp_GetSourceLineIndent(iToken) > fLaidOutLineIndent(umint(iBefore)))
 						)
 						|| (fIsReshaped(umint(iBefore)) && fp_GetSourceLineIndent(iToken) > fLaidOutLineIndent(umint(iBefore)))
 					)
@@ -976,16 +940,7 @@ namespace NMib::NDevelop::NPrivate
 				Run.f_Insert(iToken);
 				auto iLast = iToken;
 
-				// Code a comment stands in front of on its line places nothing above it: 'LINT */ class C19'.
-				auto fStartsCodeLine = [&](umint _iToken)
-					{
-						auto iPrevious = fp_PreviousSignificant(_iToken);
-
-						return fg_IsCodeToken(Tokens[_iToken]) && (iPrevious < 0 || Tokens[umint(iPrevious)].m_Kind == ECodeTokenKind::mc_Newline);
-					}
-				;
-
-				for (auto iNext = fNextFilled(iLast); iNext >= 0 && fNewlines(iLast, umint(iNext)) == 1 && fCommentLine(umint(iNext)); iNext = fNextFilled(iLast))
+				for (auto iNext = fp_NextFilled(iLast); iNext >= 0 && fp_CountNewlinesBetween(iLast, umint(iNext)) == 1 && fp_IsRunCommentLine(umint(iNext)); iNext = fp_NextFilled(iLast))
 				{
 					Run.f_Insert(umint(iNext));
 					iLast = umint(iNext);
@@ -1007,70 +962,82 @@ namespace NMib::NDevelop::NPrivate
 				auto iClosedGroup = iCode >= 0 ? mp_Structure.f_FindNodeClosingAt(umint(iCode)) : Nodes.f_GetLen();
 				bool bGroupCloser = iClosedGroup < Nodes.f_GetLen() && Nodes[iClosedGroup].m_Kind == ECodeNodeKind::mc_Group;
 
-				// Outside functions, in front of a directive other than a conditional's or a pragma, which go with the code
-				// behind them, or the file's end, the run stands where the statement above it does.
-				aint iAbove = -1;
-				if (iCode < 0)
+				// Without code below that decides, the run stands under the statement above it or at the depth of its block.
+				auto Scope = fp_FindCommentRunScope(iToken, iLast, iCode);
+				aint iAbove = Scope.m_iAbove;
+				aint nScopeIndent = -1;
+				if (Scope.m_iBlock >= 0 && umint(Scope.m_iBlock) < Nodes.f_GetLen())
 				{
-					auto iStop = fNextFilled(iLast);
-					while (iStop >= 0 && fCommentLine(umint(iStop)))
-						iStop = fNextFilled(umint(iStop));
-
-					auto iPrevious = fp_PreviousCode(iToken);
-					auto iStatement = iPrevious >= 0 ? mp_Structure.f_FindStatementEndingAt(umint(iPrevious)) : Nodes.f_GetLen();
-
-					bool bOpenEnd = iStop < 0;
-					if (iStop >= 0 && Tokens[umint(iStop)].m_Kind == ECodeTokenKind::mc_Preprocessor)
-					{
-						auto Keyword = fp_GetDirectiveKeyword(umint(iStop));
-						bOpenEnd = !Keyword.f_StartsWith("if") && !Keyword.f_StartsWith("el") && Keyword != "endif" && Keyword != "pragma";
-					}
-
-					// The statement is measured from the line its clause starts, the one a block or a body belongs to: 'if (A) {'
-					// or 'if (A)' over 'return B;'.
-					auto fLineFirst = [&](umint _iToken)
+					// A brace kept on the line of the declaration it opens the block of, 'namespace N { // NOLINT', has the
+					// declaration's depth.
+					auto const &Block = Nodes[umint(Scope.m_iBlock)];
+					umint iOpening = Block.m_iFirstToken;
+					if (!fp_IsFirstOnLine(iOpening) && Block.m_iParent < Nodes.f_GetLen() && Nodes[Block.m_iParent].m_Kind == ECodeNodeKind::mc_Statement)
+						iOpening = Nodes[Block.m_iParent].m_iFirstToken;
+					nScopeIndent = aint(fp_GetStatementIndent(iOpening) + nTab);
+				}
+				else if (Scope.m_iBlock >= 0)
+					nScopeIndent = 0;
+				// The fallback moves a run of line comments on a line each only, and only whole, their markers at one column and every
+				// line of it selected and formatted, with no other comment on the line directly above or below it; otherwise the run
+				// keeps its lines, and the text behind its markers its blanks. Under the statement above in front of a directive that
+				// goes with no code the run is placed as any other is.
+				if (iAbove >= 0 || nScopeIndent >= 0)
+					iCode = -1;
+				if (Scope.m_bFallback)
+				{
+					// The physical line next to the run counts, the last of a token above it and the first of one below it. A
+					// directive is one token with its comments, '#define DA 1 // Details', and one spanning lines, by a splice, a
+					// literal or a comment, counts as holding one.
+					auto fLineHoldsComment = [&](umint _iToken, bool _bLastLine)
 						{
-							auto iLineFirst = mp_Tokens.f_FindToken(mp_Lines.f_GetLineStart(mp_Lines.f_FindLine(Tokens[_iToken].m_iOffset)));
-							while (iLineFirst < _iToken && !fg_IsCodeToken(Tokens[iLineFirst]))
-								++iLineFirst;
+							auto const &Token = Tokens[_iToken];
+							auto iLine = mp_Lines.f_FindLine(_bLastLine ? Token.f_GetEnd() - 1 : Token.m_iOffset);
+							auto iStart = mp_Lines.f_GetLineStart(iLine);
+							auto iEnd = mp_Lines.f_GetLineEnd(iLine);
+							for (auto iOnLine = mp_Tokens.f_FindToken(iStart); iOnLine < Tokens.f_GetLen() && Tokens[iOnLine].m_iOffset < iEnd; ++iOnLine)
+							{
+								auto const &OnLine = Tokens[iOnLine];
+								if (OnLine.m_Kind == ECodeTokenKind::mc_LineComment || OnLine.m_Kind == ECodeTokenKind::mc_BlockComment)
+									return true;
 
-							return iLineFirst;
+								if (OnLine.m_Kind == ECodeTokenKind::mc_Preprocessor && (OnLine.m_bMultiLine || mp_Tokens.f_HoldsDirectiveComment(OnLine)))
+									return true;
+							}
+
+							return false;
 						}
 					;
-
-					// Inside a function the directives are its code's, whose own rules place the comments around them.
-					bool bInFunction = false;
-					for (auto iNode = iStatement; !bInFunction && iNode < Nodes.f_GetLen() && iNode; iNode = Nodes[iNode].m_iParent)
-						bInFunction = fg_IsFunctionBody(mp_Tokens, mp_Structure, iNode);
-
-					// A statement ended by its terminator or its block, not a macro's call the structure cannot delimit.
-					auto const *pPrevious = iPrevious >= 0 ? &Tokens[umint(iPrevious)] : nullptr;
-					bool bEnded = pPrevious && (mp_Tokens.f_IsText(*pPrevious, ";") || mp_Tokens.f_IsText(*pPrevious, "}"));
-					if (bOpenEnd && bEnded && !bInFunction && iStatement < Nodes.f_GetLen())
+					auto iAboveRun = fPreviousFilled(Run[0]);
+					auto iBelowRun = fp_NextFilled(iLast);
+					bool bWhole
+						= (iAboveRun < 0 || fp_CountNewlinesBetween(umint(iAboveRun), Run[0]) != 1 || !fLineHoldsComment(umint(iAboveRun), true))
+						&& (iBelowRun < 0 || fp_CountNewlinesBetween(iLast, umint(iBelowRun)) != 1 || !fLineHoldsComment(umint(iBelowRun), false))
+					;
+					for (auto iComment : Run)
 					{
-						auto iLineFirst = fLineFirst(Nodes[iStatement].m_iFirstToken);
-						for (auto iInFront = fp_PreviousCode(iLineFirst); iInFront >= 0; iInFront = fp_PreviousCode(iLineFirst))
-						{
-							auto const &InFront = Tokens[umint(iInFront)];
-							bool bEnds
-								= mp_Tokens.f_IsText(InFront, ";")
-								|| mp_Tokens.f_IsText(InFront, "{")
-								|| mp_Tokens.f_IsText(InFront, "}")
-								|| mp_Tokens.f_IsText(InFront, ":")
-								|| InFront.m_Kind == ECodeTokenKind::mc_Preprocessor
-							;
-							if (bEnds)
-								break;
+						auto iLine = mp_Lines.f_FindLine(Tokens[iComment].m_iOffset);
+						auto iStart = mp_Lines.f_GetLineStart(iLine);
+						auto nLength = Tokens[iComment].f_GetEnd() - iStart;
+						bWhole
+							= bWhole
+							&& Tokens[iComment].m_Kind == ECodeTokenKind::mc_LineComment
+							&& !Tokens[iComment].m_bMultiLine
+							&& fp_GetSourceLineIndent(iComment) == fp_GetSourceLineIndent(Run[0])
+							&& !mp_ProtectedStart[iLine]
+							&& !fp_IsDisabled(iStart, nLength)
+							&& fp_IsSelected(iStart, nLength)
+						;
+					}
 
-							iLineFirst = fLineFirst(umint(iInFront));
-						}
-
-						if (fStartsCodeLine(iLineFirst))
-							iAbove = aint(iLineFirst);
+					if (!bWhole)
+					{
+						iAbove = -1;
+						nScopeIndent = -1;
 					}
 				}
 
-				if ((iCode < 0 && iAbove < 0) || bCodeBehind || bGroupCloser)
+				if ((iCode < 0 && iAbove < 0 && nScopeIndent < 0) || bCodeBehind || bGroupCloser)
 				{
 					iToken = iLast;
 
@@ -1080,7 +1047,7 @@ namespace NMib::NDevelop::NPrivate
 				// In front of a block's closing brace the run stands where the block's last statement above it does, labels
 				// and clause bodies standing out of it and a case body on its label's line one level in from the label, one
 				// level in from the brace where none does.
-				umint nTarget = fp_GetStatementIndent(umint(iCode >= 0 ? iCode : iAbove));
+				umint nTarget = nScopeIndent >= 0 ? umint(nScopeIndent) : fp_GetStatementIndent(umint(iCode >= 0 ? iCode : iAbove));
 				auto iClosed = iCode >= 0 ? mp_Structure.f_FindNodeClosingAt(umint(iCode)) : Nodes.f_GetLen();
 				if (iCode >= 0 && mp_Tokens.f_IsText(Tokens[umint(iCode)], "}") && iClosed < Nodes.f_GetLen() && Nodes[iClosed].m_Kind == ECodeNodeKind::mc_Block)
 				{
@@ -1141,7 +1108,7 @@ namespace NMib::NDevelop::NPrivate
 
 				// Under a label, also behind the blank line the layout takes out there, the run written deeper than it is the
 				// label's body, one level in from it, whatever follows: 'case 1:' over '// Handled elsewhere' over 'default:'.
-				if (iBefore >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBefore)], ":") && fNewlines(umint(iBefore), iToken) >= 1)
+				if (iBefore >= 0 && mp_Tokens.f_IsText(Tokens[umint(iBefore)], ":") && fp_CountNewlinesBetween(umint(iBefore), iToken) >= 1)
 				{
 					auto iLabel = mp_Structure.f_FindStatementEndingAt(umint(iBefore));
 					bool bLabel = iLabel < Nodes.f_GetLen() && Nodes[iLabel].m_iLastToken == umint(iBefore);
@@ -2976,5 +2943,156 @@ namespace NMib::NDevelop::NPrivate
 			if (bPlain)
 				fp_MarkInline(iToken, umint(iOperand));
 		}
+	}
+
+	// Where no code below places a comment run, as the prefix conversion finds it too, outside functions, in front of a
+	// directive other than a conditional's or a pragma, which go with the code behind them, or the file's end, the run stands
+	// where the statement above it does. A blank line parts it from a conditional's or a pragma too. Under a directive, which
+	// has no depth, it stands at the depth of its block. Brackets that do not nest as written place neither, and the run keeps
+	// its lines.
+	auto CFormattingAnalyzer::fp_FindCommentRunScope(umint _iFirst, umint _iLast, aint _iCode) const -> CCommentRunScope
+	{
+		auto const &Tokens = mp_Tokens.f_GetTokens();
+		auto const &Nodes = mp_Structure.f_GetNodes();
+
+		CCommentRunScope Scope;
+		if (!mp_Structure.f_IsComplete())
+			return Scope;
+
+		if (_iCode < 0)
+		{
+			auto iStop = fp_NextFilled(_iLast);
+			while (iStop >= 0 && fp_IsRunCommentLine(umint(iStop)))
+				iStop = fp_NextFilled(umint(iStop));
+
+			auto iPrevious = fp_PreviousCode(_iFirst);
+			auto iStatement = iPrevious >= 0 ? mp_Structure.f_FindStatementEndingAt(umint(iPrevious)) : Nodes.f_GetLen();
+
+			bool bGoesWithNoCode = iStop < 0;
+			bool bOpenEnd = bGoesWithNoCode;
+			if (iStop >= 0 && Tokens[umint(iStop)].m_Kind == ECodeTokenKind::mc_Preprocessor)
+			{
+				auto Keyword = fp_GetDirectiveKeyword(umint(iStop));
+				bGoesWithNoCode = !Keyword.f_StartsWith("if") && !Keyword.f_StartsWith("el") && Keyword != "endif" && Keyword != "pragma";
+				bOpenEnd = bGoesWithNoCode || fp_HasBlankLineBetween(_iLast, umint(iStop));
+			}
+
+			// The statement is measured from the line its clause starts, the one a block or a body belongs to: 'if (A) {'
+			// or 'if (A)' over 'return B;'.
+			auto fLineFirst = [&](umint _iToken)
+				{
+					auto iLineFirst = mp_Tokens.f_FindToken(mp_Lines.f_GetLineStart(mp_Lines.f_FindLine(Tokens[_iToken].m_iOffset)));
+					while (iLineFirst < _iToken && !fg_IsCodeToken(Tokens[iLineFirst]))
+						++iLineFirst;
+
+					return iLineFirst;
+				}
+			;
+
+			// Inside a function the directives are its code's, whose own rules place the comments around them.
+			bool bInFunction = false;
+			for (auto iNode = iStatement; !bInFunction && iNode < Nodes.f_GetLen() && iNode; iNode = Nodes[iNode].m_iParent)
+				bInFunction = fg_IsFunctionBody(mp_Tokens, mp_Structure, iNode);
+
+			// Past the comment runs above it, which a blank line parts from it, the code tokens skip directives.
+			auto fUnderDirectiveOrOpening = [&](umint _iRun, aint _iPreviousCode)
+				{
+					aint iInFront = aint(_iRun) - 1;
+					while (iInFront >= 0)
+					{
+						auto InFrontKind = Tokens[umint(iInFront)].m_Kind;
+						bool bSkipped
+							= InFrontKind == ECodeTokenKind::mc_Whitespace
+							|| InFrontKind == ECodeTokenKind::mc_Newline
+							|| InFrontKind == ECodeTokenKind::mc_LineSplice
+							|| InFrontKind == ECodeTokenKind::mc_LineComment
+							|| InFrontKind == ECodeTokenKind::mc_BlockComment
+						;
+						if (!bSkipped)
+							break;
+
+						--iInFront;
+					}
+
+					if (iInFront < 0)
+						return false;
+
+					if (Tokens[umint(iInFront)].m_Kind == ECodeTokenKind::mc_Preprocessor)
+						return true;
+
+					return iInFront == _iPreviousCode && mp_Tokens.f_IsText(Tokens[umint(iInFront)], "{");
+				}
+			;
+
+			// A statement ended by its terminator or its block, not a macro's call the structure cannot delimit.
+			auto const *pPrevious = iPrevious >= 0 ? &Tokens[umint(iPrevious)] : nullptr;
+			bool bEnded = pPrevious && (mp_Tokens.f_IsText(*pPrevious, ";") || mp_Tokens.f_IsText(*pPrevious, "}"));
+			if (bOpenEnd && bEnded && !bInFunction && iStatement < Nodes.f_GetLen())
+			{
+				auto iLineFirst = fLineFirst(Nodes[iStatement].m_iFirstToken);
+				for (auto iInFront = fp_PreviousCode(iLineFirst); iInFront >= 0; iInFront = fp_PreviousCode(iLineFirst))
+				{
+					auto const &InFront = Tokens[umint(iInFront)];
+					bool bEnds
+						= mp_Tokens.f_IsText(InFront, ";")
+						|| mp_Tokens.f_IsText(InFront, "{")
+						|| mp_Tokens.f_IsText(InFront, "}")
+						|| mp_Tokens.f_IsText(InFront, ":")
+						|| InFront.m_Kind == ECodeTokenKind::mc_Preprocessor
+					;
+					if (bEnds)
+						break;
+
+					iLineFirst = fLineFirst(umint(iInFront));
+				}
+
+				// A statement on the line of its block's opening brace, 'namespace N { int g_A; // NOLINT', places the run at the
+				// block's depth.
+				auto iBlock = Nodes[iStatement].m_iParent;
+				while (iBlock && iBlock < Nodes.f_GetLen() && Nodes[iBlock].m_Kind != ECodeNodeKind::mc_Block)
+					iBlock = Nodes[iBlock].m_iParent;
+
+				// Code a comment stands in front of on its line places nothing above it: 'LINT */ class C19'.
+				auto iBeforeLine = fp_PreviousSignificant(iLineFirst);
+				if (iBlock && iBlock < Nodes.f_GetLen() && iLineFirst <= Nodes[iBlock].m_iFirstToken)
+				{
+					Scope.m_iBlock = aint(iBlock);
+					Scope.m_bFallback = true;
+				}
+				else if (fg_IsCodeToken(Tokens[iLineFirst]) && (iBeforeLine < 0 || Tokens[umint(iBeforeLine)].m_Kind == ECodeTokenKind::mc_Newline))
+				{
+					Scope.m_iAbove = aint(iLineFirst);
+					Scope.m_bFallback = !bGoesWithNoCode;
+				}
+			}
+			else if (bOpenEnd && iStop >= 0 && fUnderDirectiveOrOpening(_iFirst, iPrevious))
+			{
+				// A function's own rules place the comments in it. Inside an unfinished statement, an expression's group, like an
+				// initializer's braces, or structure the builder could not classify, the run keeps its lines, as the opaque
+				// directives cut the expression. Past the last statement, at the file's end, the code above that ends none is such a
+				// statement, or a macro's call the structure cannot delimit.
+				auto iBlock = mp_Structure.f_FindEnclosingNode(_iFirst);
+				bool bInExpression = (!iBlock || iBlock >= Nodes.f_GetLen()) && pPrevious && !bEnded && !mp_Tokens.f_IsText(*pPrevious, "{");
+				while (iBlock && iBlock < Nodes.f_GetLen() && Nodes[iBlock].m_Kind != ECodeNodeKind::mc_Block && !bInExpression)
+				{
+					auto Kind = Nodes[iBlock].m_Kind;
+					bInExpression = Kind == ECodeNodeKind::mc_Group || Kind == ECodeNodeKind::mc_Statement || Kind == ECodeNodeKind::mc_Unsupported;
+					iBlock = Nodes[iBlock].m_iParent;
+				}
+
+				bool bBlock = iBlock && iBlock < Nodes.f_GetLen();
+				bool bInFunctionBlock = false;
+				for (auto iNode = iBlock; !bInFunctionBlock && bBlock && iNode && iNode < Nodes.f_GetLen(); iNode = Nodes[iNode].m_iParent)
+					bInFunctionBlock = fg_IsFunctionBody(mp_Tokens, mp_Structure, iNode);
+
+				if (!bInFunctionBlock && !bInExpression)
+				{
+					Scope.m_iBlock = bBlock ? aint(iBlock) : aint(Nodes.f_GetLen());
+					Scope.m_bFallback = true;
+				}
+			}
+		}
+
+		return Scope;
 	}
 }

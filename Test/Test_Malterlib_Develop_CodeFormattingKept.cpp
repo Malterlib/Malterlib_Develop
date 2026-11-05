@@ -987,6 +987,170 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			;
 			// In front of a directive a comment stands where the statement above it does.
 			fg_ExpectFormat("CommentInFrontOfDirective", "namespace N\n{\n\tvoid f();\n\n// A\n\n#define DB 1\n}\n", "namespace N\n{\n\tvoid f();\n\n\t// A\n\n#define DB 1\n}\n");
+			{
+				CStr Defines = "namespace N\n{\n\t// A\n#define DA(d_X) d_X\n#define DB(d_X) d_X\n";
+				CStr Below = "\n\n#ifndef DC\n#endif\n}\n";
+				CStr Expected = Defines + "\t// B" + Below;
+				fg_ExpectFormat("CommentUnderDirectiveInFrontOfDirective", Defines + "// B" + Below, Expected);
+				fg_ExpectFormat("CommentUnderDirectiveInFrontOfDirectiveDeeper", Defines + "\t\t\t// B" + Below, Expected);
+				fg_ExpectFormat("CommentUnderDirectiveInFrontOfDirectiveIndented", Expected, Expected);
+				fg_ExpectFormat
+					(
+						"CommentUnderStatementInFrontOfDirective"
+						, "namespace N\n{\n\tstatic_assert(true);\n// B\n\n#ifndef DC\n#endif\n}\n"
+						, "namespace N\n{\n\tstatic_assert(true);\n\t// B\n\n#ifndef DC\n#endif\n}\n"
+					)
+				;
+				fg_ExpectFormat
+					(
+						"CommentsAroundDirectives"
+						, "namespace N\n{\n// A\n#define DA 1\n// B\n\n#ifndef DC\n#endif\n}\n"
+						, "namespace N\n{\n\t// A\n#define DA 1\n\t// B\n\n#ifndef DC\n#endif\n}\n"
+					)
+				;
+				fg_ExpectFormat
+					(
+						"CommentRunsUnderDirectiveInFrontOfDirective"
+						, "namespace N\n{\n#define DA 1\n// A\n\n// B\n\n#ifndef DC\n#endif\n}\n"
+						, "namespace N\n{\n#define DA 1\n\t// A\n\n\t// B\n\n#ifndef DC\n#endif\n}\n"
+					)
+				;
+				CStr Continued = "int g_A;\n/* Note */ // Extra\n           // Continuation\nint g_B;\n";
+				fg_ExpectFormat("ContinuationOfCommentBehindBlockComment", Continued, "int g_A;\n/* Note */ // Extra\n\t\t   // Continuation\nint g_B;\n");
+				fg_ExpectFormat
+					(
+						"RunUnderLineOfBlockCommentsKeepsItsLines"
+						, "namespace N\n{\n#define DA 1\n// Parent\n/* A */ /* B */\n// Child\n\n#define DB 2\n}\n"
+						, "namespace N\n{\n#define DA 1\n// Parent\n/* A */ // B\n// Child\n\n#define DB 2\n}\n"
+						, false
+					)
+				;
+				CStr UnderDirectiveComment = "namespace N\n{\n#define DA 1 // Details\n// A\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("RunUnderDirectiveWithCommentKeepsItsLines", UnderDirectiveComment, UnderDirectiveComment);
+				CStr SplicedComment = "namespace N\n{\n#define DA 1\n// Parent \\\n\t// Child\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("SplicedLineCommentUnderDirectiveKeepsItsLines", SplicedComment, SplicedComment);
+				for (CStr const &Value : {"\"https://example.com\"", "\"/* not a comment\""})
+				{
+					DMibTestPath(Value);
+					fg_ExpectFormat
+						(
+							"RunUnderDirectiveWithCommentMarkerInString"
+							, "namespace N\n{\n#define DValue " + Value + "\n// A\n\n#define DB 2\n}\n"
+							, "namespace N\n{\n#define DValue " + Value + "\n\t// A\n\n#define DB 2\n}\n"
+						)
+					;
+				}
+				CStr SplicedCarriageReturn = "namespace N\r{\r#define DA 1\r// Parent \\\r\t// Child\r\r#define DB 2\r}\r";
+				fg_ExpectFormat("SplicedLineCommentWithCarriageReturnsKeepsItsLines", SplicedCarriageReturn, SplicedCarriageReturn);
+				for (CStr const &Directive : {"#define DA /* Note */ \\\n\t1", "#define DCount 1\\\n'000 // It's a count"})
+				{
+					DMibTestPath(Directive.f_Left(Directive.f_FindChar('\\')));
+					CStr Continued = "namespace N\n{\n" + Directive + "\n// A\n\n#define DB 2\n}\n";
+					fg_ExpectFormat("RunUnderContinuedDirectiveKeepsItsLines", Continued, Continued);
+				}
+				for (CStr const &Directive : {"#define DCode R\"(\na\n)\"", "#include <a//b.h>"})
+				{
+					DMibTestPath(Directive.f_Left(Directive.f_FindChar(' ')));
+					fg_ExpectFormat
+						(
+							"RunUnderStatementInFrontOfDirective"
+							, "namespace N\n{\n\tint g_A;\n// A\n" + Directive + "\n}\n"
+							, "namespace N\n{\n\tint g_A;\n\t// A\n" + Directive + "\n}\n"
+						)
+					;
+				}
+				CStr UnderRawString = "namespace N\n{\n#define DCode R\"(\na\n)\"\n// A\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("RunUnderMultiLineDirectiveKeepsItsLines", UnderRawString, UnderRawString);
+				fg_ExpectFormat
+					(
+						"RunUnderIncludeWithSlashesInHeaderName"
+						, "namespace N\n{\n#include <a//b.h>\n// A\n\n#define DB 2\n}\n"
+						, "namespace N\n{\n#include <a//b.h>\n\t// A\n\n#define DB 2\n}\n"
+					)
+				;
+				CStr UnderNumber = "namespace N\n{\n#define DCount 1'000 // It's a count\n// A\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("RunUnderDirectiveWithNumberAndCommentKeepsItsLines", UnderNumber, UnderNumber);
+				CStr TrailedOpening = "namespace N { int g_A; // NOLINT\n// A\n\n#ifndef DX\n#endif\n}\n";
+				fg_ExpectFormat("CommentUnderTrailingCommentOnBlocksOpeningLine", TrailedOpening, TrailedOpening);
+				for (CStr const &Head : {"class C\n{\n\tint m_A;\n", "struct S\n{\n\tint m_A;\n"})
+				{
+					DMibTestPath(Head.f_Left(Head.f_FindChar('\n')));
+					fg_ExpectFormat
+						(
+							"NestedCommentInFrontOfAccessLabelInConditional"
+							, Head + "// Parent\n\t// Child\n\n#if DX\nprivate:\n#endif\n\tint m_B;\n};\n"
+							, Head + "// Parent\n// \tChild\n\n#if DX\nprivate:\n#endif\n\tint m_B;\n};\n"
+							, false
+						)
+					;
+				}
+				CStr Documented = "namespace N\n{\n#define DA 1\n\t\t// A\n\t\t/** B\nC */\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("RunWithBlockCommentUnderDirectiveKeepsItsLines", Documented, Documented);
+				CStr Trailed = "namespace N\n{\n#define DA 1\n\t// Parent\n\t/* Note */ // Extra\n// Child\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("RunAcrossTrailedBlockCommentKeepsItsLines", Trailed, Trailed);
+				CStr SharedOpening = "namespace N { int g_A; // NOLINT\n#define DA 1\n\t// A\n\n#ifndef DC\n#endif\n}\n";
+				fg_ExpectFormat("CommentUnderStatementOnBlocksOpeningLine", SharedOpening, SharedOpening);
+				fg_ExpectFormat
+					(
+						"CommentUnderDirectiveInBlockOpenedOnItsOwnersLine"
+						, "namespace N { // NOLINT\n#define DA 1\n// A\n\n#define DB 2\n}\n"
+						, "namespace N { // NOLINT\n#define DA 1\n\t// A\n\n#define DB 2\n}\n"
+					)
+				;
+				CStr EndingInBlockComment = "namespace N\n{\n#define DA 1\n// A\n/* Note */ // Extra\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("RunEndingInTrailedBlockCommentKeepsItsLines", EndingInBlockComment, EndingInBlockComment);
+				CStr Nested = "namespace N\n{\n#define DA 1\n// Parent\n\t// Child\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("NestedCommentUnderDirectiveKeepsItsLines", Nested, Nested);
+				CStr Columns = "namespace N\n{\n#define DA 1\n// Parent\n    // Child\n   // Other\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("CommentsAtThreeColumnsUnderDirectiveKeepTheirColumns", Columns, "namespace N\n{\n#define DA 1\n// Parent\n\t// Child\n   // Other\n\n#define DB 2\n}\n");
+				CStr AcrossBlock = "namespace N\n{\n#define DA 1\n// Parent\n/* Note */\n\t// Child\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("CommentsAcrossBlockCommentAtDifferentColumnsKeepTheirLines", AcrossBlock, AcrossBlock);
+				CStr MixedRun = "namespace N\n{\n#define DA 1\n// Parent\n\t// Child\n/* Note */\n#if DX\n#endif\n}\n";
+				fg_ExpectFormat("MixedCommentRunInFrontOfDirective", MixedRun, MixedRun);
+				CStr Unbalanced = "namespace N\n{\n#define DB 1\n// Parent\n\t// Child\n\n#define DC 2\n}\n}\n";
+				fg_ExpectFormat("NestedCommentUnderDirectiveInIncompleteStructure", Unbalanced, Unbalanced);
+				CStr Closers = "namespace N\n{\n#if DA\n}\n#else\n}\n#endif\n#define DB 1\n// Parent\n\t// Child\n\n#define DC 2\n";
+				fg_ExpectFormat("NestedCommentUnderDirectiveInAlternatives", Closers, Closers);
+				CStr Continuing = "namespace N\n{\n\tint g_A; // Details\n\n\t\t// Parent\n\t\t\t// Child\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("ContinuationRunKeepsItsLines", Continuing, Continuing);
+				CStr CodeBehind = "namespace N\n{\n#define DA 1\n// Parent\n\t// Child\n/* Note */ #define DB 2\n}\n";
+				fg_ExpectFormat("RunWithCodeBehindKeepsItsLines", CodeBehind, CodeBehind);
+				CStr Disabled = "namespace N\n{\n#define DA 1\n// malterlib-format off\n// malterlib-format on\n\t// Child\n\n#define DB 2\n}\n";
+				fg_ExpectFormat("RunWithDisabledLinesKeepsItsLines", Disabled, Disabled);
+
+				auto fExpectRangeKeeps = [](CStr const &_Case, CStr const &_Source, CStr const &_Selected, bool _bStrict)
+					{
+						DMibTestPath(_Case);
+						auto Request = fg_Request(_Source);
+						if (_bStrict)
+							Request.m_RangePolicy = ECodeRangePolicy::mc_Strict;
+						auto &Range = Request.m_Ranges.f_Insert();
+						Range.m_iOffset = _Source.f_Find(_Selected);
+						Range.m_nLength = _Selected.f_GetLen();
+						auto Result = fg_AnalyzeCodeFormatting(Request);
+						DMibExpectTrue(Result.m_Status == ECodeFormattingStatus::mc_Complete);
+						DMibExpect(fg_ApplyCodeFormattingEdits(_Source, Result.m_Edits), ==, _Source);
+					}
+				;
+				CStr SameColumn = "namespace N\n{\n#define DA 1\n// Parent\n// Child\n\n#define DB 2\n}\n";
+				fExpectRangeKeeps("PartlySelectedRunKeepsItsLines", SameColumn, "// Child", false);
+				fExpectRangeKeeps("PartlySelectedRunKeepsItsLinesStrictly", SameColumn, "// Child", true);
+				fExpectRangeKeeps("PartlySelectedNestedRunKeepsItsLines", Nested, "\t// Child", false);
+				CStr Indented = "namespace N\n{\n#define DA 1\n\t//\t\tParent\n\t\t//\t\t\tChild\n\n#define DB 2\n}\n";
+				fExpectRangeKeeps("RunWithOneLineSelectedKeepsItsBlanks", Indented, "\t\t//\t\t\tChild", true);
+				CStr Deeper = "namespace N\n{\n#define DA 1\n\t\t// Parent\n\t\t\t// Child\n\n#define DB 2\n}\n";
+				fExpectRangeKeeps("RunWithUnselectedIndentationKeepsItsLines", Deeper, "// Parent\n\t\t\t// Child", true);
+				CStr Trailing = "int g_A =\n#define DA 1\n\t// A\n\n#include \"Value.inc\"\n";
+				fg_ExpectFormat("CommentAfterTrailingUnfinishedStatement", Trailing, Trailing);
+				CStr Spliced = "int g_A[] =\n\t{\n\t\t// A\n\n#define DX 1\n\t\t1, \\\n\t\t2\n\t}\n;\n";
+				fg_ExpectFormat("CommentInUnsupportedInitializerInFrontOfDirective", Spliced, Spliced);
+				CStr Statement = "#if DA\nint g_A =\n#else\nint g_B =\n#endif\n\t// A\n\n#define DValue 2\n\tDValue;\n";
+				fg_ExpectFormat("CommentInStatementInFrontOfOpaqueDirective", Statement, Statement);
+				CStr Continuation = "int g_A =\n#ifdef DX\n\t// A\n\n\t(1 +\n#endif\n\t2\n#ifdef DX\n\t)\n#endif\n;\n";
+				fg_ExpectFormat("CommentInContinuationInFrontOfOpaqueDirective", Continuation, Continuation);
+				CStr Initializer = "int g_A[] =\n\t{\n\t\t// A\n\n#ifdef DX\n\t\t(1 +\n#endif\n\t\t2\n#ifdef DX\n\t\t)\n#endif\n\t}\n;\n";
+				fg_ExpectFormat("CommentInInitializerInFrontOfOpaqueDirective", Initializer, Initializer);
+			}
 			fg_ExpectFormat
 				(
 					"CommentInFrontOfDirectiveInFunction"
