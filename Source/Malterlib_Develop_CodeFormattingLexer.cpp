@@ -39,60 +39,65 @@ namespace
 
 	struct CLexerCursor
 	{
+		bool f_AtEnd() const;
+		ch8 f_Peek(umint _nAhead = 0) const;
+		bool f_SkipLineBreak();
+		bool f_SkipSplice();
+
 		ch8 const *m_pStart = nullptr;
 		umint m_nLength = 0;
 		umint m_iOffset = 0;
+	};
 
-		bool f_AtEnd() const
+	bool CLexerCursor::f_AtEnd() const
+	{
+		return m_iOffset >= m_nLength;
+	}
+
+	ch8 CLexerCursor::f_Peek(umint _nAhead) const
+	{
+		return m_iOffset + _nAhead < m_nLength ? m_pStart[m_iOffset + _nAhead] : ch8(0);
+	}
+
+	// Consumes a line terminator, treating CRLF as one unit. Returns false at other bytes.
+	bool CLexerCursor::f_SkipLineBreak()
+	{
+		if (f_Peek() == '\r')
 		{
-			return m_iOffset >= m_nLength;
-		}
-
-		ch8 f_Peek(umint _nAhead = 0) const
-		{
-			return m_iOffset + _nAhead < m_nLength ? m_pStart[m_iOffset + _nAhead] : ch8(0);
-		}
-
-		// Consumes a line terminator, treating CRLF as one unit. Returns false at other bytes.
-		bool f_SkipLineBreak()
-		{
-			if (f_Peek() == '\r')
-			{
-				m_iOffset += f_Peek(1) == '\n' ? 2 : 1;
-
-				return true;
-			}
-
-			if (f_Peek() == '\n')
-			{
-				++m_iOffset;
-
-				return true;
-			}
-
-			return false;
-		}
-
-		// A backslash before a line terminator splices the next source line onto this one.
-		// Trailing horizontal space between them is a common extension and stays protected.
-		bool f_SkipSplice()
-		{
-			if (f_Peek() != '\\')
-				return false;
-
-			umint iAhead = 1;
-			while (fg_IsHorizontalSpace(f_Peek(iAhead)))
-				++iAhead;
-
-			if (!fg_IsLineBreak(f_Peek(iAhead)))
-				return false;
-
-			m_iOffset += iAhead;
-			f_SkipLineBreak();
+			m_iOffset += f_Peek(1) == '\n' ? 2 : 1;
 
 			return true;
 		}
-	};
+
+		if (f_Peek() == '\n')
+		{
+			++m_iOffset;
+
+			return true;
+		}
+
+		return false;
+	}
+
+	// A backslash before a line terminator splices the next source line onto this one.
+	// Trailing horizontal space between them is a common extension and stays protected.
+	bool CLexerCursor::f_SkipSplice()
+	{
+		if (f_Peek() != '\\')
+			return false;
+
+		umint iAhead = 1;
+		while (fg_IsHorizontalSpace(f_Peek(iAhead)))
+			++iAhead;
+
+		if (!fg_IsLineBreak(f_Peek(iAhead)))
+			return false;
+
+		m_iOffset += iAhead;
+		f_SkipLineBreak();
+
+		return true;
+	}
 
 	bool fg_IsSameText(ch8 const *_pText, umint _nLength, ch8 const *_pOther)
 	{
