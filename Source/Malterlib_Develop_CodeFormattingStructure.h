@@ -65,16 +65,6 @@ namespace NMib::NDevelop
 	// an unsupported node, so the renderer preserves it instead of guessing a shape for it.
 	struct CCodeStructure
 	{
-#if defined(DMibSanitizerEnabled_Address) && defined(DPlatformFamily_Windows)
-		// AddressSanitizer's frames take about 40 KB a level of the layout, of a Windows thread's 1 MB.
-		static constexpr umint mc_MaxBracketDepth = 16;
-#elif defined(DMibDebug) && defined(DPlatformFamily_Windows)
-		// A Debug build's frames take about 5 KB a level of the layout, of a Windows thread's 1 MB.
-		static constexpr umint mc_MaxBracketDepth = 128;
-#else
-		static constexpr umint mc_MaxBracketDepth = 256; // Clang's default '-fbracket-depth'.
-#endif
-
 		CCodeStructure() = default;
 		explicit CCodeStructure(CCodeTokenStream &_Tokens, umint _nTabWidth = 4);
 
@@ -102,6 +92,16 @@ namespace NMib::NDevelop
 		umint f_FindStatementEndingAt(umint _iToken) const;
 		// True for the block of a statement that defines an enumeration.
 		bool f_IsEnumBody(umint _iBlock) const;
+
+#if defined(DMibSanitizerEnabled_Address) && defined(DPlatformFamily_Windows)
+		// AddressSanitizer's frames take about 40 KB a level of the layout, of a Windows thread's 1 MB.
+		static constexpr umint mc_MaxBracketDepth = 16;
+#elif defined(DMibDebug) && defined(DPlatformFamily_Windows)
+		// A Debug build's frames take about 5 KB a level of the layout, of a Windows thread's 1 MB.
+		static constexpr umint mc_MaxBracketDepth = 128;
+#else
+		static constexpr umint mc_MaxBracketDepth = 256; // Clang's default '-fbracket-depth'.
+#endif
 
 	private:
 		void fp_BuildIndex();

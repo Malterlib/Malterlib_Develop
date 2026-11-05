@@ -29,153 +29,162 @@ namespace NMib::NDevelop::NPrivate
 	{
 		struct CSection
 		{
-			explicit CSection(CStr const &_Pattern)
-				: m_Glob(_Pattern)
-			{
-			}
+			explicit CSection(CStr const &_Pattern);
 
 			CPathGlob m_Glob;
 			TCMap<CStr, CStr> m_Properties;
 		};
 
-		explicit CEditorConfigData(CStr const &_Contents)
-		{
-			for (auto const &ConfigLine : _Contents.f_SplitLine())
-			{
-				auto Line = ConfigLine.f_Trim();
-				if (!Line || Line.f_StartsWith("#") || Line.f_StartsWith(";"))
-					continue;
+		explicit CEditorConfigData(CStr const &_Contents);
 
-				if (Line.f_StartsWith("[") && Line.f_EndsWith("]"))
-				{
-					m_Sections.f_Insert(CSection(Line.f_Extract(1, Line.f_GetLen() - 2)));
-					continue;
-				}
-
-				auto iEquals = Line.f_Find("=");
-				if (iEquals < 0)
-					DMibError("Invalid EditorConfig line: {}"_f << Line);
-
-				auto Key = Line.f_Left(iEquals).f_Trim().f_LowerCase();
-				auto Value = Line.f_Extract(iEquals + 1).f_Trim();
-				if
-				(
-					Key == "root"
-					|| Key == "indent_style"
-					|| Key == "indent_size"
-					|| Key == "tab_width"
-					|| Key == "end_of_line"
-					|| Key == "charset"
-					|| Key == "trim_trailing_whitespace"
-					|| Key == "insert_final_newline"
-				)
-				{
-					Value = Value.f_LowerCase();
-				}
-				if (m_Sections.f_IsEmpty())
-				{
-					if (Key == "root")
-						m_bRoot = Value == "true";
-				}
-				else
-					m_Sections[m_Sections.f_GetLen() - 1].m_Properties[Key] = Value;
-			}
-		}
-
-		static bool fs_IsUnset(CStr const &_Value)
-		{
-			if (_Value.f_GetLen() != 5)
-				return false;
-
-			auto pValue = _Value.f_GetStr();
-			for (auto pExpected = "unset"; *pExpected; ++pExpected, ++pValue)
-			{
-				if (*pValue != *pExpected && *pValue != *pExpected - ('a' - 'A'))
-					return false;
-			}
-
-			return true;
-		}
-
-		void f_Apply(CStr const &_RelativePath, TCMap<CStr, CStr> &o_Properties) const
-		{
-			if (m_bRoot)
-				o_Properties.f_Clear();
-
-			auto Path = CPathGlob::fs_ToUnicode(_RelativePath);
-			auto FileName = CPathGlob::fs_ToUnicode(CFile::fs_GetFile(_RelativePath));
-			CPathGlob::CScratch Scratch;
-			for (auto const &Section : m_Sections)
-			{
-				if (!Section.m_Glob.f_Match(Path, FileName, Scratch))
-					continue;
-
-				for (auto const &Property : Section.m_Properties.f_Entries())
-				{
-					if (fs_IsUnset(Property.f_Value()))
-						o_Properties.f_Remove(Property.f_Key());
-					else
-						o_Properties[Property.f_Key()] = Property.f_Value();
-				}
-			}
-		}
-
-		// A section that covers every file under the directory settles its properties for all
-		// of them; one that may cover some of them leaves a property uncertain unless it would
-		// give it the value already settled, as the exclusions nested under an excluded tree
-		// do. A root document starts over for everything below it.
-		void f_ApplyBelow(CStr const &_RelativeDirectory, TCMap<CStr, CStr> &o_Properties, TCSet<CStr> &o_Settled, TCSet<CStr> &o_Uncertain) const
-		{
-			if (m_bRoot)
-			{
-				o_Properties.f_Clear();
-				o_Settled.f_Clear();
-				o_Uncertain.f_Clear();
-			}
-
-			auto Directory = CPathGlob::fs_ToUnicode(_RelativeDirectory == "." ? CStr() : _RelativeDirectory);
-			CPathGlob::CScratch Scratch;
-			for (auto const &Section : m_Sections)
-			{
-				auto Cover = Section.m_Glob.f_MatchBelow(Directory, Scratch);
-				if (Cover == EPathGlobCover::mc_None)
-					continue;
-
-				for (auto const &Property : Section.m_Properties.f_Entries())
-				{
-					if (Cover == EPathGlobCover::mc_Some)
-					{
-						if (!fs_IsSettledTo(Property.f_Key(), Property.f_Value(), o_Properties, o_Settled))
-							o_Uncertain.f_Insert(Property.f_Key());
-
-						continue;
-					}
-
-					o_Uncertain.f_Remove(Property.f_Key());
-					o_Settled.f_Insert(Property.f_Key());
-					if (fs_IsUnset(Property.f_Value()))
-						o_Properties.f_Remove(Property.f_Key());
-					else
-						o_Properties[Property.f_Key()] = Property.f_Value();
-				}
-			}
-		}
-
-		static bool fs_IsSettledTo(CStr const &_Key, CStr const &_Value, TCMap<CStr, CStr> const &_Properties, TCSet<CStr> const &_Settled)
-		{
-			if (!_Settled.f_FindEqual(_Key))
-				return false;
-
-			auto pCurrent = _Properties.f_FindEqual(_Key);
-			if (fs_IsUnset(_Value))
-				return !pCurrent;
-
-			return pCurrent && *pCurrent == _Value;
-		}
+		static bool fs_IsUnset(CStr const &_Value);
+		void f_Apply(CStr const &_RelativePath, TCMap<CStr, CStr> &o_Properties) const;
+		void f_ApplyBelow(CStr const &_RelativeDirectory, TCMap<CStr, CStr> &o_Properties, TCSet<CStr> &o_Settled, TCSet<CStr> &o_Uncertain) const;
+		static bool fs_IsSettledTo(CStr const &_Key, CStr const &_Value, TCMap<CStr, CStr> const &_Properties, TCSet<CStr> const &_Settled);
 
 		bool m_bRoot = false;
 		TCVector<CSection> m_Sections;
 	};
+
+	CEditorConfigData::CSection::CSection(CStr const &_Pattern)
+		: m_Glob(_Pattern)
+	{
+	}
+
+	CEditorConfigData::CEditorConfigData(CStr const &_Contents)
+	{
+		for (auto const &ConfigLine : _Contents.f_SplitLine())
+		{
+			auto Line = ConfigLine.f_Trim();
+			if (!Line || Line.f_StartsWith("#") || Line.f_StartsWith(";"))
+				continue;
+
+			if (Line.f_StartsWith("[") && Line.f_EndsWith("]"))
+			{
+				m_Sections.f_Insert(CSection(Line.f_Extract(1, Line.f_GetLen() - 2)));
+				continue;
+			}
+
+			auto iEquals = Line.f_Find("=");
+			if (iEquals < 0)
+				DMibError("Invalid EditorConfig line: {}"_f << Line);
+
+			auto Key = Line.f_Left(iEquals).f_Trim().f_LowerCase();
+			auto Value = Line.f_Extract(iEquals + 1).f_Trim();
+			if
+			(
+				Key == "root"
+				|| Key == "indent_style"
+				|| Key == "indent_size"
+				|| Key == "tab_width"
+				|| Key == "end_of_line"
+				|| Key == "charset"
+				|| Key == "trim_trailing_whitespace"
+				|| Key == "insert_final_newline"
+			)
+			{
+				Value = Value.f_LowerCase();
+			}
+			if (m_Sections.f_IsEmpty())
+			{
+				if (Key == "root")
+					m_bRoot = Value == "true";
+			}
+			else
+				m_Sections[m_Sections.f_GetLen() - 1].m_Properties[Key] = Value;
+		}
+	}
+
+	bool CEditorConfigData::fs_IsUnset(CStr const &_Value)
+	{
+		if (_Value.f_GetLen() != 5)
+			return false;
+
+		auto pValue = _Value.f_GetStr();
+		for (auto pExpected = "unset"; *pExpected; ++pExpected, ++pValue)
+		{
+			if (*pValue != *pExpected && *pValue != *pExpected - ('a' - 'A'))
+				return false;
+		}
+
+		return true;
+	}
+
+	void CEditorConfigData::f_Apply(CStr const &_RelativePath, TCMap<CStr, CStr> &o_Properties) const
+	{
+		if (m_bRoot)
+			o_Properties.f_Clear();
+
+		auto Path = CPathGlob::fs_ToUnicode(_RelativePath);
+		auto FileName = CPathGlob::fs_ToUnicode(CFile::fs_GetFile(_RelativePath));
+		CPathGlob::CScratch Scratch;
+		for (auto const &Section : m_Sections)
+		{
+			if (!Section.m_Glob.f_Match(Path, FileName, Scratch))
+				continue;
+
+			for (auto const &Property : Section.m_Properties.f_Entries())
+			{
+				if (fs_IsUnset(Property.f_Value()))
+					o_Properties.f_Remove(Property.f_Key());
+				else
+					o_Properties[Property.f_Key()] = Property.f_Value();
+			}
+		}
+	}
+
+	// A section that covers every file under the directory settles its properties for all
+	// of them; one that may cover some of them leaves a property uncertain unless it would
+	// give it the value already settled, as the exclusions nested under an excluded tree
+	// do. A root document starts over for everything below it.
+	void CEditorConfigData::f_ApplyBelow(CStr const &_RelativeDirectory, TCMap<CStr, CStr> &o_Properties, TCSet<CStr> &o_Settled, TCSet<CStr> &o_Uncertain) const
+	{
+		if (m_bRoot)
+		{
+			o_Properties.f_Clear();
+			o_Settled.f_Clear();
+			o_Uncertain.f_Clear();
+		}
+
+		auto Directory = CPathGlob::fs_ToUnicode(_RelativeDirectory == "." ? CStr() : _RelativeDirectory);
+		CPathGlob::CScratch Scratch;
+		for (auto const &Section : m_Sections)
+		{
+			auto Cover = Section.m_Glob.f_MatchBelow(Directory, Scratch);
+			if (Cover == EPathGlobCover::mc_None)
+				continue;
+
+			for (auto const &Property : Section.m_Properties.f_Entries())
+			{
+				if (Cover == EPathGlobCover::mc_Some)
+				{
+					if (!fs_IsSettledTo(Property.f_Key(), Property.f_Value(), o_Properties, o_Settled))
+						o_Uncertain.f_Insert(Property.f_Key());
+
+					continue;
+				}
+
+				o_Uncertain.f_Remove(Property.f_Key());
+				o_Settled.f_Insert(Property.f_Key());
+				if (fs_IsUnset(Property.f_Value()))
+					o_Properties.f_Remove(Property.f_Key());
+				else
+					o_Properties[Property.f_Key()] = Property.f_Value();
+			}
+		}
+	}
+
+	bool CEditorConfigData::fs_IsSettledTo(CStr const &_Key, CStr const &_Value, TCMap<CStr, CStr> const &_Properties, TCSet<CStr> const &_Settled)
+	{
+		if (!_Settled.f_FindEqual(_Key))
+			return false;
+
+		auto pCurrent = _Properties.f_FindEqual(_Key);
+		if (fs_IsUnset(_Value))
+			return !pCurrent;
+
+		return pCurrent && *pCurrent == _Value;
+	}
 
 	// The documents that apply to the files of one directory, outermost first.
 	struct CEditorConfigChainEntry
