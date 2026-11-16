@@ -866,13 +866,7 @@ namespace
 			fg_ExpectCFormat("GnuKeywordKeepsBraces", GnuSigned, GnuSigned);
 			CStr ExtInt = "void f(void)\n{\n\tif (b)\n\t{\n\t\t_ExtInt(8) v = 1;\n\t}\n}\n";
 			fg_ExpectCFormat("ExtIntKeepsBraces", ExtInt, ExtInt);
-			fg_ExpectCFormat
-				(
-					"AlignasKeepsBraces"
-					, "void f(void)\n{\n\tif (b)\n\t{\n\t\talignas(16) int x;\n\t}\n}\n"
-					, "void f(void)\n{\n\tif (b)\n\t{\n\t\talignas(16) int x;\n\t}\n}\n"
-				)
-			;
+			fg_ExpectCFormat("AlignasKeepsBraces", "void f(void)\n{\n\tif (b)\n\t{\n\t\talignas(16) int x;\n\t}\n}\n", "void f(void)\n{\n\tif (b)\n\t{\n\t\talignas(16) int x;\n\t}\n}\n");
 			fg_ExpectCFormat
 				(
 					"ParenthesizedDeclaratorKeepsBraces"
@@ -1079,10 +1073,8 @@ namespace
 					fg_ExpectFormat
 						(
 							"CommentInSignature"
-							, CStr("@interface CFoo : NSObject\n-(void)m1;\n-(void)m3:(int)block\n  ATTR(zero_argument, 1) // ~\n  ATTR2(swift_private, 1);\n@end\n")
-							.f_Replace("~", Comment)
-							, CStr("@interface CFoo : NSObject\n- (void)m1;\n- (void)m3: (int)block ATTR(zero_argument, 1) // ~\n  ATTR2(swift_private, 1);\n@end\n")
-							.f_Replace("~", Comment)
+							, CStr("@interface CFoo : NSObject\n-(void)m1;\n-(void)m3:(int)block\n  ATTR(zero_argument, 1) // ~\n  ATTR2(swift_private, 1);\n@end\n").f_Replace("~", Comment)
+							, CStr("@interface CFoo : NSObject\n- (void)m1;\n- (void)m3: (int)block ATTR(zero_argument, 1) // ~\n  ATTR2(swift_private, 1);\n@end\n").f_Replace("~", Comment)
 							, false
 						)
 					;
@@ -1279,13 +1271,7 @@ namespace
 					)
 				;
 				// A comment in front of the '=' keeps its entry out of the run.
-				fExpect
-					(
-						"CommentBeforeValue"
-						, "enum E\n{\n\tA = 1\n\t, B /* note */ = 2\n\t, CLonger = 3\n};\n"
-						, "enum E\n{\n\tA         = 1\n\t, B /* note */ = 2\n\t, CLonger = 3\n};\n"
-					)
-				;
+				fExpect("CommentBeforeValue", "enum E\n{\n\tA = 1\n\t, B /* note */ = 2\n\t, CLonger = 3\n};\n", "enum E\n{\n\tA         = 1\n\t, B /* note */ = 2\n\t, CLonger = 3\n};\n");
 				// A comment continued on the lines below keeps its entry in the run, and its lines follow it.
 				fExpect
 					(
@@ -3103,24 +3089,12 @@ namespace
 				// A parameter named behind an attribute in a nested declarator hides a return type of that name.
 				fExpect("AttributedNestedParameter", "using X@ = int;\nX@ fg_Function@(int (* [[]] X@)());\n", "using X@ = int;\nX@ fg_Function@\n\t(\n\t\tint (* [[]] X@)()\n\t)\n;\n");
 				// Behind a parenthesis another macro can expand to a macro's name, so a list there keeps its trailing comma.
-				fExpect
-					(
-						"IndirectMacroListComma"
-						, "#define M(A, B, C) 0\n#define GET() M\nint n = GET()({1,\n2,\n});\n"
-						, "#define M(A, B, C) 0\n#define GET() M\nint n = GET()({1, 2,});\n"
-					)
-				;
+				fExpect("IndirectMacroListComma", "#define M(A, B, C) 0\n#define GET() M\nint n = GET()({1,\n2,\n});\n", "#define M(A, B, C) 0\n#define GET() M\nint n = GET()({1, 2,});\n");
 				// An embedded resource's name keeps its blanks across a continuation, as a header's does.
 				CStr Embed = "#embed <dir/\\\n  data.bin>\n";
 				fExpect("EmbedContinuation", Embed, Embed);
 				// An operator's alternative spelling makes the parenthesis a constructor's arguments.
-				fExpect
-					(
-						"AlternativeOperatorArguments"
-						, "void f()\n{\n\tCBoolType Value@@@(a not_eq b);\n}\n"
-						, "void f()\n{\n\tCBoolType Value@@@\n\t\t(\n\t\t\ta not_eq b\n\t\t)\n\t;\n}\n"
-					)
-				;
+				fExpect("AlternativeOperatorArguments", "void f()\n{\n\tCBoolType Value@@@(a not_eq b);\n}\n", "void f()\n{\n\tCBoolType Value@@@\n\t\t(\n\t\t\ta not_eq b\n\t\t)\n\t;\n}\n");
 				// An enum's list written over lines starts under the brace as one written on one line does.
 				fExpect("EnumeratorsOverLines", "enum E { A,\n B };\n", "enum E\n{\n\tA\n\t, B\n};\n");
 				// A macro's argument keeps its qualifiers where they are: the macro can paste to them or take a name, no type.
