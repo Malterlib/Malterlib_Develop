@@ -1676,6 +1676,32 @@ namespace NMib::NDevelop::NCodeFormattingTest
 					, "void f()\n{\n\tco_return co_await m_Promises\n\t\t.f_Insert() // why\n\t\t.f_Future()\n\t;\n}\n"
 				)
 			;
+			// The comment keeps the chain broken at every member, and the call in front of the chain opens at the chain's level as
+			// it does where no comment stands in it, its parentheses one level in from the statement.
+			{
+				CStr Chain
+					= "void f()\n{\n\tStyleSheet += QString\n\t\t(\n"
+						"\t\t\t\" CExample#Edit { background-color: %1; color: %2; border: 1px solid %3; \"\n"
+						"\t\t\t\"padding-left: 2px; padding-top: 1px; padding-bottom: 1px; padding-right: 2px; }\"\n"
+						"\t\t)\n\t\t.arg(fg_FirstColor())\n\t\t.arg(fg_SecondColor()) // A comment about the second color\n\t\t.arg(fg_ThirdColor())\n\t;\n}\n"
+				;
+				fg_ExpectFormat("CommentMembersBehindCall", Chain, Chain);
+
+				CStr Long
+					= "\"padding-left: 2px; padding-top: 1px; padding-bottom: 1px; padding-right: 2px; "
+						"padding-left: 2px; padding-top: 1px; padding-bottom: 1px; padding-right: 2px; \""
+				;
+				fg_ExpectFormat
+					(
+						"CommentMembersBehindOpenedCall"
+						, "void f()\n{\n\tauto Value = QString(" + Long + ", fg_Value()).arg(fg_First()) // Comment\n\t\t.arg(fg_Second());\n}\n"
+						, "void f()\n{\n\tauto Value = QString\n\t\t(\n\t\t\t"
+						+ Long
+						+ "\n\t\t\t, fg_Value()\n\t\t)\n\t\t.arg(fg_First()) // Comment\n"
+						"\t\t.arg(fg_Second())\n\t;\n}\n"
+					)
+				;
+			}
 			// A string with a marker behind it starts an object only as a key, with its '='.
 			fg_ExpectFormat("DSLMarkerNoKey", "auto g_A{\n\t\"a\"_ch >> b};\n", "auto g_A\n\t{\n\t\t\"a\"_ch >> b\n\t}\n;\n");
 			// A DSL's array written across lines keeps them, as an initializer does, and one

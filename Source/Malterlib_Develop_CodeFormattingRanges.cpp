@@ -64,11 +64,13 @@ namespace NMib::NDevelop::NPrivate
 			if (iLast < 0 || umint(iLast) < iStart)
 				continue;
 
+			// What the chain is called on stays at the continuation level where a comment or directive cuts the chain, so a scope it
+			// opens stands there, as where nothing cuts it.
 			auto nSegmentIndent = iSegment ? _nContinuation : _iIndent;
 			if (fp_FitsInline(iStart, umint(iLast), nSegmentIndent))
 				fp_MarkInline(iStart, umint(iLast));
 			else
-				fp_LayoutScopes(_iNode, iStart, umint(iLast), nSegmentIndent, false, false);
+				fp_LayoutScopes(_iNode, iStart, umint(iLast), nSegmentIndent, false, !iSegment && _nContinuation != _iIndent);
 		}
 
 		return true;

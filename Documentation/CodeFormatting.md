@@ -1107,7 +1107,10 @@ Everywhere else a directive is transparent: it only ends the line it stands on,
 as a line comment does. A line comment inside a construct is treated the same
 way: what stands behind it is a line of its own and is measured as one, so a
 base clause under `class CFoo // Comment` stays closed where it fits, and a
-member chain broken at a comment stays broken at every member. The construct
+member chain broken at a comment stays broken at every member, while what the
+chain is called on opens its scopes at the chain's level, as it does where no
+comment breaks the chain: `StyleSheet += QString` over `(` one level in, under
+it the `.arg(...)` lines. The construct
 around it is written split, each stretch between two directives is a line of its
 own at the level the construct gives it, and a stretch is only broken further
 where it is still too long, so no construct is opened up to make room that no
