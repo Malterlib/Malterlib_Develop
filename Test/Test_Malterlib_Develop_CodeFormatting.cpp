@@ -383,6 +383,24 @@ namespace
 				DMibExpect(Stream.f_GetText(Tokens[10]), ==, "#define A \\\n\tB");
 			};
 
+			// A raw string's text is told on its token, between the parenthesis behind its opening delimiter and the one in front of its
+			// closing delimiter, and not where it is unterminated.
+			DMibTestCategory("RawStringInterior")
+			{
+				CCodeTokenStream Stream("auto g_A = u8R\"d(a\nb)d\";\nauto g_B = \"(a)\";\n");
+				CStr Interiors;
+				for (auto const &Token : Stream.f_GetTokens())
+				{
+					if (Token.m_Kind == ECodeTokenKind::mc_StringLiteral)
+						Interiors += "{}-{};"_f << Token.m_iRawInteriorStart << Token.m_iRawInteriorEnd;
+				}
+				DMibExpect(Interiors, ==, "6-9;0-0;");
+
+				CCodeTokenStream Unterminated("auto g_A = R\"d(a\n");
+				DMibExpectFalse(Unterminated.f_IsComplete());
+				DMibExpect(Unterminated.f_GetTokens().f_GetLast().m_iRawInteriorEnd, ==, 0u);
+			};
+
 			DMibTestCategory("DirectiveDigitSeparator")
 			{
 				CCodeTokenStream Stream("#define DCount 1'000 /* It's\na count */\nint g_A;\n");
@@ -4271,6 +4289,56 @@ namespace
 					// Inside a block comment the directives stand on lines of their own, without the '//'.
 					DMibExpect(fLengthReports("/*\tmalterlib-format off\n\tA F(\"a\", `" + Value + "`)\n\tmalterlib-format on\n*/\n"), ==, 0u);
 					DMibExpect(fLengthReports("/*\n\tA F(\"a\", `" + Value + "`)\n*/\n"), ==, 1u);
+				}
+
+				// In C and C++ the lines inside a raw string literal written across lines count for no width, since only changing the
+				// string's value could shorten them. The line it starts on counts up to its opening, and the line it ends on from its
+				// closing.
+				{
+					DMibTestPath("MultiLineRawString");
+
+					CStr Value;
+					for (umint iChar = 0; iChar < 200; ++iChar)
+						Value += "v";
+
+					auto fLengthReports = [&](CStr const &_Source) -> TCVector<umint>
+						{
+							TCVector<umint> Lines;
+							for (auto const &Diagnostic : fg_Analyze(_Source).m_Diagnostics)
+							{
+								if (Diagnostic.m_Rule == "line-length")
+									Lines.f_Insert(Diagnostic.m_iLine);
+							}
+
+							return Lines;
+						}
+					;
+
+					DMibExpect(fLengthReports("void f()\n{\n\tauto Json = R\"json({\n\t\t\"" + Value + "\"\n\t})json\";\n}\n"), ==, TCVector<umint>{});
+					DMibExpect(fLengthReports("auto g_Text = u8R\"(\n" + Value + "\n)\"_f;\n"), ==, TCVector<umint>{});
+
+					// What stands in front of the opening and behind the closing counts.
+					DMibExpect(fLengthReports("auto g_" + Value + " = R\"(\nA\n)\";\n"), ==, TCVector<umint>{1});
+					DMibExpect(fLengthReports("auto g_Text = R\"x(\nA\n)x\" + g_" + Value + ";\n"), ==, TCVector<umint>{3});
+
+					// A string on one line counts.
+					DMibExpect(fLengthReports("auto g_Text = R\"(" + Value + ")\";\n"), ==, TCVector<umint>{1});
+
+					// Every other literal is measured as written: a string continued with splices, and a literal in a directive, a raw
+					// string in a '#define' too.
+					DMibExpect(fLengthReports("auto g_Text = \"a\\\n" + Value + "\";\n"), ==, TCVector<umint>{2});
+					DMibExpect(fLengthReports("#define DJson R\"json({\n\t\"" + Value + "\"\n})json\"\n"), ==, TCVector<umint>{2});
+					DMibExpect(fLengthReports("#define DText \"a\\\n" + Value + "\"\n"), ==, TCVector<umint>{2});
+					DMibExpect(fLengthReports("#include \"a\\\n" + Value + ".h\"\n"), ==, TCVector<umint>{2});
+					DMibExpect(fLengthReports("#define D" + Value + " R\"(\nA\n)\"\n"), ==, TCVector<umint>{1});
+
+					{
+						DMibTestPath("ReportedWidth");
+
+						auto Result = fg_Analyze("auto g_" + Value + " = R\"(0123456789\nA\n)\";\n");
+						DMibAssert(Result.m_Diagnostics.f_GetLen(), ==, 1u);
+						DMibExpect(Result.m_Diagnostics[0].m_Explanation, ==, "line length 213 exceeds max_line_length = 190");
+					}
 				}
 
 				{

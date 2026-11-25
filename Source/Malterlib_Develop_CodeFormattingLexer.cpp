@@ -172,8 +172,12 @@ namespace
 		return true;
 	}
 
-	bool fg_LexRawString(CLexerCursor &_Cursor)
+	// o_iInteriorStart and o_iInteriorEnd are the offsets of the text between the parenthesis behind the opening delimiter and the
+	// one in front of the closing one, both 0 where the string is unterminated.
+	bool fg_LexRawString(CLexerCursor &_Cursor, umint &o_iInteriorStart, umint &o_iInteriorEnd)
 	{
+		o_iInteriorStart = 0;
+		o_iInteriorEnd = 0;
 		++_Cursor.m_iOffset;
 		auto iDelimiter = _Cursor.m_iOffset;
 
@@ -201,6 +205,8 @@ namespace
 
 			if (iChar == nDelimiter && _Cursor.f_Peek(1 + nDelimiter) == '"')
 			{
+				o_iInteriorStart = iDelimiter + nDelimiter + 1;
+				o_iInteriorEnd = _Cursor.m_iOffset;
 				_Cursor.m_iOffset += nDelimiter + 2;
 
 				return false;
@@ -210,6 +216,14 @@ namespace
 		}
 
 		return true;
+	}
+
+	bool fg_LexRawString(CLexerCursor &_Cursor)
+	{
+		umint iInteriorStart = 0;
+		umint iInteriorEnd = 0;
+
+		return fg_LexRawString(_Cursor, iInteriorStart, iInteriorEnd);
 	}
 
 	void fg_LexNumber(CLexerCursor &_Cursor)
@@ -1409,8 +1423,16 @@ namespace NMib::NDevelop
 				auto Quote = Cursor.f_Peek();
 				if (Quote == '"' && fg_IsOneOf(pPrefix, nPrefix, {"R", "u8R", "LR", "uR", "UR"}))
 				{
-					auto bUnterminated = fg_LexRawString(Cursor);
+					umint iInteriorStart = 0;
+					umint iInteriorEnd = 0;
+					auto bUnterminated = fg_LexRawString(Cursor, iInteriorStart, iInteriorEnd);
 					fEmit(ECodeTokenKind::mc_StringLiteral, iStart, bUnterminated);
+					if (iInteriorEnd)
+					{
+						auto &Token = mp_Tokens.f_GetLast();
+						Token.m_iRawInteriorStart = uint32(iInteriorStart - iStart);
+						Token.m_iRawInteriorEnd = uint32(iInteriorEnd - iStart);
+					}
 
 					continue;
 				}

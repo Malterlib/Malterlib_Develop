@@ -1824,7 +1824,8 @@ namespace NMib::NDevelop::NPrivate
 	// line they break up is no violation, and only what they leave too long is reported,
 	// against the source line the result's line came from. In the build system's files a string
 	// ending a line counts for no width, since its value is what makes the line long and no break
-	// can shorten it; what stands in front of it counts.
+	// can shorten it; what stands in front of it counts. In C and C++ the text inside a raw string
+	// literal written across lines counts for none for the same reason, outside a directive.
 	void CFormattingAnalyzer::fp_DiagnoseLineLength(NContainer::TCVector<CCodeFormattingEdit> const &_Edits)
 	{
 		auto nMaxColumns = mp_Request.m_Settings.m_nMaxColumns;
@@ -1835,17 +1836,93 @@ namespace NMib::NDevelop::NPrivate
 		CTextLineMap Lines(Formatted);
 		auto pFormatted = Formatted.f_GetStr();
 		auto Language = mp_Request.m_Settings.f_GetLanguage();
+
+		// Lexed only once the width of a line can't be told without the raw strings' interiors.
 		TCUniquePointer<CCodeTokenStream> pStringTokens;
-		if (Language == ECodeLanguage::mc_BuildSystem)
-			pStringTokens = fg_Construct(Formatted, nullptr, Language);
+		auto fStringTokens = [&]() -> CCodeTokenStream const &
+			{
+				if (!pStringTokens)
+					pStringTokens = fg_Construct(Formatted, nullptr, Language);
+
+				return *pStringTokens;
+			}
+		;
+
+		struct CInterior
+		{
+			umint m_iStart = 0;
+			umint m_iEnd = 0;
+		};
+
+		// The interiors of the file's raw strings written across lines, in order, as the lexer read them: from behind the opening
+		// delimiter's parenthesis to the one in front of the closing delimiter. Only a raw string holds line breaks of its own; any
+		// other literal written across lines is continued with splices, and is measured as written. A directive is one token, whose
+		// literals, a raw string in a '#define' too, are measured as written.
+		TCVector<CInterior> Interiors;
+		bool bInteriorsFound = false;
+		auto fInteriors = [&]() -> TCVector<CInterior> const &
+			{
+				if (bInteriorsFound)
+					return Interiors;
+
+				bInteriorsFound = true;
+				for (auto const &Token : fStringTokens().f_GetTokens())
+				{
+					if (Token.m_Kind == ECodeTokenKind::mc_StringLiteral && Token.m_bMultiLine && Token.m_iRawInteriorEnd > Token.m_iRawInteriorStart)
+						Interiors.f_Insert(CInterior{Token.m_iOffset + Token.m_iRawInteriorStart, Token.m_iOffset + Token.m_iRawInteriorEnd});
+				}
+
+				return Interiors;
+			}
+		;
+
+		// The text of a line outside the interiors of the raw strings written across lines that it holds: what stands in
+		// front of a raw string's opening, the opening, and what stands from its closing on. A line wholly inside one has none.
+		auto fOutsideRawStrings = [&](umint _iStart, umint _nLength) -> CStr
+			{
+				auto const &Found = fInteriors();
+				auto iEnd = _iStart + _nLength;
+
+				aint iFirst = Found.f_BinarySearchUpperBound
+					(
+						[](CInterior const &_Interior, umint _iOffset)
+						{
+							return _Interior.m_iEnd <=> _iOffset;
+						}
+						, _iStart
+					)
+				;
+				umint iLow = iFirst < 0 ? 0 : umint(iFirst);
+
+				CStr Outside;
+				umint iCopied = _iStart;
+				for (auto iInterior = iLow; iInterior < Found.f_GetLen() && Found[iInterior].m_iStart < iEnd; ++iInterior)
+				{
+					auto iSkip = fg_Max(Found[iInterior].m_iStart, iCopied);
+					auto iResume = fg_Min(Found[iInterior].m_iEnd, iEnd);
+					if (iResume <= iSkip)
+						continue;
+
+					Outside += Formatted.f_Extract(iCopied, iSkip - iCopied);
+					iCopied = iResume;
+				}
+
+				if (iCopied == _iStart)
+					return Formatted.f_Extract(_iStart, _nLength);
+
+				Outside += Formatted.f_Extract(iCopied, iEnd - iCopied);
+
+				return Outside;
+			}
+		;
 
 		// The line's text in front of the string that ends it, which only a splice may follow, or the whole line.
 		auto fWithoutEndingString = [&](umint _iStart, umint _nLength)
 			{
-				auto const &Tokens = pStringTokens->f_GetTokens();
+				auto const &Tokens = fStringTokens().f_GetTokens();
 				auto iEnd = _iStart + _nLength;
 				aint iEnding = -1;
-				for (auto iToken = pStringTokens->f_FindToken(_iStart); iToken < Tokens.f_GetLen() && Tokens[iToken].m_iOffset < iEnd; ++iToken)
+				for (auto iToken = fStringTokens().f_FindToken(_iStart); iToken < Tokens.f_GetLen() && Tokens[iToken].m_iOffset < iEnd; ++iToken)
 				{
 					auto Kind = Tokens[iToken].m_Kind;
 					if (Kind == ECodeTokenKind::mc_StringLiteral)
@@ -1884,8 +1961,12 @@ namespace NMib::NDevelop::NPrivate
 				continue;
 
 			umint nCodeColumns = 0;
-			if (pStringTokens && fg_MeasureTextColumns(fWithoutEndingString(iStart, nLength), mp_Request.m_Settings.m_nTabWidth, nCodeColumns) && nCodeColumns <= nMaxColumns)
+			auto Code = Language == ECodeLanguage::mc_BuildSystem ? fWithoutEndingString(iStart, nLength) : fOutsideRawStrings(iStart, nLength);
+			bMeasured = fg_MeasureTextColumns(Code, mp_Request.m_Settings.m_nTabWidth, nCodeColumns);
+			if (bMeasured && nCodeColumns <= nMaxColumns)
 				continue;
+
+			nColumns = nCodeColumns;
 
 			// Several lines of the result can come from one line of the source, which is
 			// then named once.

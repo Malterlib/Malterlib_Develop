@@ -61,6 +61,8 @@ namespace NMib::NDevelop
 		bool m_bUnterminated = false;     // The source ends inside the token.
 		bool m_bPlainName = false;        // In C, a word only C++ reserves, which no rule reads as that keyword.
 		bool m_bCpp = false;              // In C, it stands in a branch only C++ compiles: '#ifdef __cplusplus'.
+		uint32 m_iRawInteriorStart = 0;   // In a raw string, where its text starts, behind 'delimiter(', from the token's start.
+		uint32 m_iRawInteriorEnd = 0;     // In a raw string, where its text ends, at ')delimiter', from the token's start; 0 if unterminated.
 		ch8 const *m_pOperator = nullptr; // In C++, the operator an alternative token spells, 'or' for '||', which the rules read it as.
 		ECodeNameRole m_Roles = ECodeNameRole::mc_None;
 	};

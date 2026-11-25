@@ -295,7 +295,7 @@ the effective ranges leaves the plan as it stands.
 | `line-break` | Brings a split construct back to one line when it fits and nothing forbids it, splits one too long for its line outermost break first (see [Line structure](#line-structure)), and gives a block's braces and statements lines of their own. |
 | `layout-directive` | A list a `columns`, `table` or `rows` directive leads stands in rows, and the lines an `align: =` directive leads have their `=` at one column (see Protected regions). Reports the directive where its list keeps its lines. |
 | `structure` | Diagnostic only; the file's brackets do not nest as written, so no line of it can be placed and all of them are kept. |
-| `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source.  In the build system's files, a string ending a line, a template string included, counts for no width, since its value is what makes the line long and no break shortens it; what stands in front of it counts, and so does a string with more behind it. |
+| `line-length` | Diagnostic only, and measured on the formatted result: the lines the other rules break up are no violation, and one they leave too long is named where it stands in the source.  In the build system's files, a string ending a line, a template string included, counts for no width, since its value is what makes the line long and no break shortens it; what stands in front of it counts, and so does a string with more behind it. In C and C++ the text inside a raw string literal written across lines counts for no width, since only changing the string's value could shorten it: a line inside one counts for none, the line it starts on counts up to its opening, `R"json(`, and the line it ends on from its closing, `)json"`. Every other literal is measured as written, a string continued over lines with splices included, and so is every literal in a directive, a raw string in a `#define` too. The width reported is the one that counts. |
 | `east-qualifier` | A `const` or `volatile` written in front of its type moves behind it: `const int &_Value` becomes `int const &_Value`. |
 | `specifier-order` | `static` stands in front of `constexpr`: `constexpr static umint` becomes `static constexpr umint`. |
 | `empty-statement` | A statement terminator that ends nothing is taken out: `f_Call();;` becomes `f_Call();`. Only an empty statement standing behind another terminator goes, with nothing but spaces, line breaks and comments between them. The comments stay where they are, and a block comment in front of it on its line keeps it, since the comment would come to end the line. |
@@ -1316,7 +1316,9 @@ that never closes, and a literal the file ends inside make the file unsupported.
 
 Layout inside multiline tokens is never touched: block comments, string and
 character literals including raw strings, and the line a backslash splice ends
-on. A directive continued over lines is the exception: `directive-indentation`
+on. The lines inside a raw string literal written across lines, outside a
+directive, are no `line-length` violation either, as no change but one to the
+string's value shortens them. A directive continued over lines is the exception: `directive-indentation`
 moves its continuation lines and the splices behind them. So is the indentation
 of a block comment's lines, which `comment-space` settles against its `/*` and
 which move with it. A leading UTF-8
