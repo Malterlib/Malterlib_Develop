@@ -1603,6 +1603,15 @@ namespace NMib::NDevelop::NCodeFormattingTest
 						, "NContainer::TCVector<CStr> g_A;\nTCVector<NContainer::TCVector<int>> g_B;\nauto X = Array.f_Get<CStr>();\nbool Y = i < n;\nbool Z = j < k;\n"
 					)
 				;
+				// A spaced '<' behind a type opens a list whose closer it shares with a list inside it, '>>', as it does when it
+				// closes on a '>' of its own, wherever the declaration stands.
+				fg_ExpectFormat
+					(
+						"SpacedInFrontOfNestedCloser"
+						, "TCVector <TCVector<int>> g_Vector;\n\nstruct CFoo\n{\n\tTCMap <int, TCVector<int>> m_Map;\n};\n\nvoid f()\n{\n\tTCVector <TCVector<int>> Vector;\n}\n"
+						, "TCVector<TCVector<int>> g_Vector;\n\nstruct CFoo\n{\n\tTCMap<int, TCVector<int>> m_Map;\n};\n\nvoid f()\n{\n\tTCVector<TCVector<int>> Vector;\n}\n"
+					)
+				;
 				// So does one behind a named cast, and one whose first argument is a fundamental type, which no operand of a
 				// comparison starts with but a functional cast.
 				fg_ExpectFormat

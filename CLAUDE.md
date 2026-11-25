@@ -165,6 +165,10 @@ options section), each off unless a document sets it. A new option needs its
 own key, defaulting to the current layout, and turning it on and off again must
 give back the source: a corpus trial runs the tree both ways.
 
+Verification lexes the sources with the request's style, as the structure is
+built with it: the naming decides where a `<` opens a template argument list,
+and so which `>>` closes two of them.
+
 A decision and the spelling it is measured against have to agree. Width is
 measured at the width the spacing rules write, never at the source's, and a
 spacing rule never writes into a gap the layout breaks. Every convergence

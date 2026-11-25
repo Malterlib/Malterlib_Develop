@@ -144,7 +144,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 		// Formatting is idempotent: a second pass must find nothing left to do.
 		DMibExpect(fg_FormatSource(Formatted, "Second"), ==, _Expected);
 		if (_bTokensPreserved)
-			DMibExpectTrue(fg_HasEquivalentCodeTokens(_Source, Formatted));
+			DMibExpectTrue(fg_HasEquivalentCodeTokens(_Source, Formatted, ECodeLanguage::mc_Cpp, fg_MalterlibStyle().f_Get()));
 	}
 
 	// A project indented with spaces, two to a level, and lines at most 80 columns long, as LLVM's.
@@ -183,7 +183,7 @@ namespace NMib::NDevelop::NCodeFormattingTest
 		auto Formatted = fFormat(_Source, "First");
 		DMibExpect(Formatted, ==, _Expected);
 		DMibExpect(fFormat(Formatted, "Second"), ==, _Expected);
-		DMibExpectTrue(fg_HasEquivalentCodeTokens(_Source, Formatted));
+		DMibExpectTrue(fg_HasEquivalentCodeTokens(_Source, Formatted, ECodeLanguage::mc_Cpp, fg_MalterlibStyle().f_Get()));
 	}
 
 	CCodeFormattingRequest fg_BuildSystemRequest(CStr const &_Source)
@@ -3845,6 +3845,8 @@ namespace
 			DMibExpectFalse(fg_HasEquivalentCodeTokens("a >> b;", "a > > b;", ECodeLanguage::mc_C));
 			// In C++ only a '>>' closing two lists is two tokens; a shift and a shift assignment are one.
 			DMibExpectTrue(fg_HasEquivalentCodeTokens("TCVector<TCVector<int>> x;", "TCVector<TCVector<int> > x;", ECodeLanguage::mc_Cpp));
+			// Behind a name the naming lists as a type's a spaced '<' opens a list, which shares the '>>' with the one inside it.
+			DMibExpectTrue(fg_HasEquivalentCodeTokens("TCVector <TCVector<int>> x;", "TCVector<TCVector<int>> x;", ECodeLanguage::mc_Cpp, fg_MalterlibStyle().f_Get()));
 			DMibExpectFalse(fg_HasEquivalentCodeTokens("x >> 1;", "x > > 1;", ECodeLanguage::mc_Cpp));
 			DMibExpectFalse(fg_HasEquivalentCodeTokens("x >>= 1;", "x > >= 1;", ECodeLanguage::mc_Cpp));
 			// A pragma in front of an 'if' keeps the braces that keep an 'else' behind them from it.

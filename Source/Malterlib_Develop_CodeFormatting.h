@@ -124,8 +124,10 @@ namespace NMib::NDevelop
 	// True when the two sources have the same significant token sequence, ignoring layout.
 	// Every rule but the trailing return type conversion is whitespace-only, so this holds
 	// between a plan's result and the source with only those conversions applied.
-	bool fg_HasEquivalentCodeTokens(NStr::CStr const &_First, NStr::CStr const &_Second, ECodeLanguage _Language = ECodeLanguage::mc_Cpp);
+	bool fg_HasEquivalentCodeTokens(NStr::CStr const &_First, NStr::CStr const &_Second, ECodeLanguage _Language = ECodeLanguage::mc_Cpp, CCodeFormattingStyle const *_pStyle = nullptr);
 
 	// Describes the first token difference between two sources, for formatter diagnostics.
-	NStr::CStr fg_DescribeCodeTokenDifference(NStr::CStr const &_First, NStr::CStr const &_Second, ECodeLanguage _Language = ECodeLanguage::mc_Cpp);
+	auto fg_DescribeCodeTokenDifference(NStr::CStr const &_First, NStr::CStr const &_Second, ECodeLanguage _Language = ECodeLanguage::mc_Cpp, CCodeFormattingStyle const *_pStyle = nullptr)
+		-> NStr::CStr
+	;
 }

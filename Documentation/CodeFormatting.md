@@ -261,6 +261,8 @@ The implemented rule matrix is whitespace-only but for eight conversions:
 `trailing-return`, `braces`, `east-qualifier`, `specifier-order`,
 `empty-statement`, `enum-comma`, `list-comma`, and `trailing-comment`. Every
 plan is verified against `fg_HasEquivalentCodeTokens` on the converted source,
+read with the project's naming, which decides as the structure does which `>>`
+closes two template argument lists,
 and the plan is re-analyzed until the result is stable, up to four passes whose
 edits compose into the one plan; a token-stream change, or a file still changing
 after the last pass, is a formatter failure, not an edit. A range is analyzed
@@ -558,7 +560,9 @@ operand of a comparison starts with unless a functional cast goes on with it,
 `a < int(b)`. A `>>` that ends a template argument list is read the
 way C++ reads it, as two `>` tokens, so that each list has a closing marker of
 its own, and two closers written apart are joined back into one `>>` unless the
-layout gives the second a line of its own. A brace holding a statement
+layout gives the second a line of its own. That holds for a list a spaced `<` opens behind a
+type's name too, `TCVector <TCVector<int>>`, which the token check reads with
+the same naming. A brace holding a statement
 terminator at its own level is a block, which is how a lambda body inside an
 argument list is told apart from a braced initializer. Behind the call
 operator's name, `operator ()`, a `<` can open nothing else, so it opens a list

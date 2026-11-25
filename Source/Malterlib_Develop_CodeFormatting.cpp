@@ -654,10 +654,10 @@ namespace NMib::NDevelop
 	static CStr fg_NormalizeDirectiveLines(ch8 const *_pText, umint _nLength);
 
 	// Normalizes a source into comparable token spellings. A '>>' closing two template argument lists is split as the
-	// structure splits it, so it and '> >' normalize alike, while a shift stays one token.
-	static TCVector<CStr> fg_NormalizeCodeTokens(CStr const &_Source, ECodeLanguage _Language)
+	// structure splits it, by the same naming, so it and '> >' normalize alike, while a shift stays one token.
+	static TCVector<CStr> fg_NormalizeCodeTokens(CStr const &_Source, ECodeLanguage _Language, CCodeFormattingStyle const *_pStyle)
 	{
-		CCodeTokenStream Stream(_Source, nullptr, _Language);
+		CCodeTokenStream Stream(_Source, _pStyle, _Language);
 		bool bCpp = _Language != ECodeLanguage::mc_BuildSystem;
 		if (bCpp)
 			CCodeStructure::fs_SplitSharedAngleClosers(Stream);
@@ -705,10 +705,10 @@ namespace NMib::NDevelop
 		return Texts;
 	}
 
-	CStr fg_DescribeCodeTokenDifference(CStr const &_First, CStr const &_Second, ECodeLanguage _Language)
+	CStr fg_DescribeCodeTokenDifference(CStr const &_First, CStr const &_Second, ECodeLanguage _Language, CCodeFormattingStyle const *_pStyle)
 	{
-		auto First = fg_NormalizeCodeTokens(_First, _Language);
-		auto Second = fg_NormalizeCodeTokens(_Second, _Language);
+		auto First = fg_NormalizeCodeTokens(_First, _Language, _pStyle);
+		auto Second = fg_NormalizeCodeTokens(_Second, _Language, _pStyle);
 
 		for (umint iToken = 0; iToken < fg_Min(First.f_GetLen(), Second.f_GetLen()); ++iToken)
 		{
@@ -889,10 +889,12 @@ namespace NMib::NDevelop
 		}
 	}
 
-	bool fg_HasEquivalentCodeTokens(CStr const &_First, CStr const &_Second, ECodeLanguage _Language)
+	// The naming is the one the structure is built with, which decides as it does where a '<' opens a template argument list,
+	// and so which '>>' closes two of them: 'TCVector <TCVector<int>>' holds two lists only where 'TCVector' names a type.
+	bool fg_HasEquivalentCodeTokens(CStr const &_First, CStr const &_Second, ECodeLanguage _Language, CCodeFormattingStyle const *_pStyle)
 	{
-		CCodeTokenStream FirstStream(_First, nullptr, _Language);
-		CCodeTokenStream SecondStream(_Second, nullptr, _Language);
+		CCodeTokenStream FirstStream(_First, _pStyle, _Language);
+		CCodeTokenStream SecondStream(_Second, _pStyle, _Language);
 
 		// A '>>' closing two template argument lists is the same two tokens as '> >', which the layout may write either way;
 		// any other '>>' is a shift, whose halves never stand apart.

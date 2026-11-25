@@ -1895,8 +1895,9 @@ namespace NMib::NDevelop::NPrivate
 		// Every rule but the conversion leaves the token stream alone, so the result has to
 		// match the converted source token for token.
 		auto Formatted = fg_ApplyCodeFormattingEdits(mp_Request.m_Source, Result.m_Edits);
-		if (!fg_HasEquivalentCodeTokens(mp_Baseline, Formatted, Language))
-			return fFailed("Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(mp_Baseline, Formatted, Language));
+		auto const *pStyle = mp_Request.m_pStyle.f_Get();
+		if (!fg_HasEquivalentCodeTokens(mp_Baseline, Formatted, Language, pStyle))
+			return fFailed("Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(mp_Baseline, Formatted, Language, pStyle));
 
 		// A pass can leave work for the next, where a decision depends on a layout the pass itself made: the formatted source is
 		// analyzed again until it is stable, each pass's edits composed with the plan, so the plan takes the original straight
@@ -1948,8 +1949,14 @@ namespace NMib::NDevelop::NPrivate
 				}
 
 				auto Further = fg_ApplyCodeFormattingEdits(Formatted, Next.m_Edits);
-				if (!fg_HasEquivalentCodeTokens(Analyzer.mp_Baseline, Further, Language))
-					return fFailed("Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(Analyzer.mp_Baseline, Further, Language));
+				if (!fg_HasEquivalentCodeTokens(Analyzer.mp_Baseline, Further, Language, pStyle))
+				{
+					return fFailed
+						(
+							"Formatting would change the token stream ({}); no edits were produced"_f << fg_DescribeCodeTokenDifference(Analyzer.mp_Baseline, Further, Language, pStyle)
+						)
+					;
+				}
 
 				TCVector<CCodeFormattingEdit> Composed;
 				CStr Explanation;
