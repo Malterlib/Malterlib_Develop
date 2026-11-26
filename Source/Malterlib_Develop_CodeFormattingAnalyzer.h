@@ -186,6 +186,7 @@ namespace NMib::NDevelop::NPrivate
 
 		bool fp_IsDisabled(umint _iOffset, umint _nLength) const;
 		bool fp_IsFormatOff(umint _iOffset, umint _nLength) const;
+		bool fp_HasCppStandard(ECppStandard _Standard) const;
 		bool fp_CollectListLayouts(CStr &o_Explanation);
 		void fp_RenderListLayouts();
 		void fp_RenderAlignments();

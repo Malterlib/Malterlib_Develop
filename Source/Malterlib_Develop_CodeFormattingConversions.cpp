@@ -1397,8 +1397,8 @@ namespace NMib::NDevelop::NPrivate
 		// a dependent return type can turn a substitution failure into a hard error; the standard's trailing return type is
 		// taken to be the form such a template is written in. So is a member's definition outside its class, where the type
 		// behind the parameters is looked up in the class's scope and a member shadowing the type the leading return type names,
-		// 'CFoo::CResult' over '::CResult', would change it. C has no trailing return type.
-		if (mp_Tokens.f_IsC(mp_Tokens.f_GetTokens()[Node.m_iFirstToken]))
+		// 'CFoo::CResult' over '::CResult', would change it. C has no trailing return type, and neither has C++03.
+		if (mp_Tokens.f_IsC(mp_Tokens.f_GetTokens()[Node.m_iFirstToken]) || !fp_HasCppStandard(ECppStandard::mc_Cpp11))
 			return false;
 
 		// A declaration in a macro's argument is text the macro places or turns into a string.

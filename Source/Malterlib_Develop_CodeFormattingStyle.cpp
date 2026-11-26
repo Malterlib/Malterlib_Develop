@@ -125,6 +125,51 @@ namespace NMib::NDevelop
 				continue;
 			}
 
+			// Written as the standard's year, '03' or '11', which YAML may read as a number or a string. The formatter takes C++98
+			// as C++03.
+			if (Key == "CppStandard")
+			{
+				struct CStandard
+				{
+					int64 m_Year;
+					ECppStandard m_Standard;
+				};
+
+				constexpr CStandard c_Standards[] =
+					{
+						{98, ECppStandard::mc_Cpp03}
+						, {3, ECppStandard::mc_Cpp03}
+						, {11, ECppStandard::mc_Cpp11}
+						, {14, ECppStandard::mc_Cpp14}
+						, {17, ECppStandard::mc_Cpp17}
+						, {20, ECppStandard::mc_Cpp20}
+						, {23, ECppStandard::mc_Cpp23}
+						, {26, ECppStandard::mc_Cpp26}
+					}
+				;
+
+				int64 Year = -1;
+				if (Value.f_IsInteger())
+					Year = Value.f_Integer();
+				else if (Value.f_IsString() && Value.f_String().f_GetLen() == 2 && Value.f_String().f_IsNumeric())
+					Year = Value.f_String().f_ToInt(int64(-1));
+
+				bool bKnown = false;
+				for (auto const &Standard : c_Standards)
+				{
+					if (Standard.m_Year != Year)
+						continue;
+
+					Result.m_CppStandard = Standard.m_Standard;
+					bKnown = true;
+				}
+
+				if (!bKnown)
+					DMibError("{} must be 98, 03, 11, 14, 17, 20, 23 or 26"_f << Key);
+
+				continue;
+			}
+
 			if (Key == "AlignTrailingComments" || Key == "AlignEnumValues" || Key == "TrailingScopeAtStatementLevel")
 			{
 				if (!Value.f_IsBoolean())
@@ -197,6 +242,9 @@ namespace NMib::NDevelop
 
 		if (_Document.m_nAlignTrailingCommentsMaximumColumn)
 			m_nAlignTrailingCommentsMaximumColumn = *_Document.m_nAlignTrailingCommentsMaximumColumn;
+
+		if (_Document.m_CppStandard)
+			m_CppStandard = *_Document.m_CppStandard;
 
 		for (umint iList = 0; iList < umint(ECodeNamingList::mc_Count); ++iList)
 		{

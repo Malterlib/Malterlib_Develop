@@ -120,6 +120,7 @@ DSLMarkers:
 | `AlignEnumValues` | `true` puts the `=` of a run of enumerators at one column. See [Layout options](#layout-options). |
 | `AlignTrailingCommentsMaximumColumn` | The latest column, counting from 1, an aligned comment may start at; `0` is no limit. See [Layout options](#layout-options). |
 | `TrailingScopeAtStatementLevel` | `true` gives a lambda's body or opened scope that ends its statement's only expression no continuation level. See [Layout options](#layout-options). |
+| `CppStandard` | The oldest C++ standard the code is compiled as: `98` or `03`, `11`, `14`, `17`, `20`, `23` or `26`. See [C++ standard](#c-standard). |
 
 A list written as a sequence replaces the one extended. Written as a mapping
 holding `Append`, its sequence is added to the one extended instead:
@@ -228,6 +229,34 @@ which its return type is moved behind instead. An edit that adds such a tail or
 breaks such a head, or takes it away again, moves the whole scope and its body
 by a level. Turning the option off again gives back the layout without it.
 
+### C++ standard
+
+`CppStandard` names the oldest standard the code is compiled as, written as its
+year, `CppStandard: 03`, and the formatter writes no conversion or spelling that
+standard does not have. Where no document sets it, nothing is kept out. C++98
+has what C++03 has, so `98` reads as `03`.
+
+C++03 has no trailing return type, reads `>>` as a shift and `<:` as the
+digraph of `[`. With `03`, a declaration too long for its line keeps its return
+type in front of its name and opens its parameter list under it, as a `void`
+function's does, the closers of nested template argument lists stand apart,
+`TCVector<TCVector<int> >`, a `>>` is a shift wherever it stands, also inside a
+template argument list, `CShift<8 >> 1>`, and a `<` stands
+apart from a `::` behind it, `TCVector< ::CFoo>`, while code that holds the
+digraph, as `TCVector<::CFoo>`, is not formatted. Every other conversion writes what
+C++98 already has, and no standard after C++11 changes what the formatter
+writes.
+
+Since `MTool Format` reads the nearest `.malterlib-format`, a document that
+extends the project's and sets `CppStandard` scopes it to the code in its
+directory, such as sources shipped to customers who compile them as C++03:
+
+```yaml
+Version: 1
+Extends: ../.malterlib-format
+CppStandard: 03
+```
+
 ## Requests and results
 
 ```cpp
@@ -284,7 +313,7 @@ the effective ranges leaves the plan as it stands.
 | `string-continuation` | A string literal continued on the next line, adjacent literals being one string, stands one level in when the line it continues starts its statement, and at that line's level when the line is a list element or an operand the statement is split at. |
 | `line-break` (DSL arrays) | A DSL array such as `_o[...]` written across lines is opened, as a braced initializer is, and one written on one line is opened only where it does not fit. An opened array's `[` stands on a line of its own at the element's level, or one level in when the line starts its statement, and its elements and `]` stand with it. In an opened array, and an object whose keys are the DSL's, `"Key"_o= ...`, the closing marker takes a line of its own and no blank line stands between elements. A list holding a directive keeps its lines, the array's lines moving with its bracket. |
 | `operator-space` | One space around unambiguous binary operators. |
-| `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. |
+| `angle-space` | No space between the closing markers of two nested template argument lists: `>>`, never `> >`. With `CppStandard: 03`, which reads `>>` as a shift, one space: `> >`, and `token-space` writes one between a `<` and a `::` behind it, which C++03 would read as the digraph `<:`. |
 | `token-space` | Every other pair of tokens on one line takes the spelling the standard settles, where it settles one: member access and scope markers hug, a keyword stands apart from its parenthesis, a label's colon, a bit-field's width, and a unary sign hug, a trailing return type's arrow stands apart, an operator between two operands stands apart from both. A run of pointers is one declarator, `CFoo **`, while a reference to a pointer stands apart from it: `CFoo * &`. A declarator stands apart from a calling convention macro between it and the name, `void * DMibCrossmoduleAPI fs_Alloc`. A postfix `++` or `--` ends its operand, so `*pParse++ - '0'` subtracts. |
 | `block-blank-line` | Removes blank lines directly after an opening brace and directly in front of a closing one. |
 | `case-blank-line` | Removes blank lines directly after a `case` or `default` label. |
@@ -302,7 +331,7 @@ the effective ranges leaves the plan as it stands.
 | `enum-comma` | An enumerator's comma stands in front of it, and the last one has none. A comma that a comment or a conditional's directive separates from the enumerator behind it moves in front of that enumerator, into every branch it is compiled in, and so does one ending its line behind a block comment that describes the enumerator in front of it, `A = 1 /* One */,` over `B`; the one behind the last enumerator is taken out; the layout moves the rest. An enum holding another directive, or an enumerator that is the first in some configurations only, keeps its commas. |
 | `list-comma` | A comment behind a comma in a bracketed list describes the element in front of it, so the comma moves in front of the element behind it, as the layout writes it: `a, // A` over `b` becomes `a // A` over `, b`. A comma ending a braced list written across lines is taken out. In a braced list holding a conditional's directive, the commas move as `enum-comma` moves an enumerator's, the list keeping its commas where an element is the first in some configurations only. Only a line comment on the comma's line, with the next element on a later line and nothing but blanks and comments between, moves it, and so do comment lines between a comma ending its line and the next element: `{1, 2},` over `// B` over `{3, 4}` becomes `{1, 2}` over `// B` over `, {3, 4}`. |
 | `trailing-comment` | A block comment ending its line behind code is written as a line comment: `f_Call(); /* Text */` becomes `f_Call(); // Text`, and one over several lines becomes one line comment per line of its text, its documenting marker kept (`/**<` as `///<`) and the continuation lines aligned under the first. A comment the line would be longer than `max_line_length` with, behind code that fits by itself, moves to a line of its own above that line, at its indentation, as a line comment, unless the statement it stands in goes on behind it, as one behind an operand of an expression written across lines does, which stays behind the part it describes; a braced list's rows are no such statement; the line is measured as the spacing rules write it, the comment one space behind the code, so a column the alignment options put it at never moves it. A documenting comment keeps its marker, `/*!< Text */` written as `//!< Text`, and never moves, since it describes what stands in front of it. A comment standing for the name a declarator hugs, `int */*_Size*/`, stays a block comment where the declaration is split, as one behind an operand of a list does. A `malterlib-format` marker, a clang-tidy `NOLINT` comment, a comment behind a directive, and a block comment whose text ends in a line splice stay as they are. |
-| `trailing-return` | A function declaration or definition that does not fit on its line has its return type moved behind its parameter list, `auto fg_Function(...) -> CFoo`, as the first step of splitting it, and is then split as any other. A plain `void` stays in front, so a split declaration without a trailing return type returns nothing. |
+| `trailing-return` | A function declaration or definition that does not fit on its line has its return type moved behind its parameter list, `auto fg_Function(...) -> CFoo`, as the first step of splitting it, and is then split as any other. A plain `void` stays in front, so a split declaration without a trailing return type returns nothing. With `CppStandard: 03` no return type moves, and the declaration is split under its name with the return type in front. |
 | `braces` | Around a single statement guarded by `if`, `else`, `for`, or `while`: none when it is laid out as one line, braces when it spans lines or follows a split clause. |
 
 `operator-space` covers `==`, `!=`, `<=`, `>=`, `<=>`, `||`, and the compound
@@ -560,7 +589,8 @@ operand of a comparison starts with unless a functional cast goes on with it,
 `a < int(b)`. A `>>` that ends a template argument list is read the
 way C++ reads it, as two `>` tokens, so that each list has a closing marker of
 its own, and two closers written apart are joined back into one `>>` unless the
-layout gives the second a line of its own. That holds for a list a spaced `<` opens behind a
+layout gives the second a line of its own, or the code is C++03 (see
+[C++ standard](#c-standard)). That holds for a list a spaced `<` opens behind a
 type's name too, `TCVector <TCVector<int>>`, which the token check reads with
 the same naming. A brace holding a statement
 terminator at its own level is a block, which is how a lambda body inside an

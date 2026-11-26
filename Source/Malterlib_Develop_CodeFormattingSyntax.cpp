@@ -124,7 +124,7 @@ namespace
 							++nDepth;
 						else if (_Tokens.f_IsText(HeaderToken, ">"))
 							--nDepth;
-						else if (_Tokens.f_IsText(HeaderToken, ">>"))
+						else if (_Tokens.f_IsText(HeaderToken, ">>") && !_Tokens.f_IsShiftAlways())
 							nDepth = nDepth < 2 ? 0 : nDepth - 2;
 
 						if (!nDepth)

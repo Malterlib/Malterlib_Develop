@@ -218,14 +218,27 @@ namespace NMib::NDevelop
 		return fg_MergesTokens(_Tokens, _Left, _Right);
 	}
 
+	// The spacing between two tokens, by the standard the stream was lexed with: C++03 reads a '>>' as a shift, so the closers of
+	// nested template argument lists stand apart there, and '<:' as the digraph of '[', so a '<' stands apart from a '::' behind
+	// it: 'TCFoo< ::CBar>'.
 	ECodeSpacing fg_GetCanonicalSpacing(CCodeTokenStream const &_Tokens, CCodeStructure const &_Structure, umint _iLeft, umint _iRight)
 	{
+		auto const &Tokens = _Tokens.f_GetTokens();
+		if (_Tokens.f_IsShiftAlways())
+		{
+			bool bNestedClosers
+				= _Structure.f_IsAngleBracket(_iLeft) && _Structure.f_IsAngleBracket(_iRight) && _Tokens.f_IsText(Tokens[_iLeft], ">") && _Tokens.f_IsText(Tokens[_iRight], ">")
+			;
+			bool bDigraph = _Tokens.f_IsText(Tokens[_iLeft], "<") && _Tokens.f_IsText(Tokens[_iRight], "::");
+			if (bNestedClosers || bDigraph)
+				return ECodeSpacing::mc_Space;
+		}
+
 		auto Spacing = fsg_DecideCanonicalSpacing(_Tokens, _Structure, _iLeft, _iRight);
 		if (Spacing != ECodeSpacing::mc_None)
 			return Spacing;
 
 		// The closers of nested template argument lists are written as one '>>' on purpose: the structure reads them apart.
-		auto const &Tokens = _Tokens.f_GetTokens();
 		if (_Structure.f_IsAngleBracket(_iLeft) && _Structure.f_IsAngleBracket(_iRight))
 			return Spacing;
 

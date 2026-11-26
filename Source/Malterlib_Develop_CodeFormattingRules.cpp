@@ -655,6 +655,12 @@ namespace NMib::NDevelop::NPrivate
 	// asks for it every time it measures a line the gap stands in.
 	ECodeSpacing CFormattingAnalyzer::fp_GetCanonicalSpacing(umint _iLeft, umint _iRight) const
 	{
+		auto fDecide = [&]
+			{
+				return fg_GetCanonicalSpacing(mp_Tokens, mp_Structure, _iLeft, _iRight);
+			}
+		;
+
 		auto nTokens = mp_Tokens.f_GetTokens().f_GetLen();
 		if (mp_CanonicalSpacing.f_GetLen() != nTokens)
 		{
@@ -664,10 +670,10 @@ namespace NMib::NDevelop::NPrivate
 		}
 
 		if (_iRight >= nTokens || fp_PreviousCode(_iRight) != aint(_iLeft))
-			return fg_GetCanonicalSpacing(mp_Tokens, mp_Structure, _iLeft, _iRight);
+			return fDecide();
 
 		if (!mp_CanonicalSpacing[_iRight])
-			mp_CanonicalSpacing[_iRight] = uint8(fg_GetCanonicalSpacing(mp_Tokens, mp_Structure, _iLeft, _iRight)) + 1;
+			mp_CanonicalSpacing[_iRight] = uint8(fDecide()) + 1;
 
 		return ECodeSpacing(mp_CanonicalSpacing[_iRight] - 1);
 	}
@@ -726,7 +732,7 @@ namespace NMib::NDevelop::NPrivate
 			return ECodeSpacing::mc_Space;
 
 		if (mp_Structure.f_IsAngleBracket(_iLeft) && mp_Structure.f_IsAngleBracket(_iRight) && mp_Tokens.f_IsText(Left, ">") && mp_Tokens.f_IsText(Right, ">"))
-			return ECodeSpacing::mc_None;
+			return fp_GetCanonicalSpacing(_iLeft, _iRight);
 
 		if (mp_Tokens.f_IsText(Right, ","))
 			return ECodeSpacing::mc_None;
@@ -800,14 +806,19 @@ namespace NMib::NDevelop::NPrivate
 			if (Token.m_Kind != ECodeTokenKind::mc_Punctuator)
 				continue;
 
-			// Two nested template argument lists close as one '>>', unless the layout puts
-			// the second closer on a line of its own.
+			// Two nested template argument lists close as the standard spells them, '>>' or in C++03 '> >', unless the layout
+			// puts the second closer on a line of its own.
 			if (mp_Structure.f_IsAngleBracket(iToken) && mp_Tokens.f_IsText(Token, ">"))
 			{
 				auto iPrevious = fp_PreviousCode(iToken);
 				bool bBreak = fp_IsBreakGap(iToken);
 				if (!bBreak && iPrevious >= 0 && mp_Structure.f_IsAngleBracket(umint(iPrevious)) && mp_Tokens.f_IsText(Tokens[umint(iPrevious)], ">"))
-					fp_RemoveSpaceBefore(iToken, "angle-space", "nested template argument lists close as one '>>'");
+				{
+					if (fp_GetCanonicalSpacing(umint(iPrevious), iToken) == ECodeSpacing::mc_Space)
+						fp_EnsureSingleSpace(iToken, true, "angle-space", "nested template argument lists close as '> >' in C++03");
+					else
+						fp_RemoveSpaceBefore(iToken, "angle-space", "nested template argument lists close as one '>>'");
+				}
 
 				continue;
 			}

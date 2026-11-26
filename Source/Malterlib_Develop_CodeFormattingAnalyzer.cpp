@@ -559,6 +559,14 @@ namespace NMib::NDevelop::NPrivate
 		return false;
 	}
 
+	// Whether the code may use what the standard brings, where a request without a style limits nothing.
+	bool CFormattingAnalyzer::fp_HasCppStandard(ECppStandard _Standard) const
+	{
+		auto const *pStyle = mp_Request.m_pStyle.f_Get();
+
+		return !pStyle || pStyle->m_CppStandard >= _Standard;
+	}
+
 	// A 'columns' or 'table' directive stands on the first line inside the braced list it lays out, which no other
 	// rule then edits inside.
 	bool CFormattingAnalyzer::fp_CollectListLayouts(CStr &o_Explanation)
@@ -2190,8 +2198,8 @@ namespace NMib::NDevelop::NPrivate
 					continue;
 				}
 
-				// Two closers of nested template argument lists are written as one '>>'
-				// whatever the source has between them.
+				// Two closers of nested template argument lists are written as one '>>', or as '> >'
+				// in C++03, whatever the source has between them.
 				bool bClosers
 					= mp_Structure.f_IsAngleBracket(iPrevious) && mp_Structure.f_IsAngleBracket(iToken) && mp_Tokens.f_IsText(Tokens[iPrevious], ">") && mp_Tokens.f_IsText(Token, ">")
 				;
@@ -2199,8 +2207,10 @@ namespace NMib::NDevelop::NPrivate
 
 				// A gap the standard settles is measured as the spacing rule writes it, so a
 				// line measured to fit still fits once its gaps are respaced.
-				if (bClosers || bComment)
+				if (bComment)
 					nColumns += 0;
+				else if (bClosers)
+					nColumns += fp_GetCanonicalSpacing(iPrevious, iToken) == ECodeSpacing::mc_Space;
 				else if (bBesideComment)
 				{
 					// A break in front of a comment the code behind it names is spelled as that code's gap is.

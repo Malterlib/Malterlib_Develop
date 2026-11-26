@@ -96,6 +96,7 @@ namespace NMib::NDevelop
 		ECodeLanguage f_GetLanguage() const;
 		// Whether the token is C, read without what C++ adds: in a C file, outside its C++ branches.
 		bool f_IsC(CCodeToken const &_Token) const;
+		bool f_IsShiftAlways() const;
 
 		// Splits each of the punctuators into two adjacent tokens of the same kind. C++ reads a '>>' that
 		// ends a template argument list as two '>' tokens, and the structure builder spells it
@@ -111,6 +112,7 @@ namespace NMib::NDevelop
 		NContainer::TCVector<CCodeToken> mp_Tokens;
 		ECodeLanguage mp_Language = ECodeLanguage::mc_Cpp;
 		bool mp_bComplete = true;
+		bool mp_bCpp03 = false; // The code is C++03, which reads a '>>' as a shift wherever it stands
 	};
 
 	umint fg_ReadDirectiveKeyword(ch8 const *_pText, umint _nText, ch8 (&o_Keyword)[16], umint &o_iAfter);

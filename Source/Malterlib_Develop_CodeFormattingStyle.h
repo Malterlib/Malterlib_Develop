@@ -25,6 +25,19 @@ namespace NMib::NDevelop
 		, mc_Count
 	};
 
+	// The oldest C++ standard a project's code is compiled as. The formatter writes no conversion or spelling it does not have.
+	enum class ECppStandard : uint8
+	{
+		mc_Cpp03
+		, mc_Cpp11
+		, mc_Cpp14
+		, mc_Cpp17
+		, mc_Cpp20
+		, mc_Cpp23
+		, mc_Cpp26
+		, mc_Latest // No document sets one, which limits nothing.
+	};
+
 	// One '.malterlib-format' as written, before the document it extends is applied under it.
 	struct CCodeFormattingStyleDocument
 	{
@@ -42,6 +55,7 @@ namespace NMib::NDevelop
 		NStorage::TCOptional<bool> m_AlignEnumValues;                                // Unset keeps what it extends.
 		NStorage::TCOptional<bool> m_TrailingScopeAtStatementLevel;                  // Unset keeps what it extends.
 		NStorage::TCOptional<umint> m_nAlignTrailingCommentsMaximumColumn;           // Unset keeps what it extends; zero is no limit.
+		NStorage::TCOptional<ECppStandard> m_CppStandard;                            // Unset keeps what it extends.
 	};
 
 	// A project's style: the names it gives its functions, types and macros, compiled for a lookup per identifier, and its
@@ -51,10 +65,11 @@ namespace NMib::NDevelop
 		void f_Apply(CCodeFormattingStyleDocument const &_Document);
 		ECodeNameRole f_GetRoles(ch8 const *_pName, umint _nLength) const;
 
-		bool m_bAlignTrailingComments = false;           // The comments behind a run of enumerators or members stand at one column.
-		bool m_bAlignEnumValues = false;                 // The '=' of a run of enumerators stands at one column.
-		bool m_bTrailingScopeAtStatementLevel = false;   // A scope or lambda body ending its statement's only expression has no continuation level.
-		umint m_nAlignTrailingCommentsMaximumColumn = 0; // The latest column, from 1, an aligned comment starts at; zero is no limit.
+		bool m_bAlignTrailingComments = false;                // The comments behind a run of enumerators or members stand at one column.
+		bool m_bAlignEnumValues = false;                      // The '=' of a run of enumerators stands at one column.
+		bool m_bTrailingScopeAtStatementLevel = false;        // A scope or lambda body ending its statement's only expression has no continuation level.
+		umint m_nAlignTrailingCommentsMaximumColumn = 0;      // The latest column, from 1, an aligned comment starts at; zero is no limit.
+		ECppStandard m_CppStandard = ECppStandard::mc_Latest; // The oldest standard the code compiles as.
 
 	private:
 		struct CRange

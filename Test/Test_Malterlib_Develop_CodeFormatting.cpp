@@ -1537,6 +1537,157 @@ namespace
 			};
 		};
 
+		DMibTestSuite("CppStandard")
+		{
+			auto fFormat = [](CStr const &_Text, CStr const &_Stage, CStr const &_Standard)
+				{
+					DMibTestPath(_Stage);
+
+					auto Request = fg_Request(_Text);
+					CCodeFormattingStyle Style = *fg_MalterlibStyle();
+					Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: {}\n"_f << _Standard));
+					Request.m_pStyle = fg_Construct(fg_Move(Style));
+
+					auto Result = fg_AnalyzeCodeFormatting(Request);
+					DMibExpectTrue(Result.m_Status == ECodeFormattingStatus::mc_Complete);
+
+					return fg_ApplyCodeFormattingEdits(_Text, Result.m_Edits);
+				}
+			;
+
+			// A trailing return type is a conversion, which changes the tokens.
+			auto fExpect = [&](CStr const &_Case, CStr const &_Standard, CStr const &_Source, CStr const &_Expected, bool _bTokensPreserved = true)
+				{
+					DMibTestPath(_Case);
+
+					auto Formatted = fFormat(_Source, "First", _Standard);
+					DMibExpect(Formatted, ==, _Expected);
+					DMibExpect(fFormat(Formatted, "Second", _Standard), ==, _Expected);
+					DMibExpect(fg_HasEquivalentCodeTokens(_Source, Formatted, ECodeLanguage::mc_Cpp, fg_MalterlibStyle().f_Get()), ==, _bTokensPreserved);
+				}
+			;
+
+			CStr Parameters;
+			for (umint iParameter = 0; iParameter < 8; ++iParameter)
+				Parameters += "{}int _Parameter{}"_f << (iParameter ? ", " : "") << iParameter;
+
+			CStr SplitParameters;
+			for (umint iParameter = 0; iParameter < 8; ++iParameter)
+				SplitParameters += "\t\t{}int _Parameter{}\n"_f << (iParameter ? ", " : "") << iParameter;
+
+			CStr Declaration = "TCMap<CStr, TCVector<CStr> > CExampleWrapper::f_CollectEverythingFromTheWrappedSdk(" + Parameters + ")\n{\n\treturn {};\n}\n";
+
+			// C++03 has no trailing return type: a long declaration opens its parameter list under the name, its return type in
+			// front of it. Nor does it read a '>>' as two closers, so nested template argument lists close apart.
+			DMibTestCategory("Cpp03")
+			{
+				fExpect
+					(
+						"Declaration"
+						, "03"
+						, Declaration
+						, "TCMap<CStr, TCVector<CStr> > CExampleWrapper::f_CollectEverythingFromTheWrappedSdk\n\t(\n" + SplitParameters + "\t)\n{\n\treturn {};\n}\n"
+					)
+				;
+				fExpect
+					(
+						"NestedClosers"
+						, "98"
+						, "TCVector<TCVector<int>  > g_A;\nTCVector<TCVector<TCVector<int> >  > g_B;\nint g_C = 1 >> 2;\n"
+						, "TCVector<TCVector<int> > g_A;\nTCVector<TCVector<TCVector<int> > > g_B;\nint g_C = 1 >> 2;\n"
+					)
+				;
+				// Nor does it read '<::' as '<' and '::', but as the digraph of '[' and a ':': a '<' stays spaced from a '::' behind it,
+				// and code that holds the digraph isn't formatted, as the token check tells it from '< ::'.
+				fExpect("Digraph", "03", "TCVector< ::CFoo> g_A;\nint g_B = a[ ::g_Index];\n", "TCVector< ::CFoo> g_A;\nint g_B = a[::g_Index];\n");
+				{
+					DMibTestPath("LessColonDigraph");
+
+					CStr Source = "auto g_A = static_cast<::CFoo>(g_B);\n";
+					CCodeFormattingStyle Style = *fg_MalterlibStyle();
+					Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 03\n"));
+					auto Request = fg_Request(Source);
+					Request.m_pStyle = fg_Construct(Style);
+
+					DMibExpectTrue(fg_AnalyzeCodeFormatting(Request).m_Status == ECodeFormattingStatus::mc_Unsupported);
+					DMibExpectFalse(fg_HasEquivalentCodeTokens(Source, "auto g_A = static_cast< ::CFoo>(g_B);\n", ECodeLanguage::mc_Cpp, &Style));
+				}
+
+				// A '>>' is a shift wherever it stands, also in a template argument list, which goes on behind it, and the token
+				// check reads it as one.
+				fExpect("Shift", "03", "COuter<CShift<8 >> 1> > g_Value;\n", "COuter<CShift<8 >> 1> > g_Value;\n");
+				// So does an Objective-C header, whose list the shift leaves open over its line break, and which goes on behind it.
+				fExpect("ObjectiveCHeader", "03", "@interface CFoo <CA<8 >> 1>,\nCB> (CCat)\n@end\n", "@interface CFoo <CA<8 >> 1>, CB> (CCat)\n@end\n");
+				{
+					DMibTestPath("ShiftTokens");
+
+					CCodeFormattingStyle Style = *fg_MalterlibStyle();
+					Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 03\n"));
+					DMibExpectFalse(fg_HasEquivalentCodeTokens("COuter<CShift<8 >> 1> > g_Value;\n", "COuter<CShift<8> > 1 > > g_Value;\n", ECodeLanguage::mc_Cpp, &Style));
+				}
+
+				{
+					// The closers' space is measured as it is written: a line one column too long with it is split.
+					DMibTestPath("MeasuredClosers");
+
+					auto Request = fg_Request("TCVector<TCVector<int> > g_Values;\n");
+					CCodeFormattingStyle Style = *fg_MalterlibStyle();
+					Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 03\n"));
+					Request.m_pStyle = fg_Construct(fg_Move(Style));
+					Request.m_Settings.m_nMaxColumns = 33;
+
+					auto Result = fg_AnalyzeCodeFormatting(Request);
+					DMibExpectTrue(Result.m_Status == ECodeFormattingStatus::mc_Complete);
+					DMibExpect(fg_ApplyCodeFormattingEdits(Request.m_Source, Result.m_Edits), ==, "TCVector<TCVector<int> >\n\tg_Values\n;\n");
+				}
+			};
+
+			// From C++11 on both are written as without the setting.
+			DMibTestCategory("Cpp11")
+			{
+				fExpect
+					(
+						"Declaration"
+						, "11"
+						, Declaration
+						, "auto CExampleWrapper::f_CollectEverythingFromTheWrappedSdk\n\t(\n" + SplitParameters + "\t)\n\t-> TCMap<CStr, TCVector<CStr>>\n{\n\treturn {};\n}\n"
+						, false
+					)
+				;
+				fExpect("NestedClosers", "'17'", "TCVector<TCVector<int> > g_A;\nTCVector< ::CFoo> g_B;\n", "TCVector<TCVector<int>> g_A;\nTCVector<::CFoo> g_B;\n");
+			};
+
+			DMibTestCategory("Options")
+			{
+				CCodeFormattingStyle Style;
+				DMibExpectTrue(Style.m_CppStandard == ECppStandard::mc_Latest);
+
+				Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 03\n"));
+				DMibExpectTrue(Style.m_CppStandard == ECppStandard::mc_Cpp03);
+
+				{
+					DMibTestPath("Extends");
+
+					Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\n"));
+					DMibExpectTrue(Style.m_CppStandard == ECppStandard::mc_Cpp03);
+				}
+
+				Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: '20'\n"));
+				DMibExpectTrue(Style.m_CppStandard == ECppStandard::mc_Cpp20);
+
+				{
+					DMibTestPath("98");
+
+					Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 98\n"));
+					DMibExpectTrue(Style.m_CppStandard == ECppStandard::mc_Cpp03);
+				}
+
+				DMibExpectExceptionType(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 12\n"), NException::CException);
+				DMibExpectExceptionType(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 'c++11'\n"), NException::CException);
+				DMibExpectExceptionType(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: true\n"), NException::CException);
+			};
+		};
+
 		DMibTestSuite("Naming")
 		{
 			auto fStyle = [](CStr const &_Yaml)

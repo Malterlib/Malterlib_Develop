@@ -165,6 +165,15 @@ options section), each off unless a document sets it. A new option needs its
 own key, defaulting to the current layout, and turning it on and off again must
 give back the source: a corpus trial runs the tree both ways.
 
+It also names the oldest C++ standard the code compiles as, `CppStandard`. A
+conversion or spelling that needs a newer standard than C++98 asks
+`fp_HasCppStandard` and writes the older form where the standard lacks it, as
+the trailing return type, the `>>` closing two template argument lists and the
+`<` in front of a `::` do. The token stream reads a `>>` as a shift wherever it
+stands in C++03 (`f_IsShiftAlways`), so the structure, the token check and the
+measurement never take it for two closers there.
+Nothing is kept out where no document sets one.
+
 Verification lexes the sources with the request's style, as the structure is
 built with it: the naming decides where a `<` opens a template argument list,
 and so which `>>` closes two of them.

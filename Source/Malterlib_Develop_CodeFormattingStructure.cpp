@@ -969,7 +969,11 @@ namespace NMib::NDevelop
 			else if (mp_pTokens->f_IsText(Token, ">>"))
 			{
 				// Before the token is split, a '>>' closes this level and leaves the other
-				// half to the list around it. A '>>=' is a shift assignment wherever it stands.
+				// half to the list around it. A '>>=' is a shift assignment wherever it stands,
+				// and in C++03 a '>>' is a shift, whose list goes on: 'CShift<8 >> 1>'.
+				if (mp_pTokens->f_IsShiftAlways())
+					continue;
+
 				bCloserSeen = true;
 				if (nDepth < 2)
 					return fClose(iSignificant);
@@ -1490,7 +1494,7 @@ namespace NMib::NDevelop
 				++Depth;
 			else if (mp_pTokens->f_IsText(Next, ")") || mp_pTokens->f_IsText(Next, ">"))
 				--Depth;
-			else if (mp_pTokens->f_IsText(Next, ">>"))
+			else if (mp_pTokens->f_IsText(Next, ">>") && !mp_pTokens->f_IsShiftAlways())
 				Depth -= 2;
 
 			++iLast;
@@ -2537,7 +2541,7 @@ namespace NMib::NDevelop
 							++nHeader;
 						else if (mp_pTokens->f_IsText(Header, ">"))
 							--nHeader;
-						else if (mp_pTokens->f_IsText(Header, ">>"))
+						else if (mp_pTokens->f_IsText(Header, ">>") && !mp_pTokens->f_IsShiftAlways())
 							nHeader = nHeader < 2 ? 0 : nHeader - 2;
 
 						if (!nHeader)
@@ -2814,7 +2818,7 @@ namespace NMib::NDevelop
 						++nDepth;
 					else if (nDepth && (mp_pTokens->f_IsText(Behind, ")") || mp_pTokens->f_IsText(Behind, "]") || (bAngle && mp_pTokens->f_IsText(Behind, ">"))))
 						--nDepth;
-					else if (bAngle && mp_pTokens->f_IsText(Behind, ">>"))
+					else if (bAngle && mp_pTokens->f_IsText(Behind, ">>") && !mp_pTokens->f_IsShiftAlways())
 						nDepth = nDepth < 2 ? 0 : nDepth - 2;
 				}
 

@@ -558,7 +558,7 @@ namespace
 		return bUnterminated;
 	}
 
-	bool fg_LexPunctuator(CLexerCursor &_Cursor)
+	bool fg_LexPunctuator(CLexerCursor &_Cursor, bool _bCpp03)
 	{
 		constexpr ch8 const *c_Punctuators[] =
 			{
@@ -592,11 +592,11 @@ namespace
 			}
 		;
 
-		// A digraph is one punctuator, which the analysis refuses to format. '<::' is '<' and '::' unless a ':' or '>'
-		// follows it.
+		// A digraph is one punctuator, which the analysis refuses to format. From C++11 '<::' is '<' and '::' unless a ':' or
+		// '>' follows it.
 		auto First = _Cursor.f_Peek();
 		auto Second = _Cursor.f_Peek(1);
-		bool bLessColon = First == '<' && Second == ':' && (_Cursor.f_Peek(2) != ':' || _Cursor.f_Peek(3) == ':' || _Cursor.f_Peek(3) == '>');
+		bool bLessColon = First == '<' && Second == ':' && (_bCpp03 || _Cursor.f_Peek(2) != ':' || _Cursor.f_Peek(3) == ':' || _Cursor.f_Peek(3) == '>');
 		if (First == '%' && Second == ':' && _Cursor.f_Peek(2) == '%' && _Cursor.f_Peek(3) == ':')
 		{
 			_Cursor.m_iOffset += 4;
@@ -665,6 +665,7 @@ namespace NMib::NDevelop
 			return;
 		}
 
+		mp_bCpp03 = _pStyle && _pStyle->m_CppStandard == ECppStandard::mc_Cpp03;
 		fp_Lex();
 
 		// C reserves none of the words C++ adds, so they name what the code declares: 'struct CNode *new;'. C's character
@@ -933,6 +934,12 @@ namespace NMib::NDevelop
 	ECodeLanguage CCodeTokenStream::f_GetLanguage() const
 	{
 		return mp_Language;
+	}
+
+	// Whether a '>>' is a shift wherever it stands, as C++03 reads it, and never the closers of two template argument lists.
+	bool CCodeTokenStream::f_IsShiftAlways() const
+	{
+		return mp_bCpp03;
 	}
 
 	bool CCodeTokenStream::f_IsC(CCodeToken const &_Token) const
@@ -1482,7 +1489,7 @@ namespace NMib::NDevelop
 				continue;
 			}
 
-			if (fg_LexPunctuator(Cursor))
+			if (fg_LexPunctuator(Cursor, mp_bCpp03))
 			{
 				fEmit(ECodeTokenKind::mc_Punctuator, iStart, false);
 
