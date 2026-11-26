@@ -368,6 +368,96 @@ namespace
 		return true;
 	}
 
+	// Whether _iStart continues an identifier across splices, as one that a splice ends a physical line of: 'PREFIX_\' over 'R'
+	// is the identifier PREFIX_R, whose second part is no raw string's prefix.
+	bool fg_ContinuesIdentifier(CLexerCursor const &_Cursor, umint _iStart)
+	{
+		auto pText = _Cursor.m_pStart;
+		umint iAt = _iStart;
+		bool bSpliced = false;
+		while (iAt > 0 && fg_IsLineBreak(pText[iAt - 1]))
+		{
+			// The backslash in front of the line break and the space before it, as a splice that ends at iAt starts.
+			umint iSplice = iAt;
+			while (iSplice > 0 && (fg_IsLineBreak(pText[iSplice - 1]) || fg_IsHorizontalSpace(pText[iSplice - 1])))
+				--iSplice;
+			if (iSplice == 0)
+				break;
+
+			CLexerCursor Splice = _Cursor;
+			Splice.m_iOffset = iSplice - 1;
+			if (!Splice.f_SkipSplice() || Splice.m_iOffset != iAt)
+				break;
+
+			iAt = iSplice - 1;
+			bSpliced = true;
+		}
+
+		return bSpliced && iAt > 0 && fg_IsIdentifierChar(pText[iAt - 1]);
+	}
+
+	// The quote of the raw string whose prefix starts at _iStart, or zero where none does. Splices go before tokens are read, so
+	// they can stand inside a raw string's prefix and between it and its quote: 'u\' over '8R\' over '"(...)"'. With _bSplices the
+	// prefix is read across them.
+	umint fg_FindRawStringQuote(CLexerCursor const &_Cursor, umint _iStart, bool _bSplices)
+	{
+		auto pText = _Cursor.m_pStart;
+		auto nText = _Cursor.m_nLength;
+		if (fg_ContinuesIdentifier(_Cursor, _iStart))
+			return 0;
+
+		auto fSkipSplices = [&](umint _iFrom)
+			{
+				CLexerCursor Cursor = _Cursor;
+				Cursor.m_iOffset = _iFrom;
+				while (_bSplices && Cursor.f_SkipSplice())
+				{
+				}
+
+				return Cursor.m_iOffset;
+			}
+		;
+
+		constexpr ch8 const *c_Prefixes[] = {"R", "u8R", "LR", "uR", "UR"};
+		ch8 Prefix[3];
+		umint nPrefix = 0;
+		// Whether the identifier read so far is a raw string's prefix, or with _bStart starts one, so the read stops at the first
+		// character that can't.
+		auto fIsPrefix = [&](bool _bStart)
+			{
+				for (auto *pCandidate : c_Prefixes)
+				{
+					umint nCandidate = NStr::fg_StrLen(pCandidate);
+					if ((_bStart || nCandidate == nPrefix) && NStr::fg_StrStartsWith(pCandidate, Prefix, nCandidate, nPrefix))
+						return true;
+				}
+
+				return false;
+			}
+		;
+
+		auto iQuote = _iStart;
+		while (iQuote < nText && fg_IsIdentifierChar(pText[iQuote]))
+		{
+			if (nPrefix == sizeof(Prefix))
+				return 0;
+
+			Prefix[nPrefix++] = pText[iQuote];
+			if (!fIsPrefix(true))
+				return 0;
+
+			iQuote = fSkipSplices(iQuote + 1);
+		}
+
+		if (!fIsPrefix(false))
+			return 0;
+
+		if (iQuote >= nText || pText[iQuote] != '"')
+			return 0;
+
+		return iQuote;
+	}
+
 	// A directive runs to the first line terminator that is neither spliced nor inside a
 	// block comment. Conditional branches are not evaluated; every branch is lexed as text.
 	// o_pComment is set where the directive holds a comment.
@@ -502,52 +592,17 @@ namespace
 			// A raw string's line breaks are its text, and do not end the directive: '#define DCode R"(' over 'a' over ')"'.
 			if (fg_IsIdentifierStart(Char) && (!_Cursor.m_iOffset || !fg_IsIdentifierChar(_Cursor.m_pStart[_Cursor.m_iOffset - 1])))
 			{
-				// Splices go before tokens are read, so they can stand inside a raw string's prefix and between it and its quote:
-				// 'u\' over '8R\' over '"(...)"'. The prefix is read across them.
-				auto pText = _Cursor.m_pStart;
-				auto nText = _Cursor.m_nLength;
-				auto fSkipSplices = [&](umint _iFrom)
-					{
-						auto iAt = _iFrom;
-						while (iAt < nText && pText[iAt] == '\\')
-						{
-							auto iBreak = iAt + 1;
-							while (iBreak < nText && (pText[iBreak] == ' ' || pText[iBreak] == '\t'))
-								++iBreak;
-
-							if (iBreak >= nText || (pText[iBreak] != '\n' && pText[iBreak] != '\r'))
-								break;
-
-							iAt = iBreak + (pText[iBreak] == '\r' && iBreak + 1 < nText && pText[iBreak + 1] == '\n' ? 2 : 1);
-						}
-
-						return iAt;
-					}
-				;
-
-				ch8 Prefix[3];
-				umint nPrefix = 0;
-				auto iQuote = _Cursor.m_iOffset;
-				while (iQuote < nText && fg_IsIdentifierChar(pText[iQuote]))
+				auto iQuote = fg_FindRawStringQuote(_Cursor, _Cursor.m_iOffset, true);
+				if (iQuote)
 				{
-					if (nPrefix < sizeof(Prefix))
-						Prefix[nPrefix] = pText[iQuote];
+					_Cursor.m_iOffset = iQuote;
+					bUnterminated |= fg_LexRawString(_Cursor);
 
-					++nPrefix;
-					iQuote = fSkipSplices(iQuote + 1);
+					continue;
 				}
 
 				while (fg_IsIdentifierChar(_Cursor.f_Peek()))
 					++_Cursor.m_iOffset;
-
-				if (nPrefix > sizeof(Prefix) || !fg_IsOneOf(Prefix, nPrefix, {"R", "u8R", "LR", "uR", "UR"}))
-					continue;
-
-				if (iQuote < _Cursor.m_nLength && _Cursor.m_pStart[iQuote] == '"')
-				{
-					_Cursor.m_iOffset = iQuote;
-					bUnterminated |= fg_LexRawString(_Cursor);
-				}
 
 				continue;
 			}
@@ -1422,14 +1477,13 @@ namespace NMib::NDevelop
 
 			if (fg_IsIdentifierStart(Char))
 			{
-				while (fg_IsIdentifierChar(Cursor.f_Peek()))
-					++Cursor.m_iOffset;
-
-				auto pPrefix = Cursor.m_pStart + iStart;
-				auto nPrefix = Cursor.m_iOffset - iStart;
-				auto Quote = Cursor.f_Peek();
-				if (Quote == '"' && fg_IsOneOf(pPrefix, nPrefix, {"R", "u8R", "LR", "uR", "UR"}))
+				// A raw string's prefix is read across splices, as in a directive, where the code has raw strings: from C++11 on, and
+				// in C, as GNU C reads them. Without them, in C++03, 'R' over '"x"' is a name and a string, as a macro in front of a
+				// string can be.
+				auto iQuote = fg_FindRawStringQuote(Cursor, iStart, !mp_bCpp03);
+				if (iQuote)
 				{
+					Cursor.m_iOffset = iQuote;
 					umint iInteriorStart = 0;
 					umint iInteriorEnd = 0;
 					auto bUnterminated = fg_LexRawString(Cursor, iInteriorStart, iInteriorEnd);
@@ -1444,7 +1498,14 @@ namespace NMib::NDevelop
 					continue;
 				}
 
-				if ((Quote == '"' || Quote == '\'') && fg_IsOneOf(pPrefix, nPrefix, {"u8", "L", "u", "U"}))
+				while (fg_IsIdentifierChar(Cursor.f_Peek()))
+					++Cursor.m_iOffset;
+
+				auto pPrefix = Cursor.m_pStart + iStart;
+				auto nPrefix = Cursor.m_iOffset - iStart;
+				auto Quote = Cursor.f_Peek();
+
+				if ((Quote == '"' || Quote == '\'') && fg_IsOneOf(pPrefix, nPrefix, {"u8", "L", "u", "U"}) && !fg_ContinuesIdentifier(Cursor, iStart))
 				{
 					auto bUnterminated = fg_LexQuoted(Cursor, Quote);
 					fEmit(Quote == '"' ? ECodeTokenKind::mc_StringLiteral : ECodeTokenKind::mc_CharLiteral, iStart, bUnterminated);

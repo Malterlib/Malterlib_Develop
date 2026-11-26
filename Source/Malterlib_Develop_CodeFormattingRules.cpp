@@ -1853,7 +1853,7 @@ namespace NMib::NDevelop::NPrivate
 		auto fStringTokens = [&]() -> CCodeTokenStream const &
 			{
 				if (!pStringTokens)
-					pStringTokens = fg_Construct(Formatted, nullptr, Language);
+					pStringTokens = fg_Construct(Formatted, mp_Request.m_pStyle.f_Get(), Language);
 
 				return *pStringTokens;
 			}
@@ -1879,8 +1879,13 @@ namespace NMib::NDevelop::NPrivate
 				bInteriorsFound = true;
 				for (auto const &Token : fStringTokens().f_GetTokens())
 				{
-					if (Token.m_Kind == ECodeTokenKind::mc_StringLiteral && Token.m_bMultiLine && Token.m_iRawInteriorEnd > Token.m_iRawInteriorStart)
-						Interiors.f_Insert(CInterior{Token.m_iOffset + Token.m_iRawInteriorStart, Token.m_iOffset + Token.m_iRawInteriorEnd});
+					if (Token.m_Kind != ECodeTokenKind::mc_StringLiteral || Token.m_iRawInteriorEnd <= Token.m_iRawInteriorStart)
+						continue;
+
+					// A splice between the prefix and the quote breaks the token's line, not the string's.
+					CInterior Interior{Token.m_iOffset + Token.m_iRawInteriorStart, Token.m_iOffset + Token.m_iRawInteriorEnd};
+					if (Lines.f_FindLine(Interior.m_iStart) != Lines.f_FindLine(Interior.m_iEnd))
+						Interiors.f_Insert(Interior);
 				}
 
 				return Interiors;

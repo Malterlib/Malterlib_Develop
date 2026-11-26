@@ -383,6 +383,25 @@ namespace
 				DMibExpect(Stream.f_GetText(Tokens[10]), ==, "#define A \\\n\tB");
 			};
 
+			// A part of a name a splice continues is no prefix: 'PREFIX_\' over 'R\' over '"x"' is the name PREFIX_R and a string, in
+			// code and in a directive alike.
+			DMibTestCategory("SplicedName")
+			{
+				for (CStr const &Text : {CStr("PREFIX_\\\nR\\\n\"x\"\n"), CStr("#define D PREFIX_\\\nR\\\n\"x\"\nint g_A;\n")})
+				{
+					DMibTestPath(Text.f_StartsWith("#") ? "Directive" : "Code");
+					CCodeTokenStream Stream(Text);
+					DMibExpectTrue(Stream.f_IsComplete());
+					CStr Strings;
+					for (auto const &Token : Stream.f_GetTokens())
+					{
+						if (Token.m_Kind == ECodeTokenKind::mc_StringLiteral)
+							Strings += Stream.f_GetText(Token) + ";";
+					}
+					DMibExpect(Strings, ==, Text.f_StartsWith("#") ? CStr("") : CStr("\"x\";"));
+				}
+			};
+
 			// A raw string's text is told on its token, between the parenthesis behind its opening delimiter and the one in front of its
 			// closing delimiter, and not where it is unterminated.
 			DMibTestCategory("RawStringInterior")
@@ -399,6 +418,39 @@ namespace
 				CCodeTokenStream Unterminated("auto g_A = R\"d(a\n");
 				DMibExpectFalse(Unterminated.f_IsComplete());
 				DMibExpect(Unterminated.f_GetTokens().f_GetLast().m_iRawInteriorEnd, ==, 0u);
+			};
+
+			// C reads a raw string across a splice, as GNU C does, where C++03 has no raw strings: 'R\' over '"x"' is a name, as a macro
+			// can be, and a string.
+			DMibTestCategory("SplicedRawPrefixByLanguage")
+			{
+				auto fStrings = [](CCodeTokenStream const &_Stream)
+					{
+						CStr Strings;
+						for (auto const &Token : _Stream.f_GetTokens())
+						{
+							if (Token.m_Kind == ECodeTokenKind::mc_StringLiteral)
+								Strings += _Stream.f_GetText(Token) + ";";
+						}
+
+						return Strings;
+					}
+				;
+
+				{
+					DMibTestPath("C");
+					CCodeTokenStream Stream("char const *g_Text = R\\\n\"(a\nb)\";\n", nullptr, ECodeLanguage::mc_C);
+					DMibExpectTrue(Stream.f_IsComplete());
+					DMibExpect(fStrings(Stream), ==, "R\\\n\"(a\nb)\";");
+				}
+				{
+					DMibTestPath("Cpp03");
+					CCodeFormattingStyle Style = *fg_MalterlibStyle();
+					Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 03\n"));
+					CCodeTokenStream Stream("R\\\n\"x\"\n", &Style, ECodeLanguage::mc_Cpp);
+					DMibExpectTrue(Stream.f_IsComplete());
+					DMibExpect(fStrings(Stream), ==, "\"x\";");
+				}
 			};
 
 			DMibTestCategory("DirectiveDigitSeparator")
@@ -4482,6 +4534,29 @@ namespace
 					DMibExpect(fLengthReports("#define DText \"a\\\n" + Value + "\"\n"), ==, TCVector<umint>{2});
 					DMibExpect(fLengthReports("#include \"a\\\n" + Value + ".h\"\n"), ==, TCVector<umint>{2});
 					DMibExpect(fLengthReports("#define D" + Value + " R\"(\nA\n)\"\n"), ==, TCVector<umint>{1});
+
+					// A raw string whose only line break is a splice in front of its quote stands on one line, which counts.
+					DMibExpect(fLengthReports("auto g_Text = R\\\n\"(" + Value + ")\";\n"), ==, TCVector<umint>{2});
+
+					// A raw string's prefix spliced from its quote is still one: its closing line counts from the delimiter on.
+					DMibExpect(fLengthReports("auto g_Json = R\\\n\"json({\n\t\"" + Value + "\"\n})json\";\n"), ==, TCVector<umint>{});
+					// The space a splice allows between its backslash and line break, a vertical tab and a form feed too.
+					DMibExpect(fLengthReports("auto g_Json = R\\\v\f\n\"json({\n\t\"" + Value + "\"\n})json\";\n"), ==, TCVector<umint>{});
+					DMibExpect(fLengthReports("auto g_Text = R\\\v\n\"x(\nA\n)x\" + g_" + Value + ";\n"), ==, TCVector<umint>{4});
+					DMibExpect(fLengthReports("#define DJson R\\\n\"json({\n\t\"" + Value + "\"\n})json\"\n"), ==, TCVector<umint>{3});
+
+					{
+						// C reads a raw string across a splice, as GNU C does.
+						DMibTestPath("C");
+						auto Request = fg_Request("char const *g_Json = R\\\n\"json({\n\t\"" + Value + "\"\n})json\";\n");
+						auto Properties = fg_MalterlibProperties();
+						Properties["malterlib_format"] = "malterlib-c";
+						Request.m_Settings = CCodeFormattingSettings(Properties);
+						umint nReports = 0;
+						for (auto const &Diagnostic : fg_AnalyzeCodeFormatting(Request).m_Diagnostics)
+							nReports += Diagnostic.m_Rule == "line-length";
+						DMibExpect(nReports, ==, 0u);
+					}
 
 					{
 						DMibTestPath("ReportedWidth");
