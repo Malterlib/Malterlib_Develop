@@ -857,7 +857,7 @@ namespace NMib::NDevelop
 				nLength -= nSkip;
 
 				// A literal's lines are its text, which no layout of the directive's lines may change.
-				if (Token.m_bMultiLine && !fg_HoldsRawStringLines(pText, nLength) && !fg_HoldsSplicedLiteral(pText, nLength))
+				if (Token.m_bMultiLine && !_Stream.f_HoldsDirectiveRawStringLines(Token) && !fg_HoldsSplicedLiteral(pText, nLength))
 				{
 					CCodeTokenView View{Kind, nullptr, 0, fg_NormalizeDirectiveLines(pText, nLength)};
 					o_Views.f_Insert(fg_Move(View));
@@ -1163,7 +1163,7 @@ namespace NMib::NDevelop::NPrivate
 	// move left out, and how many of each there are. The tokens are joined since a '>' that
 	// a qualifier lands between two of is lexed as one token with its neighbour before the
 	// move and as two after it.
-	CStr fg_GetReorderInvariant(CStr const &_Source, ECodeLanguage _Language)
+	CStr fg_GetReorderInvariant(CStr const &_Source, ECodeLanguage _Language, CCodeFormattingStyle const *_pStyle)
 	{
 		constexpr ch8 const *c_Moved[] =
 			{
@@ -1178,7 +1178,7 @@ namespace NMib::NDevelop::NPrivate
 		// that end nothing: 'f_Call();;' reads as 'f_Call();'. A comma in front of a closing
 		// brace goes the same way: 'EA, }' reads as 'EA }'. So does one beside a directive,
 		// which the stage moves across it into every branch.
-		CCodeTokenStream Tokens(_Source, nullptr, _Language);
+		CCodeTokenStream Tokens(_Source, _pStyle, _Language);
 		auto pSource = _Source.f_GetStr();
 		CStr Text;
 		{
@@ -1412,60 +1412,6 @@ namespace NMib::NDevelop::NPrivate
 	}
 
 	// The indentation of a directive's continuation lines and the blanks in front of its splices are layout.
-	// Whether a directive's text holds a raw string literal spanning lines.
-	bool fg_HoldsRawStringLines(ch8 const *_pText, umint _nLength)
-	{
-		for (umint iChar = 0; iChar + 1 < _nLength; ++iChar)
-		{
-			if (_pText[iChar] != 'R' || _pText[iChar + 1] != '"')
-				continue;
-
-			auto iWord = iChar;
-
-			auto fWordChar = [](ch8 _Char)
-				{
-					return fg_CharIsAnsiAlphabetical(_Char) || fg_CharIsNumber(_Char) || _Char == '_';
-				}
-			;
-
-			while (iWord && fWordChar(_pText[iWord - 1]))
-				--iWord;
-
-			CStr Prefix(_pText + iWord, iChar + 1 - iWord);
-			if (Prefix != "R" && Prefix != "u8R" && Prefix != "LR" && Prefix != "uR" && Prefix != "UR")
-				continue;
-
-			auto iOpen = iChar + 2;
-			while (iOpen < _nLength)
-			{
-				auto Char = _pText[iOpen];
-				if (Char == '(' || Char == '\n' || Char == '\r')
-					break;
-
-				++iOpen;
-			}
-
-			if (iOpen >= _nLength || _pText[iOpen] != '(')
-				continue;
-
-			CStr Close = ")" + CStr(_pText + iChar + 2, iOpen - iChar - 2) + "\"";
-			for (auto iEnd = iOpen + 1; iEnd < _nLength; ++iEnd)
-			{
-				if (_pText[iEnd] == '\n' || _pText[iEnd] == '\r')
-					return true;
-
-				if (iEnd + Close.f_GetLen() <= _nLength && CStr(_pText + iEnd, Close.f_GetLen()) == Close)
-				{
-					iChar = iEnd;
-
-					break;
-				}
-			}
-		}
-
-		return false;
-	}
-
 	// Whether a directive's text continues a string or character literal onto its next line, whose blanks are then the
 	// literal's. A digit separator read as a quote only keeps lines that could have moved.
 	bool fg_HoldsSplicedLiteral(ch8 const *_pText, umint _nLength)
@@ -1564,11 +1510,12 @@ namespace NMib::NDevelop::NPrivate
 		return false;
 	}
 
-	// True when the two sources hold the same directives in the same order, whatever their indentation.
-	bool fg_HasEquivalentDirectives(CStr const &_First, CStr const &_Second, ECodeLanguage _Language)
+	// True when the two sources hold the same directives in the same order, whatever their indentation. The sources are lexed with
+	// _pStyle, whose standard decides what a directive holds, as a raw string.
+	bool fg_HasEquivalentDirectives(CStr const &_First, CStr const &_Second, ECodeLanguage _Language, CCodeFormattingStyle const *_pStyle)
 	{
-		CCodeTokenStream FirstStream(_First, nullptr, _Language);
-		CCodeTokenStream SecondStream(_Second, nullptr, _Language);
+		CCodeTokenStream FirstStream(_First, _pStyle, _Language);
+		CCodeTokenStream SecondStream(_Second, _pStyle, _Language);
 		TCVector<CCodeTokenView> First;
 		TCVector<CCodeTokenView> Second;
 

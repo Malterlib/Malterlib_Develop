@@ -1878,6 +1878,12 @@ namespace NMib::NDevelop::NCodeFormattingTest
 			;
 			// A raw string in a directive holds the directive's lines.
 			fg_ExpectFormat("RawStringInDirective", "#define DCode R\"(\na \"\n)\"\nint g_A;\n", "#define DCode R\"(\na \"\n)\"\nint g_A;\n");
+			// Also one whose prefix a splice parts from its quote, as the lexer reads it.
+			for (CStr const &Text : {CStr("#define DText R\\\n\"(\na\n)\"\nint g_A;\n"), CStr("namespace N\n{\n#define DText R\\\n\"(\n\ta\n)\"\n}\n")})
+			{
+				DMibTestPath(Text.f_Left(8));
+				fg_ExpectFormat("SplicedRawStringInDirective", Text, Text);
+			}
 			// A statement holding a raw string moves to its depth, the string's lines as they are.
 			fg_ExpectFormat("RawStringStatementMoved", "namespace N\n{\nch8 const *g_pA = R\"---(\n\ta\n)---\";\n}\n", "namespace N\n{\n\tch8 const *g_pA = R\"---(\n\ta\n)---\";\n}\n");
 			// A statement a block comment keeps the lines of moves to its depth with all of them.

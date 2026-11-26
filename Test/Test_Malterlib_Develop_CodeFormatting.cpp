@@ -420,6 +420,55 @@ namespace
 				DMibExpect(Unterminated.f_GetTokens().f_GetLast().m_iRawInteriorEnd, ==, 0u);
 			};
 
+			// C++03 has no raw strings: 'R"x(a)x"' is a name and a string, also in a directive, whose line breaks then end it.
+			DMibTestCategory("RawStringByLanguage")
+			{
+				auto fKinds = [](CCodeTokenStream const &_Stream)
+					{
+						CStr Kinds;
+						for (auto const &Token : _Stream.f_GetTokens())
+						{
+							if (Token.m_Kind == ECodeTokenKind::mc_Identifier)
+								Kinds += "name " + _Stream.f_GetText(Token) + ";";
+							else if (Token.m_Kind == ECodeTokenKind::mc_StringLiteral)
+								Kinds += "string " + _Stream.f_GetText(Token) + ";";
+							else if (Token.m_Kind == ECodeTokenKind::mc_Preprocessor)
+								Kinds += "directive " + _Stream.f_GetText(Token) + ";";
+						}
+
+						return Kinds;
+					}
+				;
+
+				CCodeFormattingStyle Cpp03 = *fg_MalterlibStyle();
+				Cpp03.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 03\n"));
+
+				{
+					DMibTestPath("Cpp03");
+					DMibExpect(fKinds(CCodeTokenStream("R\"x(a)x\";\n", &Cpp03, ECodeLanguage::mc_Cpp)), ==, "name R;string \"x(a)x\";");
+				}
+				{
+					DMibTestPath("Directive");
+					CStr Text = "#define DText R\"(\na\n)\"\n";
+					DMibExpect(fKinds(CCodeTokenStream(Text)), ==, "directive #define DText R\"(\na\n)\";");
+					DMibExpect(fKinds(CCodeTokenStream(Text, &Cpp03, ECodeLanguage::mc_Cpp)), ==, "directive #define DText R\"(;name a;string \";");
+				}
+				{
+					// The standard of C++ doesn't apply to C, which reads raw strings as GNU C does.
+					DMibTestPath("C");
+					DMibExpect(fKinds(CCodeTokenStream("R\"x(a)x\";\n", &Cpp03, ECodeLanguage::mc_C)), ==, "string R\"x(a)x\";");
+					CStr Text = "#define DText R\"(\na\n)\"\n";
+					DMibExpect(fKinds(CCodeTokenStream(Text, &Cpp03, ECodeLanguage::mc_C)), ==, "directive #define DText R\"(\na\n)\";");
+				}
+				{
+					// A raw string's lines in a directive are its text, also where a splice parts its prefix from its quote, so the
+					// indentation of its lines tells directives apart.
+					DMibTestPath("DirectiveLines");
+					DMibExpectFalse(fg_HasEquivalentCodeTokens("#define DText R\"(\na\n)\"\n", "#define DText R\"(\n\ta\n)\"\n"));
+					DMibExpectFalse(fg_HasEquivalentCodeTokens("#define DText R\\\n\"(\na\n)\"\n", "#define DText R\\\n\"(\n\ta\n)\"\n"));
+				}
+			};
+
 			// C reads a raw string across a splice, as GNU C does, where C++03 has no raw strings: 'R\' over '"x"' is a name, as a macro
 			// can be, and a string.
 			DMibTestCategory("SplicedRawPrefixByLanguage")
@@ -1670,6 +1719,21 @@ namespace
 				fExpect("Shift", "03", "COuter<CShift<8 >> 1> > g_Value;\n", "COuter<CShift<8 >> 1> > g_Value;\n");
 				// So does an Objective-C header, whose list the shift leaves open over its line break, and which goes on behind it.
 				fExpect("ObjectiveCHeader", "03", "@interface CFoo <CA<8 >> 1>,\nCB> (CCat)\n@end\n", "@interface CFoo <CA<8 >> 1>, CB> (CCat)\n@end\n");
+
+				{
+					// A directive is read as the standard reads it when a conversion is checked to leave the directives alone: 'R'
+					// in front of a string is a name, here an empty macro's, not a raw string's prefix.
+					DMibTestPath("DirectiveWithoutRawString");
+					CStr Source = "#define R\n#define DText R\"(words\"\nconst int g_A = 1;\n";
+					DMibExpect(fFormat(Source, "First", "03"), ==, "#define R\n#define DText R\"(words\"\nint const g_A = 1;\n");
+				}
+
+				{
+					// So is the code a reorder of qualifiers is checked against: 'R' in front of a string in code is a name too.
+					DMibTestPath("ReorderWithoutRawString");
+					CStr Source = "#define R\nchar const *g_Text = R\"(words\";\nconst int g_A = 1;\n";
+					DMibExpect(fFormat(Source, "First", "03"), ==, "#define R\nchar const *g_Text = R\"(words\";\nint const g_A = 1;\n");
+				}
 				{
 					DMibTestPath("ShiftTokens");
 
@@ -4544,6 +4608,25 @@ namespace
 					DMibExpect(fLengthReports("auto g_Json = R\\\v\f\n\"json({\n\t\"" + Value + "\"\n})json\";\n"), ==, TCVector<umint>{});
 					DMibExpect(fLengthReports("auto g_Text = R\\\v\n\"x(\nA\n)x\" + g_" + Value + ";\n"), ==, TCVector<umint>{4});
 					DMibExpect(fLengthReports("#define DJson R\\\n\"json({\n\t\"" + Value + "\"\n})json\"\n"), ==, TCVector<umint>{3});
+
+					{
+						// C++03 has no raw strings: an 'R' in front of a string continued with splices is a name, and the string is
+						// measured, where from C++11 on the raw string's lines count for none.
+						DMibTestPath("Cpp03");
+						CStr Source = "auto g_Text = R\"(a\\\n" + Value + ")\";\n";
+						DMibExpect(fLengthReports(Source), ==, TCVector<umint>{});
+						auto Request = fg_Request(Source);
+						CCodeFormattingStyle Style = *fg_MalterlibStyle();
+						Style.f_Apply(CCodeFormattingStyleDocument::fs_Parse("Version: 1\nCppStandard: 03\n"));
+						Request.m_pStyle = fg_Construct(fg_Move(Style));
+						TCVector<umint> Lines;
+						for (auto const &Diagnostic : fg_AnalyzeCodeFormatting(Request).m_Diagnostics)
+						{
+							if (Diagnostic.m_Rule == "line-length")
+								Lines.f_Insert(Diagnostic.m_iLine);
+						}
+						DMibExpect(Lines, ==, TCVector<umint>{2});
+					}
 
 					{
 						// C reads a raw string across a splice, as GNU C does.

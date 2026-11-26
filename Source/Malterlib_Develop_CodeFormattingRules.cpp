@@ -332,7 +332,7 @@ namespace NMib::NDevelop::NPrivate
 			bool bKeepLines
 				= bInclude
 				|| bNameAtSplice
-				|| fg_HoldsRawStringLines(pText, Token.m_nLength)
+				|| mp_Tokens.f_HoldsDirectiveRawStringLines(Token)
 				|| fg_HoldsSplicedLiteral(pText, Token.m_nLength)
 				|| fg_JoinsAcrossSplice(pText, Token.m_nLength)
 			;

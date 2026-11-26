@@ -38,7 +38,7 @@ namespace NMib::NDevelop::NPrivate
 	CStr fg_TrailingLineComment(CStr const &_Text);
 	bool fg_IsFallthroughComment(CStr const &_Text);
 	umint fg_MapOffsetToConverted(TCVector<CCodeFormattingEdit> const &_Conversions, umint _iOffset, bool _bEnd);
-	CStr fg_GetReorderInvariant(CStr const &_Source, ECodeLanguage _Language);
+	CStr fg_GetReorderInvariant(CStr const &_Source, ECodeLanguage _Language, CCodeFormattingStyle const *_pStyle);
 
 	// Maps offsets of the converted source back to the original, resuming where the previous offset left off, so ascending
 	// offsets take one pass over the edits; a smaller one starts over.
@@ -51,10 +51,9 @@ namespace NMib::NDevelop::NPrivate
 	};
 
 	umint fg_MapOffsetToOriginal(COffsetToOriginal &_Mapper, umint _iOffset, bool _bEnd = false);
-	bool fg_HoldsRawStringLines(ch8 const *_pText, umint _nLength);
 	bool fg_HoldsSplicedLiteral(ch8 const *_pText, umint _nLength);
 	bool fg_JoinsAcrossSplice(ch8 const *_pText, umint _nLength);
-	bool fg_HasEquivalentDirectives(CStr const &_First, CStr const &_Second, ECodeLanguage _Language);
+	bool fg_HasEquivalentDirectives(CStr const &_First, CStr const &_Second, ECodeLanguage _Language, CCodeFormattingStyle const *_pStyle);
 
 	auto fg_ComposeEdits
 		(

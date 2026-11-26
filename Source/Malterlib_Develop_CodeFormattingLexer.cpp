@@ -397,9 +397,9 @@ namespace
 	}
 
 	// The quote of the raw string whose prefix starts at _iStart, or zero where none does. Splices go before tokens are read, so
-	// they can stand inside a raw string's prefix and between it and its quote: 'u\' over '8R\' over '"(...)"'. With _bSplices the
-	// prefix is read across them.
-	umint fg_FindRawStringQuote(CLexerCursor const &_Cursor, umint _iStart, bool _bSplices)
+	// they can stand inside a raw string's prefix and between it and its quote: 'u\' over '8R\' over '"(...)"'. The prefix is read
+	// across them.
+	umint fg_FindRawStringQuote(CLexerCursor const &_Cursor, umint _iStart)
 	{
 		auto pText = _Cursor.m_pStart;
 		auto nText = _Cursor.m_nLength;
@@ -410,7 +410,7 @@ namespace
 			{
 				CLexerCursor Cursor = _Cursor;
 				Cursor.m_iOffset = _iFrom;
-				while (_bSplices && Cursor.f_SkipSplice())
+				while (Cursor.f_SkipSplice())
 				{
 				}
 
@@ -460,8 +460,9 @@ namespace
 
 	// A directive runs to the first line terminator that is neither spliced nor inside a
 	// block comment. Conditional branches are not evaluated; every branch is lexed as text.
-	// o_pComment is set where the directive holds a comment.
-	bool fg_LexPreprocessor(CLexerCursor &_Cursor, bool *o_pComment = nullptr)
+	// _bRawStrings is whether the code it stands in has raw strings, which C++03 lacks.
+	// o_pComment is set where the directive holds a comment, and o_pRawStringLines where it holds a raw string spanning lines.
+	bool fg_LexPreprocessor(CLexerCursor &_Cursor, bool _bRawStrings, bool *o_pComment = nullptr, bool *o_pRawStringLines = nullptr)
 	{
 		bool bUnterminated = false;
 		auto iDirective = _Cursor.m_iOffset;
@@ -592,11 +593,13 @@ namespace
 			// A raw string's line breaks are its text, and do not end the directive: '#define DCode R"(' over 'a' over ')"'.
 			if (fg_IsIdentifierStart(Char) && (!_Cursor.m_iOffset || !fg_IsIdentifierChar(_Cursor.m_pStart[_Cursor.m_iOffset - 1])))
 			{
-				auto iQuote = fg_FindRawStringQuote(_Cursor, _Cursor.m_iOffset, true);
+				auto iQuote = _bRawStrings ? fg_FindRawStringQuote(_Cursor, _Cursor.m_iOffset) : 0;
 				if (iQuote)
 				{
 					_Cursor.m_iOffset = iQuote;
 					bUnterminated |= fg_LexRawString(_Cursor);
+					if (o_pRawStringLines && NStr::fg_StrFindCharsLengthAware<false, false>(_Cursor.m_pStart + iQuote, _Cursor.m_iOffset - iQuote, "\r\n", 2) >= 0)
+						*o_pRawStringLines = true;
 
 					continue;
 				}
@@ -721,6 +724,7 @@ namespace NMib::NDevelop
 		}
 
 		mp_bCpp03 = _pStyle && _pStyle->m_CppStandard == ECppStandard::mc_Cpp03;
+		mp_bRawStrings = !mp_bCpp03 || _Language != ECodeLanguage::mc_Cpp;
 		fp_Lex();
 
 		// C reserves none of the words C++ adds, so they name what the code declares: 'struct CNode *new;'. C's character
@@ -976,9 +980,23 @@ namespace NMib::NDevelop
 
 		CLexerCursor Cursor{mp_Source.f_GetStr(), _Directive.f_GetEnd(), _Directive.m_iOffset};
 		bool bComment = false;
-		fg_LexPreprocessor(Cursor, &bComment);
+		fg_LexPreprocessor(Cursor, mp_bRawStrings, &bComment);
 
 		return bComment;
+	}
+
+	// Whether a directive holds a raw string literal spanning lines, whose lines are its text, as the lexer reads it, also where a
+	// splice parts its prefix from its quote: '#define DText R\' over '"(' over 'a' over ')"'.
+	bool CCodeTokenStream::f_HoldsDirectiveRawStringLines(CCodeToken const &_Directive) const
+	{
+		if (_Directive.m_Kind != ECodeTokenKind::mc_Preprocessor)
+			return false;
+
+		CLexerCursor Cursor{mp_Source.f_GetStr(), _Directive.f_GetEnd(), _Directive.m_iOffset};
+		bool bRawStringLines = false;
+		fg_LexPreprocessor(Cursor, mp_bRawStrings, nullptr, &bRawStringLines);
+
+		return bRawStringLines;
 	}
 
 	CStr const &CCodeTokenStream::f_GetSource() const
@@ -1433,7 +1451,7 @@ namespace NMib::NDevelop
 
 			if (Char == '#' && bLineStart)
 			{
-				auto bUnterminated = fg_LexPreprocessor(Cursor);
+				auto bUnterminated = fg_LexPreprocessor(Cursor, mp_bRawStrings);
 				fEmit(ECodeTokenKind::mc_Preprocessor, iStart, bUnterminated);
 
 				continue;
@@ -1477,10 +1495,9 @@ namespace NMib::NDevelop
 
 			if (fg_IsIdentifierStart(Char))
 			{
-				// A raw string's prefix is read across splices, as in a directive, where the code has raw strings: from C++11 on, and
-				// in C, as GNU C reads them. Without them, in C++03, 'R' over '"x"' is a name and a string, as a macro in front of a
-				// string can be.
-				auto iQuote = fg_FindRawStringQuote(Cursor, iStart, !mp_bCpp03);
+				// C++03 has no raw strings: 'R"(a)"' is a name, as a macro can be, and a string. Elsewhere a raw string's prefix is read
+				// across splices too, as in a directive, also in C, as GNU C reads raw strings.
+				auto iQuote = mp_bRawStrings ? fg_FindRawStringQuote(Cursor, iStart) : 0;
 				if (iQuote)
 				{
 					Cursor.m_iOffset = iQuote;

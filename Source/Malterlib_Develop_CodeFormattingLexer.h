@@ -92,6 +92,7 @@ namespace NMib::NDevelop
 		ch8 const *f_GetTextPointer(CCodeToken const &_Token) const;
 		NStr::CStr f_GetText(CCodeToken const &_Token) const;
 		bool f_HoldsDirectiveComment(CCodeToken const &_Directive) const;
+		bool f_HoldsDirectiveRawStringLines(CCodeToken const &_Directive) const;
 		NStr::CStr const &f_GetSource() const;
 		ECodeLanguage f_GetLanguage() const;
 		// Whether the token is C, read without what C++ adds: in a C file, outside its C++ branches.
@@ -112,7 +113,8 @@ namespace NMib::NDevelop
 		NContainer::TCVector<CCodeToken> mp_Tokens;
 		ECodeLanguage mp_Language = ECodeLanguage::mc_Cpp;
 		bool mp_bComplete = true;
-		bool mp_bCpp03 = false; // The code is C++03, which reads a '>>' as a shift wherever it stands
+		bool mp_bCpp03 = false;     // The code is C++03, which reads a '>>' as a shift wherever it stands
+		bool mp_bRawStrings = true; // The code has raw strings, which C++03 lacks while C reads them, as GNU C does
 	};
 
 	umint fg_ReadDirectiveKeyword(ch8 const *_pText, umint _nText, ch8 (&o_Keyword)[16], umint &o_iAfter);

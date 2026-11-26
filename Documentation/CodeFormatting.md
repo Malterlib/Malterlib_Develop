@@ -236,9 +236,11 @@ year, `CppStandard: 03`, and the formatter writes no conversion or spelling that
 standard does not have. Where no document sets it, nothing is kept out. C++98
 has what C++03 has, so `98` reads as `03`.
 
-C++03 has no trailing return type, reads `>>` as a shift and `<:` as the
-digraph of `[`. With `03`, a declaration too long for its line keeps its return
-type in front of its name and opens its parameter list under it, as a `void`
+C++03 has no trailing return type and no raw strings, reads `>>` as a shift and
+`<:` as the digraph of `[`. `R"x(a)x"` reads as a name, as a macro can be, in
+front of a string, while C reads raw strings whatever `CppStandard` is. With
+`03`, a declaration too long for its line keeps its return type in front of its
+name and opens its parameter list under it, as a `void`
 function's does, the closers of nested template argument lists stand apart,
 `TCVector<TCVector<int> >`, a `>>` is a shift wherever it stands, also inside a
 template argument list, `CShift<8 >> 1>`, and a `<` stands

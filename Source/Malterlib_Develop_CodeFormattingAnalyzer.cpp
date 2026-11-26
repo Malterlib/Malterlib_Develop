@@ -1726,11 +1726,12 @@ namespace NMib::NDevelop::NPrivate
 
 			// Moving a qualifier changes nothing but where it stands, which is checked here
 			// since the result is only ever compared against the converted source.
-			if (bQualifierStage && fg_GetReorderInvariant(mp_Request.m_Source, Language) != fg_GetReorderInvariant(ConvertedSource, Language))
+			auto const *pStyle = mp_Request.m_pStyle.f_Get();
+			if (bQualifierStage && fg_GetReorderInvariant(mp_Request.m_Source, Language, pStyle) != fg_GetReorderInvariant(ConvertedSource, Language, pStyle))
 				return fFailed("Reordering qualifiers and specifiers would change more than where they stand; no edits were produced");
 
 			// No conversion moves or rewrites a directive, and the result is only ever compared against the converted source.
-			if (!fg_HasEquivalentDirectives(mp_Request.m_Source, ConvertedSource, Language))
+			if (!fg_HasEquivalentDirectives(mp_Request.m_Source, ConvertedSource, Language, pStyle))
 				return fFailed("A conversion would change a preprocessor directive; no edits were produced");
 
 			CCodeFormattingRequest Nested = mp_Request;
